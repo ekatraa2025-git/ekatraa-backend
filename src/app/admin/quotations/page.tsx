@@ -5,6 +5,7 @@ import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import { DataTableView } from '@/components/admin-panel/data-table-view'
 import { createClient } from '@/utils/supabase/client'
 import { FileText, Loader2, MoreHorizontal, Eye, Download, Printer } from 'lucide-react'
+import Link from 'next/link'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -39,7 +40,8 @@ export default function QuotationsPage() {
 
     const handleSearch = (val: string) => {
         const filtered = quotations.filter(q =>
-            q.vendors?.business_name?.toLowerCase().includes(val.toLowerCase()) ||
+            q.vendor?.business_name?.toLowerCase().includes(val.toLowerCase()) ||
+            q.booking?.customer_name?.toLowerCase().includes(val.toLowerCase()) ||
             q.id?.toLowerCase().includes(val.toLowerCase())
         )
         setFilteredQuotations(filtered)
@@ -47,14 +49,15 @@ export default function QuotationsPage() {
 
     const columns = [
         { header: 'Quotation #', key: 'id', render: (val: string) => <span className="font-mono text-xs uppercase">{val.slice(0, 8)}</span> },
-        { header: 'Vendor', key: 'vendors', render: (val: any) => val?.business_name || 'N/A' },
-        { header: 'Booking Ref', key: 'bookings', render: (val: any) => val?.id?.slice(0, 8) || 'N/A' },
+        { header: 'Vendor', key: 'vendor', render: (val: any) => val?.business_name || 'N/A' },
+        { header: 'Customer', key: 'booking', render: (val: any) => val?.customer_name || 'N/A' },
+        { header: 'Booking Date', key: 'booking', render: (val: any) => val?.booking_date ? new Date(val.booking_date).toLocaleDateString() : 'N/A' },
         { header: 'Amount', key: 'total_amount', render: (val: number) => <span className="font-semibold">₹{val || 0}</span> },
         {
             header: 'Status',
             key: 'status',
             render: (val: string) => (
-                <Badge variant={val === 'accepted' ? 'secondary' as const : val === 'draft' ? 'outline' as const : 'outline' as const}>
+                <Badge variant={val === 'accepted' ? 'secondary' as const : val === 'rejected' ? 'destructive' as const : 'outline' as const}>
                     {val || 'Pending'}
                 </Badge>
             )
@@ -88,22 +91,11 @@ export default function QuotationsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem>
-                                <Eye className="mr-2 h-4 w-4" />
-                                View Quotation
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                                <Download className="mr-2 h-4 w-4" />
-                                Download PDF
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                                <Printer className="mr-2 h-4 w-4" />
-                                Print Receipt
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-emerald-600">
-                                <FileText className="mr-2 h-4 w-4" />
-                                Accept Quote
+                            <DropdownMenuItem asChild>
+                                <Link href={`/admin/quotations/${item.id}`} className="flex items-center">
+                                    <Eye className="mr-2 h-4 w-4" />
+                                    View Details
+                                </Link>
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
