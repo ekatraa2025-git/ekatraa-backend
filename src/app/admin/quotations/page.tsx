@@ -42,17 +42,30 @@ export default function QuotationsPage() {
         const filtered = quotations.filter(q =>
             q.vendor?.business_name?.toLowerCase().includes(val.toLowerCase()) ||
             q.booking?.customer_name?.toLowerCase().includes(val.toLowerCase()) ||
+            q.customer_name?.toLowerCase().includes(val.toLowerCase()) ||
+            q.service_type?.toLowerCase().includes(val.toLowerCase()) ||
             q.id?.toLowerCase().includes(val.toLowerCase())
         )
         setFilteredQuotations(filtered)
     }
 
+    const formatDate = (dateStr: string | null) => {
+        if (!dateStr) return 'N/A'
+        try {
+            return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+        } catch {
+            return 'N/A'
+        }
+    }
+
     const columns = [
-        { header: 'Quotation #', key: 'id', render: (val: string) => <span className="font-mono text-xs uppercase">{val.slice(0, 8)}</span> },
+        { header: 'Quotation #', key: 'id', render: (val: string) => <span className="font-mono text-xs uppercase">{val?.slice(0, 8) || 'N/A'}</span> },
+        { header: 'Service', key: 'service_type', render: (val: string, row: any) => val || row?.booking?.details?.slice(0, 30) || 'N/A' },
         { header: 'Vendor', key: 'vendor', render: (val: any) => val?.business_name || 'N/A' },
-        { header: 'Customer', key: 'booking', render: (val: any) => val?.customer_name || 'N/A' },
-        { header: 'Booking Date', key: 'booking', render: (val: any) => val?.booking_date ? new Date(val.booking_date).toLocaleDateString() : 'N/A' },
-        { header: 'Amount', key: 'total_amount', render: (val: number) => <span className="font-semibold">₹{val || 0}</span> },
+        { header: 'Customer', key: 'customer_name', render: (val: string, row: any) => val || row?.booking?.customer_name || 'N/A' },
+        { header: 'Quotation Date', key: 'quotation_date', render: (val: string, row: any) => formatDate(val || row?.created_at) },
+        { header: 'Valid Until', key: 'valid_until', render: (val: string) => formatDate(val) },
+        { header: 'Amount', key: 'amount', render: (val: number, row: any) => <span className="font-semibold text-primary">₹{val || row?.total_amount || 0}</span> },
         {
             header: 'Status',
             key: 'status',

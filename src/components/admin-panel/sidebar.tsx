@@ -43,15 +43,15 @@ export function Sidebar({ className }: SidebarProps) {
         <aside className={cn("relative z-20 h-screen w-72 border-r bg-card transition-all duration-300 ease-in-out", className)}>
             <div className="flex h-full flex-col">
                 <div className="flex h-[60px] items-center border-b px-6">
-                    <Link href="/admin/dashboard" className="flex items-center gap-2 font-bold">
+                    <Link href="/admin/dashboard" className="flex items-center gap-3 font-bold">
                         <Image
-                            src="/logo.png"
-                            alt="Logo"
-                            width={32}
-                            height={32}
+                            src="/ekatraa.svg"
+                            alt="eKatRaa Logo"
+                            width={40}
+                            height={40}
                             className="rounded-lg"
                         />
-                        <span className="text-xl tracking-tight">EKATRAA</span>
+                        <span className="text-xl tracking-tight text-primary">eKatRaa</span>
                     </Link>
                 </div>
                 <ScrollArea className="flex-1 px-3 py-4">
