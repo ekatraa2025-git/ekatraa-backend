@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import { DataTableView } from '@/components/admin-panel/data-table-view'
-import { Loader2, Plus, Edit, Save, X, Languages } from 'lucide-react'
+import { Loader2, Plus, Edit, Save, X, Languages, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -30,6 +30,7 @@ export default function TranslationsPage() {
     const [editData, setEditData] = useState<Translation | null>(null)
     const [newTranslation, setNewTranslation] = useState<Translation>({ key: '', en: '', hi: '', or: '' })
     const [showAddForm, setShowAddForm] = useState(false)
+    const [deletingKey, setDeletingKey] = useState<string | null>(null)
 
     useEffect(() => {
         fetchTranslations()
@@ -134,6 +135,34 @@ export default function TranslationsPage() {
             alert('Failed to add: ' + error.message)
         } finally {
             setSaving(false)
+        }
+    }
+
+    const handleDelete = async (key: string) => {
+        if (!confirm(`Are you sure you want to delete the translation key "${key}"?`)) {
+            return
+        }
+
+        setDeletingKey(key)
+        try {
+            const res = await fetch(`/api/admin/translations?key=${encodeURIComponent(key)}`, {
+                method: 'DELETE',
+            })
+
+            const result = await res.json()
+
+            if (result.error) {
+                alert(result.error)
+            } else {
+                // Remove from local state
+                const updated = translations.filter(t => t.key !== key)
+                setTranslations(updated)
+                setFilteredTranslations(updated)
+            }
+        } catch (error: any) {
+            alert('Failed to delete: ' + error.message)
+        } finally {
+            setDeletingKey(null)
         }
     }
 
@@ -284,9 +313,24 @@ export default function TranslationsPage() {
                                 </Button>
                             </div>
                         ) : (
-                            <Button size="sm" variant="ghost" onClick={() => handleEdit(item)}>
-                                <Edit className="h-4 w-4" />
-                            </Button>
+                            <div className="flex gap-2">
+                                <Button size="sm" variant="ghost" onClick={() => handleEdit(item)}>
+                                    <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    onClick={() => handleDelete(item.key)}
+                                    disabled={deletingKey === item.key}
+                                    className="text-destructive hover:text-destructive"
+                                >
+                                    {deletingKey === item.key ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Trash2 className="h-4 w-4" />
+                                    )}
+                                </Button>
+                            </div>
                         )
                     )}
                 />

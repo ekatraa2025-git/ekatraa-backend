@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 export async function GET() {
     const { data: translations, error } = await supabase
         .from('translations')
-        .select('key, en, hi, or')
+        .select('key, en, hi, "or"')
         .order('key', { ascending: true })
 
     if (error) {
@@ -27,7 +27,7 @@ export async function GET() {
         if (t.key) {
             result.en[t.key] = t.en || ''
             result.hi[t.key] = t.hi || ''
-            result.or[t.key] = t.or || ''
+            result.or[t.key] = t['or'] || t.or || ''
         }
     })
 

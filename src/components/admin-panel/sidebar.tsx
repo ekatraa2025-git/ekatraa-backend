@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
+import { useMemo } from 'react'
 import {
     LayoutDashboard,
     Users,
@@ -13,7 +14,8 @@ import {
     MapPin,
     CreditCard,
     ChevronLeft,
-    Layers
+    Layers,
+    Languages
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -24,20 +26,25 @@ interface SidebarProps {
     className?: string
 }
 
+// Define menu items outside component to ensure stability
+const MENU_ITEMS = [
+    { name: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
+    { name: 'Vendors', icon: Users, path: '/admin/vendors' },
+    { name: 'Categories', icon: Layers, path: '/admin/categories' },
+    { name: 'Services', icon: Briefcase, path: '/admin/services' },
+    { name: 'Bookings', icon: Calendar, path: '/admin/bookings' },
+    { name: 'Bookings Allocation', icon: MapPin, path: '/admin/locations' },
+    { name: 'Quotations', icon: FileText, path: '/admin/quotations' },
+    { name: 'Payments', icon: CreditCard, path: '/admin/payments' },
+    { name: 'Translations', icon: Languages, path: '/admin/translations' },
+    { name: 'Settings', icon: Settings, path: '/admin/settings' },
+] as const
+
 export function Sidebar({ className }: SidebarProps) {
     const pathname = usePathname()
 
-    const menuItems = [
-        { name: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
-        { name: 'Vendors', icon: Users, path: '/admin/vendors' },
-        { name: 'Categories', icon: Layers, path: '/admin/categories' },
-        { name: 'Services', icon: Briefcase, path: '/admin/services' },
-        { name: 'Bookings', icon: Calendar, path: '/admin/bookings' },
-        { name: 'Bookings Allocation', icon: MapPin, path: '/admin/locations' },
-        { name: 'Quotations', icon: FileText, path: '/admin/quotations' },
-        { name: 'Payments', icon: CreditCard, path: '/admin/payments' },
-        { name: 'Settings', icon: Settings, path: '/admin/settings' },
-    ]
+    // Memoize menu items to prevent hydration issues
+    const menuItems = useMemo(() => MENU_ITEMS, [])
 
     return (
         <aside className={cn("relative z-20 h-screen w-72 border-r bg-card transition-all duration-300 ease-in-out", className)}>
@@ -59,22 +66,26 @@ export function Sidebar({ className }: SidebarProps) {
                         <h2 className="mb-2 px-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                             Main Menu
                         </h2>
-                        {menuItems.map((item) => (
-                            <Button
-                                key={item.path}
-                                asChild
-                                variant={pathname.startsWith(item.path) ? "secondary" : "ghost"}
-                                className={cn(
-                                    "w-full justify-start gap-3 px-4",
-                                    pathname.startsWith(item.path) && "bg-secondary font-semibold"
-                                )}
-                            >
-                                <Link href={item.path}>
-                                    <item.icon className="h-5 w-5" />
-                                    {item.name}
-                                </Link>
-                            </Button>
-                        ))}
+                        {menuItems.map((item) => {
+                            const IconComponent = item.icon
+                            const isActive = pathname.startsWith(item.path)
+                            return (
+                                <Button
+                                    key={item.path}
+                                    asChild
+                                    variant={isActive ? "secondary" : "ghost"}
+                                    className={cn(
+                                        "w-full justify-start gap-3 px-4",
+                                        isActive && "bg-secondary font-semibold"
+                                    )}
+                                >
+                                    <Link href={item.path}>
+                                        <IconComponent className="h-5 w-5" />
+                                        {item.name}
+                                    </Link>
+                                </Button>
+                            )
+                        })}
                     </div>
                 </ScrollArea>
                 <div className="mt-auto border-t p-4">

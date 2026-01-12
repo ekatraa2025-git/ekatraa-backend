@@ -52,6 +52,30 @@ export async function POST(req: Request) {
     }
 }
 
+export async function DELETE(req: Request) {
+    try {
+        const { searchParams } = new URL(req.url)
+        const key = searchParams.get('key')
+
+        if (!key) {
+            return NextResponse.json({ error: 'Key is required' }, { status: 400 })
+        }
+
+        const { error } = await supabase
+            .from('translations')
+            .delete()
+            .eq('key', key)
+
+        if (error) {
+            return NextResponse.json({ error: error.message }, { status: 500 })
+        }
+
+        return NextResponse.json({ success: true, message: 'Translation deleted successfully' })
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+}
+
 function getDefaultTranslations() {
     return [
         { key: 'splash_tagline', en: 'Celebrating Togetherness with Trust and Care', hi: 'विश्वास और देखभाल के साथ एकजुटता का जश्न मनाना', or: 'ଏକତ୍ରୀତ ହବା ପାଇଁ ଏକତ୍ର ହିଁ ଏକମାତ୍ର ଭରୋସା ଓ ସାହାରା' },
