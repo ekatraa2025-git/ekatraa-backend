@@ -15,7 +15,8 @@ import {
     CreditCard,
     ChevronLeft,
     Layers,
-    Languages
+    Languages,
+    Bell
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -36,6 +37,7 @@ const MENU_ITEMS = [
     { name: 'Bookings Allocation', icon: MapPin, path: '/admin/locations' },
     { name: 'Quotations', icon: FileText, path: '/admin/quotations' },
     { name: 'Payments', icon: CreditCard, path: '/admin/payments' },
+    { name: 'Notifications', icon: Bell, path: '/admin/notifications' },
     { name: 'Translations', icon: Languages, path: '/admin/translations' },
     { name: 'Settings', icon: Settings, path: '/admin/settings' },
 ] as const

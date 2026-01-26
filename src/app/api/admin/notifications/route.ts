@@ -32,6 +32,7 @@ export async function POST(req: Request) {
           message,
           data: data || {},
           read: false,
+          created_at: new Date().toISOString(),
         },
       ])
       .select()
@@ -75,14 +76,39 @@ export async function PUT(req: Request) {
       )
     }
 
-    const notifications = vendor_ids.map((vendor_id) => ({
+    // Map vendor IDs to auth user IDs
+    // Check if vendors table has user_id field, otherwise assume vendors.id = auth.users.id
+    const { data: vendorsData, error: vendorsError } = await supabase
+      .from('vendors')
+      .select('id, user_id')
+      .in('id', vendor_ids)
+
+    let mappedVendorIds = vendor_ids
+
+    if (!vendorsError && vendorsData) {
+      // If vendors have user_id field, use it; otherwise use vendors.id
+      mappedVendorIds = vendorsData.map((vendor: any) => vendor.user_id || vendor.id)
+      console.log('[Notifications] Mapped vendor IDs:', {
+        original: vendor_ids,
+        mapped: mappedVendorIds,
+        vendors: vendorsData
+      })
+    } else {
+      console.log('[Notifications] Using vendor IDs as-is (assuming vendors.id = auth.users.id):', vendor_ids)
+    }
+
+    const currentTimestamp = new Date().toISOString();
+    const notifications = mappedVendorIds.map((vendor_id) => ({
       vendor_id,
       type,
       title,
       message,
       data: data || {},
       read: false,
+      created_at: currentTimestamp,
     }))
+
+    console.log('[Notifications] Inserting notifications:', notifications)
 
     const { data: insertedNotifications, error } = await supabase
       .from('vendor_notifications')
@@ -90,6 +116,7 @@ export async function PUT(req: Request) {
       .select()
 
     if (error) {
+      console.error('[Notifications] Error inserting notifications:', error)
       // If table doesn't exist, log error but don't fail
       if (error.code === '42P01') {
         console.warn('vendor_notifications table does not exist. Please create it in Supabase.')
@@ -102,12 +129,15 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    console.log('[Notifications] Successfully inserted notifications:', insertedNotifications)
+
     return NextResponse.json({
       success: true,
       count: insertedNotifications?.length || 0,
       notifications: insertedNotifications,
     })
   } catch (error: any) {
+    console.error('[Notifications] Exception:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
