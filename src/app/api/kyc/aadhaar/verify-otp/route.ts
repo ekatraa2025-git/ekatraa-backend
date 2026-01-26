@@ -19,8 +19,25 @@ export async function POST(req: Request) {
   }
 
   try {
-    const body = await req.json()
+    let body
+    try {
+      body = await req.json()
+    } catch (parseError: any) {
+      console.error('[OTP Verify] JSON parse error:', parseError)
+      return NextResponse.json(
+        { error: 'Invalid request body. Please ensure all required fields are provided.' },
+        { status: 400, headers: corsHeaders }
+      )
+    }
+
     const { reference_id, otp, vendor_id, aadhaar_number, aadhaar_front_url, aadhaar_back_url } = body
+
+    console.log('[OTP Verify] Received request body:', {
+      has_reference_id: !!reference_id,
+      has_otp: !!otp,
+      has_vendor_id: !!vendor_id,
+      otp_length: otp?.length,
+    })
 
     if (!reference_id || !otp) {
       return NextResponse.json(
@@ -59,20 +76,41 @@ export async function POST(req: Request) {
     console.log('[OTP Verify] Calling Sandbox API with token:', accessToken.substring(0, 20) + '...')
 
     // Verify OTP with Sandbox API
+    const requestPayload = {
+      '@entity': 'in.co.sandbox.kyc.aadhaar.okyc.request',
+      reference_id: reference_id.trim(),
+      otp: otp.trim(),
+    }
+
+    console.log('[OTP Verify] Sandbox API request payload:', {
+      entity: requestPayload['@entity'],
+      has_reference_id: !!requestPayload.reference_id,
+      has_otp: !!requestPayload.otp,
+      otp_length: requestPayload.otp?.length,
+    })
+
     const response = await fetch(`${SANDBOX_HOST}/kyc/aadhaar/okyc/otp/verify`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        '@entity': 'in.co.sandbox.kyc.aadhaar.okyc.request',
-        reference_id: reference_id,
-        otp: otp,
-      }),
+      body: JSON.stringify(requestPayload),
     })
 
     console.log('[OTP Verify] Sandbox API response status:', response.status)
 
-    const data = await response.json()
-    console.log('[OTP Verify] Sandbox API response:', data)
+    let data
+    try {
+      const responseText = await response.text()
+      console.log('[OTP Verify] Sandbox API raw response:', responseText)
+      data = responseText ? JSON.parse(responseText) : {}
+    } catch (parseError: any) {
+      console.error('[OTP Verify] Failed to parse Sandbox response:', parseError)
+      return NextResponse.json(
+        { error: 'Invalid response from verification service' },
+        { status: 500, headers: corsHeaders }
+      )
+    }
+
+    console.log('[OTP Verify] Sandbox API parsed response:', data)
 
     if (!response.ok) {
       console.error('[OTP Verify] Sandbox API error:', {
@@ -81,7 +119,7 @@ export async function POST(req: Request) {
         data: data,
       })
       return NextResponse.json(
-        { error: data.message || data.error || 'OTP verification failed' },
+        { error: data.message || data.error || data.data?.message || 'OTP verification failed' },
         { status: response.status, headers: corsHeaders }
       )
     }
