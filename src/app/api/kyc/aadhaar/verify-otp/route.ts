@@ -126,8 +126,10 @@ export async function POST(req: Request) {
 
     // If verification successful, update vendor record
     if (data.data && data.data.status === 'VALID') {
+      // Always set is_verified to true on successful Aadhaar verification
+      // This is the primary flag that determines vendor verification status
       const updateData: any = {
-        is_verified: true,
+        is_verified: true, // CRITICAL: Always set to true on successful verification
         aadhaar_verified: true,
         aadhaar_verification_data: data.data,
       }
@@ -145,9 +147,12 @@ export async function POST(req: Request) {
         updateData.aadhaar_back_url = aadhaar_back_url
       }
 
-      console.log('[OTP Verify] Updating vendor record:', {
+      console.log('[OTP Verify] Updating vendor record with verification status:', {
         vendor_id,
-        updateData: { ...updateData, aadhaar_verification_data: '...' }
+        is_verified: updateData.is_verified,
+        aadhaar_verified: updateData.aadhaar_verified,
+        has_aadhaar_number: !!updateData.aadhaar_number,
+        has_images: !!(updateData.aadhaar_front_url || updateData.aadhaar_back_url)
       })
 
       // First, verify the vendor exists (using service role key, bypasses RLS)
@@ -241,16 +246,16 @@ export async function POST(req: Request) {
         console.log('[OTP Verify] Vendor exists check:', { testUpdate, testError })
         
         // Even if update fails, verification was successful
-        // Try one more time with a simpler update
-        console.log('[OTP Verify] Retrying update with minimal fields...')
+        // Try one more time with a simpler update - CRITICAL: is_verified must be set to true
+        console.log('[OTP Verify] Retrying update with minimal fields (is_verified: true)...')
         const { data: retryUpdate, error: retryError } = await supabase
           .from('vendors')
           .update({
-            is_verified: true,
+            is_verified: true, // CRITICAL: Must be true for vendor to show as verified
             aadhaar_verified: true,
           })
           .eq('id', vendor_id)
-          .select()
+          .select('id, is_verified, aadhaar_verified')
           .single()
         
         if (retryError) {
@@ -282,16 +287,45 @@ export async function POST(req: Request) {
         }, { headers: corsHeaders })
       }
 
+      // Verify that is_verified was actually set to true
+      if (updatedVendor.is_verified !== true) {
+        console.error('[OTP Verify] WARNING: is_verified is not true after update!', {
+          id: updatedVendor.id,
+          is_verified: updatedVendor.is_verified,
+          aadhaar_verified: updatedVendor.aadhaar_verified
+        })
+        
+        // Force update is_verified to true one more time
+        const { data: forceUpdate, error: forceError } = await supabase
+          .from('vendors')
+          .update({ is_verified: true })
+          .eq('id', vendor_id)
+          .select('id, is_verified')
+          .single()
+        
+        if (forceError) {
+          console.error('[OTP Verify] Force update failed:', forceError)
+        } else {
+          console.log('[OTP Verify] Force update successful:', forceUpdate)
+          updatedVendor.is_verified = true
+        }
+      }
+
       console.log('[OTP Verify] Vendor record updated successfully:', {
         id: updatedVendor.id,
         is_verified: updatedVendor.is_verified,
-        aadhaar_verified: updatedVendor.aadhaar_verified
+        aadhaar_verified: updatedVendor.aadhaar_verified,
+        verification_complete: updatedVendor.is_verified === true && updatedVendor.aadhaar_verified === true
       })
 
       return NextResponse.json({
         success: true,
         message: 'Aadhaar verified successfully',
         data: data.data,
+        vendor_updated: {
+          is_verified: updatedVendor.is_verified,
+          aadhaar_verified: updatedVendor.aadhaar_verified
+        }
       }, { headers: corsHeaders })
     } else {
       return NextResponse.json(
