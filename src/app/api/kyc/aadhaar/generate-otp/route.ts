@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
+import { supabase } from '@/lib/supabase/server'
+import { getSandboxAccessToken } from '@/lib/sandbox-auth'
 
-const SANDBOX_API_KEY = process.env.SANDBOX_API_KEY
-const SANDBOX_API_SECRET = process.env.SANDBOX_API_SECRET
 const SANDBOX_HOST = process.env.SANDBOX_HOST || 'https://api.sandbox.co.in'
 
 export async function POST(req: Request) {
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json()
-    const { aadhaar_number } = body
+    const { aadhaar_number, vendor_id, aadhaar_front_url, aadhaar_back_url } = body
 
     if (!aadhaar_number || aadhaar_number.length !== 12) {
       return NextResponse.json(
@@ -29,25 +29,46 @@ export async function POST(req: Request) {
       )
     }
 
-    if (!SANDBOX_API_KEY || !SANDBOX_API_SECRET) {
+    if (!vendor_id) {
       return NextResponse.json(
-        { error: 'Sandbox API credentials not configured' },
-        { status: 500, headers: corsHeaders }
+        { error: 'vendor_id is required' },
+        { status: 400, headers: corsHeaders }
       )
     }
 
-    // Sandbox API authentication - using API key in header
-    // Note: If Authorization token is required, it should be obtained separately
+    // Update vendor record with Aadhaar info (using service role key, bypasses RLS)
+    if (vendor_id && (aadhaar_front_url || aadhaar_back_url)) {
+      const updateData: any = {
+        aadhaar_number: aadhaar_number,
+      }
+
+      if (aadhaar_front_url) {
+        updateData.aadhaar_front_url = aadhaar_front_url
+      }
+      if (aadhaar_back_url) {
+        updateData.aadhaar_back_url = aadhaar_back_url
+      }
+
+      const { error: updateError } = await supabase
+        .from('vendors')
+        .update(updateData)
+        .eq('id', vendor_id)
+
+      if (updateError) {
+        console.error('[Vendor Update Error in Generate OTP]:', updateError)
+        // Don't fail the OTP generation if update fails, just log it
+      }
+    }
+
+    // Get Sandbox access token
+    const accessToken = await getSandboxAccessToken()
+
+    // Note: According to Sandbox docs, the token is NOT a bearer token
+    // Pass it in Authorization header without "Bearer" keyword
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'x-api-key': SANDBOX_API_KEY,
+      'Authorization': accessToken, // Token without "Bearer" prefix as per Sandbox docs
       'x-api-version': '1.0.0',
-    };
-
-    // Add Authorization header if access token is available (set via env var)
-    const accessToken = process.env.SANDBOX_ACCESS_TOKEN;
-    if (accessToken) {
-      headers['Authorization'] = `Bearer ${accessToken}`;
     }
 
     const response = await fetch(`${SANDBOX_HOST}/kyc/aadhaar/okyc/otp`, {

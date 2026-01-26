@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase/server'
+import { getSandboxAccessToken } from '@/lib/sandbox-auth'
 
-const SANDBOX_API_KEY = process.env.SANDBOX_API_KEY
-const SANDBOX_API_SECRET = process.env.SANDBOX_API_SECRET
 const SANDBOX_HOST = process.env.SANDBOX_HOST || 'https://api.sandbox.co.in'
 
 export async function POST(req: Request) {
@@ -37,25 +36,15 @@ export async function POST(req: Request) {
       )
     }
 
-    if (!SANDBOX_API_KEY || !SANDBOX_API_SECRET) {
-      return NextResponse.json(
-        { error: 'Sandbox API credentials not configured' },
-        { status: 500, headers: corsHeaders }
-      )
-    }
+    // Get Sandbox access token
+    const accessToken = await getSandboxAccessToken()
 
-    // Sandbox API authentication - using API key in header
-    // Note: If Authorization token is required, it should be obtained separately
+    // Note: According to Sandbox docs, the token is NOT a bearer token
+    // Pass it in Authorization header without "Bearer" keyword
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'x-api-key': SANDBOX_API_KEY,
+      'Authorization': accessToken, // Token without "Bearer" prefix as per Sandbox docs
       'x-api-version': '1.0.0',
-    };
-
-    // Add Authorization header if access token is available (set via env var)
-    const accessToken = process.env.SANDBOX_ACCESS_TOKEN;
-    if (accessToken) {
-      headers['Authorization'] = `Bearer ${accessToken}`;
     }
 
     // Verify OTP with Sandbox API
