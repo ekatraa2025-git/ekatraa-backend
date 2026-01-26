@@ -150,6 +150,25 @@ export async function POST(req: Request) {
         updateData: { ...updateData, aadhaar_verification_data: '...' }
       })
 
+      // First, verify the vendor exists
+      const { data: existingVendor, error: checkError } = await supabase
+        .from('vendors')
+        .select('id, is_verified, aadhaar_verified')
+        .eq('id', vendor_id)
+        .single()
+
+      if (checkError) {
+        console.error('[Vendor Check Error]:', checkError)
+        return NextResponse.json({
+          success: false,
+          error: 'Vendor not found',
+          message: 'Could not find vendor record to update',
+        }, { status: 404, headers: corsHeaders })
+      }
+
+      console.log('[OTP Verify] Existing vendor data:', existingVendor)
+
+      // Update vendor record using service role key (bypasses RLS)
       const { data: updatedVendor, error: updateError } = await supabase
         .from('vendors')
         .update(updateData)
@@ -163,19 +182,67 @@ export async function POST(req: Request) {
           message: updateError.message,
           details: updateError.details,
           hint: updateError.hint,
-          code: updateError.code
+          code: updateError.code,
+          vendor_id,
+          updateData
         })
-        // Don't fail the entire request if update fails - verification was successful
-        // Return success but with a warning
+        
+        // Try to get more details about the error
+        const { data: testUpdate, error: testError } = await supabase
+          .from('vendors')
+          .select('id')
+          .eq('id', vendor_id)
+          .single()
+        
+        console.log('[OTP Verify] Vendor exists check:', { testUpdate, testError })
+        
+        // Even if update fails, verification was successful
+        // Try one more time with a simpler update
+        console.log('[OTP Verify] Retrying update with minimal fields...')
+        const { data: retryUpdate, error: retryError } = await supabase
+          .from('vendors')
+          .update({
+            is_verified: true,
+            aadhaar_verified: true,
+          })
+          .eq('id', vendor_id)
+          .select()
+          .single()
+        
+        if (retryError) {
+          console.error('[Vendor Update Retry Error]:', retryError)
+          // Return success but with detailed error info for debugging
+          return NextResponse.json({
+            success: true,
+            message: 'Aadhaar verified successfully',
+            data: data.data,
+            warning: 'Verification successful but vendor record update failed. Please contact support.',
+            error_details: {
+              original_error: updateError.message,
+              retry_error: retryError.message,
+            }
+          }, { headers: corsHeaders })
+        }
+        
+        console.log('[OTP Verify] Retry update successful:', retryUpdate)
+        updatedVendor = retryUpdate
+      }
+
+      if (!updatedVendor) {
+        console.error('[OTP Verify] Update returned no data')
         return NextResponse.json({
           success: true,
           message: 'Aadhaar verified successfully',
           data: data.data,
-          warning: 'Verification successful but vendor record update had issues. Please refresh your profile.',
+          warning: 'Verification successful but vendor record update returned no data. Please refresh your profile.',
         }, { headers: corsHeaders })
       }
 
-      console.log('[OTP Verify] Vendor record updated successfully:', updatedVendor?.id)
+      console.log('[OTP Verify] Vendor record updated successfully:', {
+        id: updatedVendor.id,
+        is_verified: updatedVendor.is_verified,
+        aadhaar_verified: updatedVendor.aadhaar_verified
+      })
 
       return NextResponse.json({
         success: true,
