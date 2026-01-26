@@ -166,14 +166,18 @@ export async function PATCH(
                 .eq('id', currentQuotation.vendor_id)
         }
 
-        // Always recalculate expected total revenues (sum of all quotations)
+        // Always recalculate expected total revenues (sum of all quotations, excluding rejected)
         if (currentQuotation.vendor_id) {
             const { data: allQuotations } = await supabase
                 .from('quotations')
-                .select('amount')
+                .select('amount, status')
                 .eq('vendor_id', currentQuotation.vendor_id)
 
             const expectedRevenue = (allQuotations || []).reduce((sum, q) => {
+                // Exclude rejected quotations from expected revenue
+                if (q.status === 'rejected' || q.status === 'declined') {
+                    return sum
+                }
                 return sum + (parseFloat(q.amount || '0') || 0)
             }, 0)
 
