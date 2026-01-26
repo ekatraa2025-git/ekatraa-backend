@@ -150,37 +150,75 @@ export async function POST(req: Request) {
         updateData: { ...updateData, aadhaar_verification_data: '...' }
       })
 
-      // First, verify the vendor exists
+      // First, verify the vendor exists (using service role key, bypasses RLS)
+      console.log('[OTP Verify] Checking vendor existence:', { vendor_id })
+      
       const { data: existingVendor, error: checkError } = await supabase
         .from('vendors')
         .select('id, is_verified, aadhaar_verified')
         .eq('id', vendor_id)
-        .single()
+        .maybeSingle()
 
       if (checkError) {
-        console.error('[Vendor Check Error]:', checkError)
-        return NextResponse.json({
-          success: false,
-          error: 'Vendor not found',
-          message: 'Could not find vendor record to update',
-        }, { status: 404, headers: corsHeaders })
+        console.error('[Vendor Check Error]:', {
+          error: checkError,
+          message: checkError.message,
+          details: checkError.details,
+          hint: checkError.hint,
+          code: checkError.code,
+          vendor_id
+        })
+        // Don't fail if check has an error - try to update anyway
+        console.warn('[OTP Verify] Vendor check failed, but proceeding with update attempt')
       }
 
-      console.log('[OTP Verify] Existing vendor data:', existingVendor)
+      if (!existingVendor) {
+        console.error('[OTP Verify] Vendor not found in database:', { vendor_id })
+        // Don't fail the verification - try to create or update anyway
+        console.warn('[OTP Verify] Vendor not found, but proceeding with update attempt (may create record)')
+      } else {
+        console.log('[OTP Verify] Existing vendor data:', existingVendor)
+      }
 
       // Update vendor record using service role key (bypasses RLS)
+      // If vendor doesn't exist, try to upsert instead
       let updatedVendor: any = null
       let updateError: any = null
       
-      const updateResult = await supabase
-        .from('vendors')
-        .update(updateData)
-        .eq('id', vendor_id)
-        .select()
-        .single()
-      
-      updatedVendor = updateResult.data
-      updateError = updateResult.error
+      if (!existingVendor) {
+        // Vendor doesn't exist, try to upsert (insert or update)
+        console.log('[OTP Verify] Vendor not found, attempting upsert...')
+        const upsertData = {
+          id: vendor_id,
+          ...updateData,
+        }
+        
+        const upsertResult = await supabase
+          .from('vendors')
+          .upsert(upsertData, { onConflict: 'id' })
+          .select()
+          .single()
+        
+        updatedVendor = upsertResult.data
+        updateError = upsertResult.error
+        
+        if (updateError) {
+          console.error('[OTP Verify] Upsert failed:', updateError)
+        } else {
+          console.log('[OTP Verify] Upsert successful:', updatedVendor?.id)
+        }
+      } else {
+        // Vendor exists, perform normal update
+        const updateResult = await supabase
+          .from('vendors')
+          .update(updateData)
+          .eq('id', vendor_id)
+          .select()
+          .single()
+        
+        updatedVendor = updateResult.data
+        updateError = updateResult.error
+      }
 
       if (updateError) {
         console.error('[Vendor Update Error]:', {
