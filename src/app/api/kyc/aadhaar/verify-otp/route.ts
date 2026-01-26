@@ -169,12 +169,18 @@ export async function POST(req: Request) {
       console.log('[OTP Verify] Existing vendor data:', existingVendor)
 
       // Update vendor record using service role key (bypasses RLS)
-      const { data: updatedVendor, error: updateError } = await supabase
+      let updatedVendor: any = null
+      let updateError: any = null
+      
+      const updateResult = await supabase
         .from('vendors')
         .update(updateData)
         .eq('id', vendor_id)
         .select()
         .single()
+      
+      updatedVendor = updateResult.data
+      updateError = updateResult.error
 
       if (updateError) {
         console.error('[Vendor Update Error]:', {
