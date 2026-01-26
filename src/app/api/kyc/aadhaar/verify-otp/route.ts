@@ -128,24 +128,26 @@ export async function POST(req: Request) {
     if (data.data && data.data.status === 'VALID') {
       // Always set is_verified to true on successful Aadhaar verification
       // This is the primary flag that determines vendor verification status
+      // NOTE: Based on error logs, aadhaar_verified and aadhaar_verification_data columns don't exist
+      // So we only update is_verified and other basic fields that should exist
       const updateData: any = {
-        is_verified: true, // CRITICAL: Always set to true on successful verification
-        aadhaar_verified: true,
-        aadhaar_verification_data: data.data,
+        is_verified: true, // CRITICAL: Always set to true on successful verification - this column must exist
       }
 
-      // Add Aadhaar number if provided
+      // Add Aadhaar number if provided (if this column exists)
       if (aadhaar_number) {
         updateData.aadhaar_number = aadhaar_number
       }
 
-      // Add image URLs if provided
+      // Add image URLs if provided (if these columns exist)
       if (aadhaar_front_url) {
         updateData.aadhaar_front_url = aadhaar_front_url
       }
       if (aadhaar_back_url) {
         updateData.aadhaar_back_url = aadhaar_back_url
       }
+      
+      // Do NOT include aadhaar_verified or aadhaar_verification_data - these columns don't exist in the schema
 
       console.log('[OTP Verify] Updating vendor record with verification status:', {
         vendor_id,
@@ -160,7 +162,7 @@ export async function POST(req: Request) {
       
       const { data: existingVendor, error: checkError } = await supabase
         .from('vendors')
-        .select('id, is_verified, aadhaar_verified')
+        .select('id, is_verified')
         .eq('id', vendor_id)
         .maybeSingle()
 
@@ -192,16 +194,28 @@ export async function POST(req: Request) {
       
       if (!existingVendor) {
         // Vendor doesn't exist, try to upsert (insert or update)
-        console.log('[OTP Verify] Vendor not found, attempting upsert...')
-        const upsertData = {
+        // Use minimal data - only is_verified which must exist
+        console.log('[OTP Verify] Vendor not found, attempting upsert with minimal fields...')
+        const upsertData: any = {
           id: vendor_id,
-          ...updateData,
+          is_verified: true, // CRITICAL: Primary verification flag
+        }
+        
+        // Only add optional fields if they're provided
+        if (aadhaar_number) {
+          upsertData.aadhaar_number = aadhaar_number
+        }
+        if (aadhaar_front_url) {
+          upsertData.aadhaar_front_url = aadhaar_front_url
+        }
+        if (aadhaar_back_url) {
+          upsertData.aadhaar_back_url = aadhaar_back_url
         }
         
         const upsertResult = await supabase
           .from('vendors')
           .upsert(upsertData, { onConflict: 'id' })
-          .select()
+          .select('id, is_verified')
           .single()
         
         updatedVendor = upsertResult.data
@@ -214,15 +228,35 @@ export async function POST(req: Request) {
         }
       } else {
         // Vendor exists, perform normal update
+        // First try with all fields, if it fails, try with just is_verified
         const updateResult = await supabase
           .from('vendors')
           .update(updateData)
           .eq('id', vendor_id)
-          .select()
+          .select('id, is_verified')
           .single()
         
         updatedVendor = updateResult.data
         updateError = updateResult.error
+        
+        // If update failed due to missing columns, try with just is_verified
+        if (updateError && (updateError.message?.includes('column') || updateError.message?.includes('schema cache'))) {
+          console.log('[OTP Verify] Update failed due to missing columns, retrying with only is_verified...')
+          const minimalUpdate = await supabase
+            .from('vendors')
+            .update({ is_verified: true })
+            .eq('id', vendor_id)
+            .select('id, is_verified')
+            .single()
+          
+          if (!minimalUpdate.error) {
+            updatedVendor = minimalUpdate.data
+            updateError = null
+            console.log('[OTP Verify] Minimal update successful with is_verified only')
+          } else {
+            updateError = minimalUpdate.error
+          }
+        }
       }
 
       if (updateError) {
@@ -246,16 +280,15 @@ export async function POST(req: Request) {
         console.log('[OTP Verify] Vendor exists check:', { testUpdate, testError })
         
         // Even if update fails, verification was successful
-        // Try one more time with a simpler update - CRITICAL: is_verified must be set to true
-        console.log('[OTP Verify] Retrying update with minimal fields (is_verified: true)...')
+        // Try one more time with ONLY is_verified - this column must exist
+        console.log('[OTP Verify] Retrying update with ONLY is_verified field (most critical)...')
         const { data: retryUpdate, error: retryError } = await supabase
           .from('vendors')
           .update({
-            is_verified: true, // CRITICAL: Must be true for vendor to show as verified
-            aadhaar_verified: true,
+            is_verified: true, // CRITICAL: Must be true for vendor to show as verified - this is the only required field
           })
           .eq('id', vendor_id)
-          .select('id, is_verified, aadhaar_verified')
+          .select('id, is_verified')
           .single()
         
         if (retryError) {
@@ -291,8 +324,7 @@ export async function POST(req: Request) {
       if (updatedVendor.is_verified !== true) {
         console.error('[OTP Verify] WARNING: is_verified is not true after update!', {
           id: updatedVendor.id,
-          is_verified: updatedVendor.is_verified,
-          aadhaar_verified: updatedVendor.aadhaar_verified
+          is_verified: updatedVendor.is_verified
         })
         
         // Force update is_verified to true one more time
@@ -314,8 +346,7 @@ export async function POST(req: Request) {
       console.log('[OTP Verify] Vendor record updated successfully:', {
         id: updatedVendor.id,
         is_verified: updatedVendor.is_verified,
-        aadhaar_verified: updatedVendor.aadhaar_verified,
-        verification_complete: updatedVendor.is_verified === true && updatedVendor.aadhaar_verified === true
+        verification_complete: updatedVendor.is_verified === true
       })
 
       return NextResponse.json({
@@ -323,8 +354,7 @@ export async function POST(req: Request) {
         message: 'Aadhaar verified successfully',
         data: data.data,
         vendor_updated: {
-          is_verified: updatedVendor.is_verified,
-          aadhaar_verified: updatedVendor.aadhaar_verified
+          is_verified: updatedVendor.is_verified
         }
       }, { headers: corsHeaders })
     } else {
