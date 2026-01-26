@@ -110,7 +110,7 @@ export async function POST(req: Request) {
       )
     }
 
-    console.log('[OTP Verify] Sandbox API parsed response:', data)
+    console.log('[OTP Verify] Sandbox API parsed response:', JSON.stringify(data, null, 2))
 
     if (!response.ok) {
       console.error('[OTP Verify] Sandbox API error:', {
@@ -118,44 +118,59 @@ export async function POST(req: Request) {
         statusText: response.statusText,
         data: data,
       })
+      const errorMessage = data.message || data.error || data.data?.message || `OTP verification failed (${response.status})`
       return NextResponse.json(
-        { error: data.message || data.error || data.data?.message || 'OTP verification failed' },
+        { error: errorMessage },
         { status: response.status, headers: corsHeaders }
       )
     }
 
+    // Check if verification was successful
+    // Sandbox API returns data in different structures, check both
+    const verificationStatus = data.data?.status || data.status
+    const isValid = verificationStatus === 'VALID' || (data.code === 200 && data.data)
+    
+    console.log('[OTP Verify] Verification status check:', {
+      verificationStatus,
+      isValid,
+      hasData: !!data.data,
+      responseStructure: Object.keys(data)
+    })
+
     // If verification successful, update vendor record
-    if (data.data && data.data.status === 'VALID') {
+    if (isValid && (data.data?.status === 'VALID' || verificationStatus === 'VALID')) {
       // Always set is_verified to true on successful Aadhaar verification
       // This is the primary flag that determines vendor verification status
       // NOTE: Based on error logs, aadhaar_verified and aadhaar_verification_data columns don't exist
       // So we only update is_verified and other basic fields that should exist
-      const updateData: any = {
-        is_verified: true, // CRITICAL: Always set to true on successful verification - this column must exist
-      }
-
-      // Add Aadhaar number if provided (if this column exists)
-      if (aadhaar_number) {
-        updateData.aadhaar_number = aadhaar_number
-      }
-
-      // Add image URLs if provided (if these columns exist)
-      if (aadhaar_front_url) {
-        updateData.aadhaar_front_url = aadhaar_front_url
-      }
-      if (aadhaar_back_url) {
-        updateData.aadhaar_back_url = aadhaar_back_url
-      }
       
-      // Do NOT include aadhaar_verified or aadhaar_verification_data - these columns don't exist in the schema
+      // Try to update vendor record, but don't fail verification if update fails
+      try {
+        const updateData: any = {
+          is_verified: true, // CRITICAL: Always set to true on successful verification - this column must exist
+        }
 
-      console.log('[OTP Verify] Updating vendor record with verification status:', {
-        vendor_id,
-        is_verified: updateData.is_verified,
-        aadhaar_verified: updateData.aadhaar_verified,
-        has_aadhaar_number: !!updateData.aadhaar_number,
-        has_images: !!(updateData.aadhaar_front_url || updateData.aadhaar_back_url)
-      })
+        // Add Aadhaar number if provided (if this column exists)
+        if (aadhaar_number) {
+          updateData.aadhaar_number = aadhaar_number
+        }
+
+        // Add image URLs if provided (if these columns exist)
+        if (aadhaar_front_url) {
+          updateData.aadhaar_front_url = aadhaar_front_url
+        }
+        if (aadhaar_back_url) {
+          updateData.aadhaar_back_url = aadhaar_back_url
+        }
+        
+        // Do NOT include aadhaar_verified or aadhaar_verification_data - these columns don't exist in the schema
+
+        console.log('[OTP Verify] Updating vendor record with verification status:', {
+          vendor_id,
+          is_verified: updateData.is_verified,
+          has_aadhaar_number: !!updateData.aadhaar_number,
+          has_images: !!(updateData.aadhaar_front_url || updateData.aadhaar_back_url)
+        })
 
       // First, verify the vendor exists (using service role key, bypasses RLS)
       console.log('[OTP Verify] Checking vendor existence:', { vendor_id })
@@ -349,24 +364,49 @@ export async function POST(req: Request) {
         verification_complete: updatedVendor.is_verified === true
       })
 
-      return NextResponse.json({
-        success: true,
-        message: 'Aadhaar verified successfully',
-        data: data.data,
-        vendor_updated: {
-          is_verified: updatedVendor.is_verified
-        }
-      }, { headers: corsHeaders })
+        return NextResponse.json({
+          success: true,
+          message: 'Aadhaar verified successfully',
+          data: data.data,
+          vendor_updated: {
+            is_verified: updatedVendor.is_verified
+          }
+        }, { headers: corsHeaders })
+      } catch (updateException: any) {
+        // If vendor update fails, still return success for verification
+        // The verification itself was successful, update is secondary
+        console.error('[OTP Verify] Exception during vendor update:', updateException)
+        return NextResponse.json({
+          success: true,
+          message: 'Aadhaar verified successfully',
+          data: data.data,
+          warning: 'Verification successful but vendor record update encountered an error. Please refresh your profile.',
+        }, { headers: corsHeaders })
+      }
     } else {
+      // Verification was not successful
+      const errorMessage = data.data?.message || data.message || 'Aadhaar verification failed'
+      console.error('[OTP Verify] Verification failed:', {
+        status: verificationStatus,
+        message: errorMessage,
+        fullResponse: data
+      })
       return NextResponse.json(
-        { error: data.data?.message || 'Aadhaar verification failed' },
+        { error: errorMessage },
         { status: 400, headers: corsHeaders }
       )
     }
   } catch (error: any) {
     console.error('[Aadhaar OTP Verification Error]:', error)
+    // More specific error message
+    const errorMessage = error.message || 'Failed to verify OTP'
+    console.error('[OTP Verify] Full error details:', {
+      message: errorMessage,
+      stack: error.stack,
+      name: error.name
+    })
     return NextResponse.json(
-      { error: error.message || 'Failed to verify OTP' },
+      { error: errorMessage },
       { status: 500, headers: corsHeaders }
     )
   }
