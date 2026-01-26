@@ -53,12 +53,13 @@ export async function getSandboxAccessToken(): Promise<string> {
     const data = await response.json()
 
     if (data.code === 200 && data.data?.access_token) {
+      const accessToken = data.data.access_token
       // Cache the token with 23 hours expiry (slightly less than 24 hours for safety)
       tokenCache = {
-        token: data.data.access_token,
+        token: accessToken,
         expiresAt: now + 23 * 60 * 60 * 1000, // 23 hours in milliseconds
       }
-      return tokenCache.token
+      return accessToken
     } else {
       throw new Error('Invalid response from authentication endpoint')
     }
