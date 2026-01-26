@@ -34,6 +34,7 @@ export async function getSandboxAccessToken(): Promise<string> {
   }
 
   try {
+    console.log('[Sandbox Auth] Authenticating with Sandbox API...')
     const response = await fetch(`${SANDBOX_HOST}/authenticate`, {
       method: 'POST',
       headers: {
@@ -43,14 +44,18 @@ export async function getSandboxAccessToken(): Promise<string> {
       },
     })
 
+    console.log('[Sandbox Auth] Response status:', response.status)
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
+      console.error('[Sandbox Auth] Error response:', errorData)
       throw new Error(
         errorData.message || `Authentication failed: ${response.status} ${response.statusText}`
       )
     }
 
     const data = await response.json()
+    console.log('[Sandbox Auth] Response data:', { code: data.code, hasToken: !!data.data?.access_token })
 
     if (data.code === 200 && data.data?.access_token) {
       const accessToken = data.data.access_token
@@ -59,8 +64,10 @@ export async function getSandboxAccessToken(): Promise<string> {
         token: accessToken,
         expiresAt: now + 23 * 60 * 60 * 1000, // 23 hours in milliseconds
       }
+      console.log('[Sandbox Auth] Token cached successfully')
       return accessToken
     } else {
+      console.error('[Sandbox Auth] Invalid response structure:', data)
       throw new Error('Invalid response from authentication endpoint')
     }
   } catch (error: any) {

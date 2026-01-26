@@ -121,6 +121,19 @@ export async function PATCH(
     try {
         const { id } = await params
         const body = await req.json()
+        
+        // Get current quotation to check vendor_id and amount
+        const { data: currentQuotation } = await supabase
+            .from('quotations')
+            .select('vendor_id, total_amount, amount, status')
+            .eq('id', id)
+            .single()
+
+        if (!currentQuotation) {
+            return NextResponse.json({ error: 'Quotation not found' }, { status: 404 })
+        }
+
+        // Update quotation
         const { data, error } = await supabase
             .from('quotations')
             .update(body)
@@ -130,6 +143,44 @@ export async function PATCH(
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 400 })
+        }
+
+        // If status changed to 'accepted', update vendor revenue
+        if (body.status === 'accepted' && currentQuotation.status !== 'accepted' && currentQuotation.vendor_id) {
+            const quotationAmount = parseFloat(data.total_amount || data.amount || '0') || 0
+            
+            // Get current vendor revenue
+            const { data: vendorData } = await supabase
+                .from('vendors')
+                .select('real_revenue_earned')
+                .eq('id', currentQuotation.vendor_id)
+                .single()
+
+            const currentRealRevenue = parseFloat(vendorData?.real_revenue_earned || '0') || 0
+            const newRealRevenue = currentRealRevenue + quotationAmount
+
+            // Update vendor real revenue
+            await supabase
+                .from('vendors')
+                .update({ real_revenue_earned: newRealRevenue })
+                .eq('id', currentQuotation.vendor_id)
+        }
+
+        // Always recalculate expected total revenues (sum of all quotations)
+        if (currentQuotation.vendor_id) {
+            const { data: allQuotations } = await supabase
+                .from('quotations')
+                .select('total_amount, amount')
+                .eq('vendor_id', currentQuotation.vendor_id)
+
+            const expectedRevenue = (allQuotations || []).reduce((sum, q) => {
+                return sum + (parseFloat(q.total_amount || q.amount || '0') || 0)
+            }, 0)
+
+            await supabase
+                .from('vendors')
+                .update({ expected_total_revenues: expectedRevenue })
+                .eq('id', currentQuotation.vendor_id)
         }
 
         return NextResponse.json(data)

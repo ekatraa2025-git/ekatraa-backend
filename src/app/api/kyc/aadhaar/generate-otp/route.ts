@@ -62,14 +62,25 @@ export async function POST(req: Request) {
 
     // Get Sandbox access token
     const accessToken = await getSandboxAccessToken()
+    const SANDBOX_API_KEY = process.env.SANDBOX_API_KEY
+
+    if (!SANDBOX_API_KEY) {
+      return NextResponse.json(
+        { error: 'Sandbox API key not configured' },
+        { status: 500, headers: corsHeaders }
+      )
+    }
 
     // Note: According to Sandbox docs, the token is NOT a bearer token
     // Pass it in Authorization header without "Bearer" keyword
+    // For authenticated requests, only Authorization header is needed (not x-api-key)
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Authorization': accessToken, // Token without "Bearer" prefix as per Sandbox docs
       'x-api-version': '1.0.0',
     }
+
+    console.log('[OTP Generate] Calling Sandbox API with token:', accessToken.substring(0, 20) + '...')
 
     const response = await fetch(`${SANDBOX_HOST}/kyc/aadhaar/okyc/otp`, {
       method: 'POST',
@@ -82,11 +93,19 @@ export async function POST(req: Request) {
       }),
     })
 
+    console.log('[OTP Generate] Sandbox API response status:', response.status)
+
     const data = await response.json()
+    console.log('[OTP Generate] Sandbox API response:', data)
 
     if (!response.ok) {
+      console.error('[OTP Generate] Sandbox API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        data: data,
+      })
       return NextResponse.json(
-        { error: data.message || 'Failed to generate OTP' },
+        { error: data.message || data.error || 'Failed to generate OTP' },
         { status: response.status, headers: corsHeaders }
       )
     }
