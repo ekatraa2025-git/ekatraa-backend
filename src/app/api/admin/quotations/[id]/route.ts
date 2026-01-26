@@ -125,7 +125,7 @@ export async function PATCH(
         // Get current quotation to check vendor_id and amount
         const { data: currentQuotation } = await supabase
             .from('quotations')
-            .select('vendor_id, total_amount, amount, status')
+            .select('vendor_id, amount, status')
             .eq('id', id)
             .single()
 
@@ -147,7 +147,7 @@ export async function PATCH(
 
         // If status changed to 'accepted', update vendor revenue
         if (body.status === 'accepted' && currentQuotation.status !== 'accepted' && currentQuotation.vendor_id) {
-            const quotationAmount = parseFloat(data.total_amount || data.amount || '0') || 0
+            const quotationAmount = parseFloat(data.amount || '0') || 0
             
             // Get current vendor revenue
             const { data: vendorData } = await supabase
@@ -170,11 +170,11 @@ export async function PATCH(
         if (currentQuotation.vendor_id) {
             const { data: allQuotations } = await supabase
                 .from('quotations')
-                .select('total_amount, amount')
+                .select('amount')
                 .eq('vendor_id', currentQuotation.vendor_id)
 
             const expectedRevenue = (allQuotations || []).reduce((sum, q) => {
-                return sum + (parseFloat(q.total_amount || q.amount || '0') || 0)
+                return sum + (parseFloat(q.amount || '0') || 0)
             }, 0)
 
             await supabase
