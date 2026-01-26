@@ -145,18 +145,37 @@ export async function POST(req: Request) {
         updateData.aadhaar_back_url = aadhaar_back_url
       }
 
-      const { error: updateError } = await supabase
+      console.log('[OTP Verify] Updating vendor record:', {
+        vendor_id,
+        updateData: { ...updateData, aadhaar_verification_data: '...' }
+      })
+
+      const { data: updatedVendor, error: updateError } = await supabase
         .from('vendors')
         .update(updateData)
         .eq('id', vendor_id)
+        .select()
+        .single()
 
       if (updateError) {
-        console.error('[Vendor Update Error]:', updateError)
-        return NextResponse.json(
-          { error: 'Verification successful but failed to update vendor record' },
-          { status: 500, headers: corsHeaders }
-        )
+        console.error('[Vendor Update Error]:', {
+          error: updateError,
+          message: updateError.message,
+          details: updateError.details,
+          hint: updateError.hint,
+          code: updateError.code
+        })
+        // Don't fail the entire request if update fails - verification was successful
+        // Return success but with a warning
+        return NextResponse.json({
+          success: true,
+          message: 'Aadhaar verified successfully',
+          data: data.data,
+          warning: 'Verification successful but vendor record update had issues. Please refresh your profile.',
+        }, { headers: corsHeaders })
       }
+
+      console.log('[OTP Verify] Vendor record updated successfully:', updatedVendor?.id)
 
       return NextResponse.json({
         success: true,
