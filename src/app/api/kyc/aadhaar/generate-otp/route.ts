@@ -71,12 +71,12 @@ export async function POST(req: Request) {
       )
     }
 
-    // Note: According to Sandbox docs, the token is NOT a bearer token
-    // Pass it in Authorization header without "Bearer" keyword
-    // For authenticated requests, only Authorization header is needed (not x-api-key)
+    // Note: According to Sandbox docs, both Authorization and x-api-key headers are required
+    // Pass token in Authorization header without "Bearer" keyword
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Authorization': accessToken, // Token without "Bearer" prefix as per Sandbox docs
+      'x-api-key': SANDBOX_API_KEY, // Required header for authenticated requests
       'x-api-version': '1.0.0',
     }
 
