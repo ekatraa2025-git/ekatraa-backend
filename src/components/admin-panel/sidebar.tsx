@@ -16,7 +16,9 @@ import {
     ChevronLeft,
     Layers,
     Languages,
-    Bell
+    Bell,
+    Tag,
+    Package
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -32,6 +34,8 @@ const MENU_ITEMS = [
     { name: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
     { name: 'Vendors', icon: Users, path: '/admin/vendors' },
     { name: 'Categories', icon: Layers, path: '/admin/categories' },
+    { name: 'Subcategories', icon: Tag, path: '/admin/subcategories' },
+    { name: 'Service Items', icon: Package, path: '/admin/stocks' },
     { name: 'Services', icon: Briefcase, path: '/admin/services' },
     { name: 'Bookings', icon: Calendar, path: '/admin/bookings' },
     { name: 'Bookings Allocation', icon: MapPin, path: '/admin/locations' },
