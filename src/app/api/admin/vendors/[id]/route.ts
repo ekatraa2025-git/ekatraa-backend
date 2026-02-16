@@ -27,6 +27,15 @@ export async function PATCH(
     try {
         const { id } = await params
         const body = await req.json()
+
+        // Remove non-vendor fields that might be sent from the form
+        delete body.service_subcategory
+        delete body.service_stock_id
+        delete body.service_stock_name
+        delete body.service_pricing_type
+        delete body.service_price_amount
+        delete body.vendor_categories
+        delete body.create_auth
         
         // Auto-extract city from address if address is being updated and city is not explicitly provided
         if (body.address !== undefined) {
@@ -37,6 +46,11 @@ export async function PATCH(
                     body.city = extractedCity
                 }
             }
+        }
+
+        // Sync aadhaar_verified with is_verified if is_verified is being updated
+        if (body.is_verified !== undefined) {
+            body.aadhaar_verified = body.is_verified
         }
         
         const { data, error } = await supabase
