@@ -7,6 +7,32 @@ import { Loader2, CheckCircle2, AlertCircle, Shield } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { uploadFile } from '@/utils/storage'
 
+// Renders image from full URL or fetches signed URL when value is a storage path (private bucket)
+function AdminImage({ url, alt, className, placeholderClassName }: { url: string | null | undefined; alt: string; className?: string; placeholderClassName?: string }) {
+    const [resolvedUrl, setResolvedUrl] = useState<string | null>(null)
+    useEffect(() => {
+        if (!url) {
+            setResolvedUrl(null)
+            return
+        }
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+            setResolvedUrl(url)
+            return
+        }
+        let cancelled = false
+        fetch(`/api/admin/storage/signed-url?path=${encodeURIComponent(url)}`)
+            .then((res) => res.json())
+            .then((data) => {
+                if (!cancelled && data?.url) setResolvedUrl(data.url)
+            })
+            .catch(() => { if (!cancelled) setResolvedUrl(null) })
+        return () => { cancelled = true }
+    }, [url])
+    if (!url) return <div className={placeholderClassName || 'h-12 w-12 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs'}>{'No img'}</div>
+    if (!resolvedUrl) return <div className={placeholderClassName || 'h-12 w-12 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs'}>{'No img'}</div>
+    return <img src={resolvedUrl} alt={alt} className={className} />
+}
+
 export default function EditVendorPage() {
     const [loading, setLoading] = useState(false)
     const [fetching, setFetching] = useState(true)
@@ -33,9 +59,17 @@ export default function EditVendorPage() {
     // File upload states
     const [uploadingFront, setUploadingFront] = useState(false)
     const [uploadingBack, setUploadingBack] = useState(false)
+    const [uploadingLogo, setUploadingLogo] = useState(false)
 
     // Selected stock for pricing tiers
     const [selectedStock, setSelectedStock] = useState<any>(null)
+
+    // Vendor services (multiple service items with pricing and images)
+    const [vendorServices, setVendorServices] = useState<any[]>([])
+    // Add-from-catalog: image for the service being added
+    const [serviceImageForAdd, setServiceImageForAdd] = useState('')
+    const [uploadingServiceForAdd, setUploadingServiceForAdd] = useState(false)
+    const [addingServiceFromCatalog, setAddingServiceFromCatalog] = useState(false)
 
     useEffect(() => {
         fetchInitialData()
@@ -79,10 +113,88 @@ export default function EditVendorPage() {
                     setSubcategories(subData)
                 }
             }
+
+            // Load services for this vendor
+            const svcRes = await fetch(`/api/admin/services?vendor_id=${id}`)
+            const svcData = await svcRes.json()
+            if (svcData && !svcData.error && Array.isArray(svcData)) {
+                setVendorServices(svcData)
+            }
         } catch (err) {
             console.error('Fetch error:', err)
         } finally {
             setFetching(false)
+        }
+    }
+
+    const fetchVendorServices = async () => {
+        if (!id) return
+        const res = await fetch(`/api/admin/services?vendor_id=${id}`)
+        const data = await res.json()
+        if (data && !data.error && Array.isArray(data)) setVendorServices(data)
+    }
+
+    const handleAddServiceFromCatalog = async () => {
+        if (!selectedStock || !formData.service_price_amount || !formData.service_pricing_type) {
+            alert('Select a service item and a pricing tier first.')
+            return
+        }
+        setAddingServiceFromCatalog(true)
+        try {
+            const body: any = {
+                vendor_id: id,
+                name: formData.service_stock_name || selectedStock.name,
+                price_amount: parseFloat(formData.service_price_amount),
+                price_unit: 'event',
+            }
+            if (serviceImageForAdd) body.image_url = serviceImageForAdd
+            const res = await fetch('/api/admin/services', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            })
+            const result = await res.json()
+            if (result.error) throw new Error(result.error)
+            setServiceImageForAdd('')
+            setFormData((prev: any) => ({
+                ...prev,
+                service_stock_id: '',
+                service_stock_name: '',
+                service_pricing_type: '',
+                service_price_amount: '',
+            }))
+            setSelectedStock(null)
+            await fetchVendorServices()
+        } catch (err: any) {
+            alert(err?.message || 'Failed to add service')
+        } finally {
+            setAddingServiceFromCatalog(false)
+        }
+    }
+
+    const handleServiceImageForAddUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        setUploadingServiceForAdd(true)
+        try {
+            const url = await uploadFile(file, 'services')
+            if (url) setServiceImageForAdd(url)
+        } catch (err) {
+            console.error(err)
+        } finally {
+            setUploadingServiceForAdd(false)
+        }
+    }
+
+    const handleDeleteService = async (serviceId: string) => {
+        if (!confirm('Delete this service?')) return
+        try {
+            const res = await fetch(`/api/admin/services/${serviceId}`, { method: 'DELETE' })
+            const result = await res.json()
+            if (result.error) throw new Error(result.error)
+            await fetchVendorServices()
+        } catch (err: any) {
+            alert(err?.message || 'Failed to delete')
         }
     }
 
@@ -150,10 +262,14 @@ export default function EditVendorPage() {
         const file = e.target.files?.[0]
         if (!file) return
 
-        const setUploading = fieldName === 'aadhaar_front_url' ? setUploadingFront : setUploadingBack
+        const setUploading =
+            fieldName === 'logo_url' ? setUploadingLogo
+            : fieldName === 'aadhaar_front_url' ? setUploadingFront
+            : setUploadingBack
         setUploading(true)
         try {
-            const url = await uploadFile(file, 'kyc')
+            const folder = fieldName === 'logo_url' ? 'vendors' : 'kyc'
+            const url = await uploadFile(file, folder)
             if (url) {
                 handleChange(fieldName, url)
             }
@@ -303,6 +419,20 @@ export default function EditVendorPage() {
                         </div>
                         <div className="p-6">
                             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                                <div className="md:col-span-2">
+                                    <label className={labelClass}>Profile / Logo Image</label>
+                                    <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-2">Shown on vendor details in the app.</p>
+                                    <div className="flex items-center gap-4">
+                                        {formData.logo_url ? (
+                                            <AdminImage url={formData.logo_url} alt="Logo" className="h-20 w-20 rounded-lg object-cover border border-neutral-200 dark:border-neutral-700 flex-shrink-0" placeholderClassName="h-20 w-20 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs flex-shrink-0" />
+                                        ) : null}
+                                        <div className="flex-1">
+                                            <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, 'logo_url')} disabled={uploadingLogo} className={inputClass + ' file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90'} />
+                                            {uploadingLogo && <p className="mt-1 text-sm text-blue-600">Uploading...</p>}
+                                            {formData.logo_url && !uploadingLogo && <p className="mt-1 text-sm text-green-600">Profile image uploaded</p>}
+                                        </div>
+                                    </div>
+                                </div>
                                 <div>
                                     <label className={labelClass}>Business Name <span className="text-red-500">*</span></label>
                                     <input type="text" value={formData.business_name || ''} onChange={(e) => handleChange('business_name', e.target.value)} required className={inputClass} />
@@ -337,6 +467,15 @@ export default function EditVendorPage() {
                                 <div>
                                     <label className={labelClass}>City (Auto-extracted from address)</label>
                                     <input type="text" value={formData.city || ''} onChange={(e) => handleChange('city', e.target.value)} placeholder="Will be extracted from address" className={inputClass} />
+                                </div>
+                                <div>
+                                    <label className={labelClass}>State</label>
+                                    <select value={formData.state || ''} onChange={(e) => handleChange('state', e.target.value)} className={inputClass}>
+                                        <option value="">Select State</option>
+                                        {['Odisha', 'Assam', 'West Bengal', 'Karnataka', 'Telangana', 'Tamil Nadu', 'Maharashtra', 'Delhi', 'Gujarat', 'Rajasthan', 'Kerala', 'Andhra Pradesh', 'Other'].map(s => (
+                                            <option key={s} value={s}>{s}</option>
+                                        ))}
+                                    </select>
                                 </div>
                                 <div className="md:col-span-2">
                                     <label className={labelClass}>Business Description</label>
@@ -436,9 +575,9 @@ export default function EditVendorPage() {
                                     </div>
                                 )}
 
-                                {/* Price summary */}
-                                {formData.service_price_amount && formData.service_pricing_type && (
-                                    <div className="md:col-span-2">
+                                {/* Price summary + image upload + Add this service */}
+                                {formData.service_price_amount && formData.service_pricing_type && selectedStock && (
+                                    <div className="md:col-span-2 space-y-4">
                                         <div className="rounded-lg bg-primary/5 border border-primary/20 p-4">
                                             <p className="text-xs font-bold uppercase tracking-widest text-primary mb-1">Selected Service</p>
                                             <p className="text-2xl font-bold text-primary">₹{formData.service_price_amount}</p>
@@ -449,9 +588,56 @@ export default function EditVendorPage() {
                                                 Tier: {formData.service_pricing_type.charAt(0).toUpperCase() + formData.service_pricing_type.slice(1)}
                                             </p>
                                         </div>
+                                        <div>
+                                            <label className={labelClass}>Service image (optional)</label>
+                                            <div className="flex items-center gap-4 mt-2">
+                                                {serviceImageForAdd && (
+                                                    <img src={serviceImageForAdd} alt="Service" className="h-16 w-16 rounded-lg object-cover border border-neutral-200 dark:border-neutral-700 flex-shrink-0" />
+                                                )}
+                                                <div className="flex-1 min-w-0">
+                                                    <input type="file" accept="image/*" onChange={handleServiceImageForAddUpload} disabled={uploadingServiceForAdd} className={inputClass + ' file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white'} />
+                                                    {uploadingServiceForAdd && <p className="mt-1 text-sm text-blue-600">Uploading...</p>}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button type="button" onClick={handleAddServiceFromCatalog} disabled={addingServiceFromCatalog} className="px-4 py-2 rounded-lg bg-primary text-white font-semibold text-sm hover:bg-primary/90 disabled:opacity-50">
+                                            {addingServiceFromCatalog ? 'Adding...' : 'Add this service'}
+                                        </button>
+                                        <p className="text-xs text-gray-500">You can add more services by selecting another item and tier above, then Add this service again.</p>
                                     </div>
                                 )}
                             </div>
+                        </div>
+                    </div>
+
+                    {/* Section 2b: Vendor Services (multiple service items with pricing and images) */}
+                    <div className="rounded-lg border border-stroke bg-white shadow-lg dark:border-strokedark dark:bg-boxdark mb-6">
+                        <div className="border-b border-stroke px-6 py-4 dark:border-strokedark bg-gradient-to-r from-emerald-50 to-white dark:from-emerald-950 dark:to-boxdark">
+                            <h3 className="text-lg font-semibold text-black dark:text-white">Vendor Services &amp; Pricing</h3>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">All service items and pricings for this vendor. Shown in the app on the vendor details page. Upload images to Supabase storage.</p>
+                        </div>
+                        <div className="p-6">
+                            {vendorServices.length > 0 && (
+                                <div className="mb-6">
+                                    <h4 className="text-sm font-semibold text-black dark:text-white mb-3">Current services</h4>
+                                    <ul className="space-y-3">
+                                        {vendorServices.map((svc: any) => (
+                                            <li key={svc.id} className="flex items-center gap-4 rounded-lg border border-stroke dark:border-strokedark p-3 bg-gray-50 dark:bg-gray-900">
+                                                <AdminImage url={svc.image_url} alt="" className="h-12 w-12 rounded-lg object-cover flex-shrink-0" />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-semibold text-black dark:text-white truncate">{svc.name}</p>
+                                                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                        {(svc.price_amount != null || svc.base_price != null) && `₹${Number(svc.price_amount ?? svc.base_price).toLocaleString()}`}
+                                                        {svc.price_unit && ` / ${svc.price_unit}`}
+                                                    </p>
+                                                </div>
+                                                <a href={`/admin/services/${svc.id}/edit`} className="text-primary font-medium text-sm hover:underline">Edit</a>
+                                                <button type="button" onClick={() => handleDeleteService(svc.id)} className="text-red-600 hover:text-red-700 text-sm font-medium">Delete</button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
                         </div>
                     </div>
 

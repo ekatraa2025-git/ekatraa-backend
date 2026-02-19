@@ -10,7 +10,6 @@ import {
     Settings,
     Calendar,
     FileText,
-    Briefcase,
     MapPin,
     CreditCard,
     ChevronDown,
@@ -59,7 +58,6 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
     const menuItems = [
         { name: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
         { name: 'Vendors', icon: Users, path: '/admin/vendors' },
-        { name: 'Services', icon: Briefcase, path: '/admin/services' },
         { name: 'Bookings', icon: Calendar, path: '/admin/bookings' },
         { name: 'Bookings Allocation', icon: MapPin, path: '/admin/locations' },
         { name: 'Quotations', icon: FileText, path: '/admin/quotations' },

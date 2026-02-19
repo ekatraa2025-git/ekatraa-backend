@@ -10,7 +10,6 @@ import {
     Settings,
     Calendar,
     FileText,
-    Briefcase,
     MapPin,
     CreditCard,
     ChevronLeft,
@@ -18,7 +17,10 @@ import {
     Languages,
     Bell,
     Tag,
-    Package
+    Package,
+    ImageIcon,
+    Sparkles,
+    ListChecks
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -36,7 +38,9 @@ const MENU_ITEMS = [
     { name: 'Categories', icon: Layers, path: '/admin/categories' },
     { name: 'Subcategories', icon: Tag, path: '/admin/subcategories' },
     { name: 'Service Items', icon: Package, path: '/admin/stocks' },
-    { name: 'Services', icon: Briefcase, path: '/admin/services' },
+    { name: 'Banners', icon: ImageIcon, path: '/admin/banners' },
+    { name: 'Get Together Types', icon: Sparkles, path: '/admin/event-types' },
+    { name: 'Event Services Catalog', icon: ListChecks, path: '/admin/app-service-catalog' },
     { name: 'Bookings', icon: Calendar, path: '/admin/bookings' },
     { name: 'Bookings Allocation', icon: MapPin, path: '/admin/locations' },
     { name: 'Quotations', icon: FileText, path: '/admin/quotations' },

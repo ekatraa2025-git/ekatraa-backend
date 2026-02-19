@@ -27,6 +27,7 @@ export default function NewServicePage() {
         { name: 'name', label: 'Service Name', type: 'text', required: true, placeholder: 'e.g. Catering, Photography' },
         { name: 'base_price', label: 'Starting Price', type: 'number', required: true, placeholder: '0.00' },
         { name: 'description', label: 'Description', type: 'textarea', placeholder: 'Tell us about this service...' },
+        { name: 'image_url', label: 'Service Image', type: 'file', uploadFolder: 'services', accept: 'image/*' },
         { name: 'is_active', label: 'Is Active?', type: 'checkbox', initialValue: true },
     ]
 

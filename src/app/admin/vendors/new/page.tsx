@@ -26,8 +26,10 @@ export default function NewVendorPage() {
         phone: '',
         address: '',
         city: '',
+        state: '',
         service_area: '',
         description: '',
+        logo_url: '',
         aadhaar_number: '',
         aadhaar_front_url: '',
         aadhaar_back_url: '',
@@ -54,6 +56,7 @@ export default function NewVendorPage() {
     // File upload states
     const [uploadingFront, setUploadingFront] = useState(false)
     const [uploadingBack, setUploadingBack] = useState(false)
+    const [uploadingLogo, setUploadingLogo] = useState(false)
 
     // Selected stock for pricing tiers
     const [selectedStock, setSelectedStock] = useState<any>(null)
@@ -136,10 +139,14 @@ export default function NewVendorPage() {
         const file = e.target.files?.[0]
         if (!file) return
 
-        const setUploading = fieldName === 'aadhaar_front_url' ? setUploadingFront : setUploadingBack
+        const setUploading =
+            fieldName === 'logo_url' ? setUploadingLogo
+            : fieldName === 'aadhaar_front_url' ? setUploadingFront
+            : setUploadingBack
         setUploading(true)
         try {
-            const url = await uploadFile(file, 'kyc')
+            const folder = fieldName === 'logo_url' ? 'vendors' : 'kyc'
+            const url = await uploadFile(file, folder)
             if (url) {
                 handleChange(fieldName, url)
             }
@@ -314,6 +321,20 @@ export default function NewVendorPage() {
                         </div>
                         <div className="p-6">
                             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                                <div className="md:col-span-2">
+                                    <label className={labelClass}>Profile / Logo Image</label>
+                                    <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-2">Shown on vendor details in the app.</p>
+                                    <div className="flex items-center gap-4">
+                                        {formData.logo_url && (
+                                            <img src={formData.logo_url} alt="Logo" className="h-20 w-20 rounded-lg object-cover border border-neutral-200 dark:border-neutral-700" />
+                                        )}
+                                        <div className="flex-1">
+                                            <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, 'logo_url')} disabled={uploadingLogo} className={inputClass + ' file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90'} />
+                                            {uploadingLogo && <p className="mt-1 text-sm text-blue-600">Uploading...</p>}
+                                            {formData.logo_url && !uploadingLogo && <p className="mt-1 text-sm text-green-600">Profile image uploaded</p>}
+                                        </div>
+                                    </div>
+                                </div>
                                 <div>
                                     <label className={labelClass}>Business Name <span className="text-red-500">*</span></label>
                                     <input type="text" value={formData.business_name} onChange={(e) => handleChange('business_name', e.target.value)} placeholder="Enter business name" required className={inputClass} />
@@ -348,6 +369,15 @@ export default function NewVendorPage() {
                                 <div>
                                     <label className={labelClass}>City (Auto-extracted from address)</label>
                                     <input type="text" value={formData.city} onChange={(e) => handleChange('city', e.target.value)} placeholder="Will be extracted from address" className={inputClass} />
+                                </div>
+                                <div>
+                                    <label className={labelClass}>State</label>
+                                    <select value={formData.state || ''} onChange={(e) => handleChange('state', e.target.value)} className={selectClass}>
+                                        <option value="">Select State</option>
+                                        {['Odisha', 'Assam', 'West Bengal', 'Karnataka', 'Telangana', 'Tamil Nadu', 'Maharashtra', 'Delhi', 'Gujarat', 'Rajasthan', 'Kerala', 'Andhra Pradesh', 'Other'].map(s => (
+                                            <option key={s} value={s}>{s}</option>
+                                        ))}
+                                    </select>
                                 </div>
                                 <div className="md:col-span-2">
                                     <label className={labelClass}>Business Description</label>
