@@ -388,7 +388,7 @@ export default function EditVendorPage() {
                                             <option value="">Select Service Item</option>
                                             {stocks.map((s: any) => (
                                                 <option key={s.id} value={s.id}>
-                                                    {s.name} (Basic: ₹{s.price_basic} | Standard: ₹{s.price_standard} | Premium: ₹{s.price_premium})
+                                                    {s.name} (Classic Value: ₹{s.price_classic_value ?? 0} | Signature: ₹{s.price_signature ?? 0} | Prestige: ₹{s.price_prestige ?? 0} | Royal: ₹{s.price_royal ?? 0} | Imperial: ₹{s.price_imperial ?? 0})
                                                 </option>
                                             ))}
                                         </select>
@@ -399,11 +399,13 @@ export default function EditVendorPage() {
                                 {selectedStock && (
                                     <div className="md:col-span-2">
                                         <label className={labelClass}>Pricing Tier</label>
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                                             {[
-                                                { key: 'basic', label: 'Basic', price: selectedStock.price_basic, desc: 'Economy option' },
-                                                { key: 'standard', label: 'Standard', price: selectedStock.price_standard, desc: 'Most popular choice' },
-                                                { key: 'premium', label: 'Premium', price: selectedStock.price_premium, desc: 'Premium quality' },
+                                                { key: 'classic_value', label: 'Classic Value', price: selectedStock.price_classic_value ?? 0, desc: 'Economy option' },
+                                                { key: 'signature', label: 'Signature', price: selectedStock.price_signature ?? 0, desc: 'Popular choice' },
+                                                { key: 'prestige', label: 'Prestige', price: selectedStock.price_prestige ?? 0, desc: 'Premium quality' },
+                                                { key: 'royal', label: 'Royal', price: selectedStock.price_royal ?? 0, desc: 'Luxury tier' },
+                                                { key: 'imperial', label: 'Imperial', price: selectedStock.price_imperial ?? 0, desc: 'Top tier' },
                                             ].map((tier) => (
                                                 <button
                                                     key={tier.key}

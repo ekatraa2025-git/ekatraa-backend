@@ -8,7 +8,7 @@ export async function GET(req: Request) {
 
     let query = supabase
         .from('service_stocks')
-        .select('id, name, subcategory_id, price_basic, price_standard, price_premium')
+        .select('id, name, subcategory_id, price_classic_value, price_signature, price_prestige, price_royal, price_imperial')
         .order('name', { ascending: true })
 
     if (subcategoryId) {

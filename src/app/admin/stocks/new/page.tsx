@@ -36,9 +36,11 @@ export default function NewStockPage() {
             }))
         },
         { name: 'name', label: 'Service Item Name', type: 'text', required: true, placeholder: 'e.g. Bridal, Light Make Up, Eye Fix' },
-        { name: 'price_basic', label: 'Basic Price (₹)', type: 'number', required: true, placeholder: 'e.g. 300' },
-        { name: 'price_standard', label: 'Standard Price (₹)', type: 'number', required: true, placeholder: 'e.g. 500' },
-        { name: 'price_premium', label: 'Premium Price (₹)', type: 'number', required: true, placeholder: 'e.g. 800' },
+        { name: 'price_classic_value', label: 'Classic Value (₹)', type: 'number', required: true, placeholder: 'e.g. 300' },
+        { name: 'price_signature', label: 'Signature (₹)', type: 'number', required: true, placeholder: 'e.g. 500' },
+        { name: 'price_prestige', label: 'Prestige (₹)', type: 'number', required: true, placeholder: 'e.g. 800' },
+        { name: 'price_royal', label: 'Royal (₹)', type: 'number', required: false, placeholder: 'e.g. 1200' },
+        { name: 'price_imperial', label: 'Imperial (₹)', type: 'number', required: false, placeholder: 'e.g. 2000' },
     ]
 
     const handleSubmit = async (data: any) => {
@@ -48,9 +50,11 @@ export default function NewStockPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 ...data,
-                price_basic: parseFloat(data.price_basic) || 0,
-                price_standard: parseFloat(data.price_standard) || 0,
-                price_premium: parseFloat(data.price_premium) || 0,
+                price_classic_value: parseFloat(data.price_classic_value) || 0,
+                price_signature: parseFloat(data.price_signature) || 0,
+                price_prestige: parseFloat(data.price_prestige) || 0,
+                price_royal: parseFloat(data.price_royal) || 0,
+                price_imperial: parseFloat(data.price_imperial) || 0,
             })
         })
         const result = await res.json()

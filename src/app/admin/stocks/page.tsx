@@ -82,19 +82,29 @@ export default function StocksPage() {
             )
         },
         {
-            header: 'Basic Price',
-            key: 'price_basic',
-            render: (val: number) => <span className="font-semibold">₹{val?.toLocaleString() || '0'}</span>
+            header: 'Classic Value',
+            key: 'price_classic_value',
+            render: (val: number) => <span className="font-semibold">₹{val?.toLocaleString() ?? '0'}</span>
         },
         {
-            header: 'Standard Price',
-            key: 'price_standard',
-            render: (val: number) => <span className="font-semibold text-blue-500">₹{val?.toLocaleString() || '0'}</span>
+            header: 'Signature',
+            key: 'price_signature',
+            render: (val: number) => <span className="font-semibold text-blue-500">₹{val?.toLocaleString() ?? '0'}</span>
         },
         {
-            header: 'Premium Price',
-            key: 'price_premium',
-            render: (val: number) => <span className="font-semibold text-amber-500">₹{val?.toLocaleString() || '0'}</span>
+            header: 'Prestige',
+            key: 'price_prestige',
+            render: (val: number) => <span className="font-semibold text-amber-500">₹{val?.toLocaleString() ?? '0'}</span>
+        },
+        {
+            header: 'Royal',
+            key: 'price_royal',
+            render: (val: number) => <span className="font-semibold text-purple-500">₹{val?.toLocaleString() ?? '0'}</span>
+        },
+        {
+            header: 'Imperial',
+            key: 'price_imperial',
+            render: (val: number) => <span className="font-semibold text-rose-500">₹{val?.toLocaleString() ?? '0'}</span>
         },
     ]
 
@@ -102,7 +112,7 @@ export default function StocksPage() {
         <DefaultLayout>
             <DataTableView
                 title="Service Items"
-                description="Manage service items with tiered pricing (Basic, Standard, Premium)."
+                description="Manage service items with tiered pricing (Classic Value, Signature, Prestige, Royal, Imperial)."
                 columns={columns}
                 data={filteredStocks}
                 onSearch={handleSearch}
