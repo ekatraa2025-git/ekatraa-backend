@@ -19,7 +19,7 @@ export async function GET(req: Request) {
     if (useNewModel) {
         let query = supabase
             .from('offerable_services')
-            .select('id, category_id, name, description, image_url, display_order, price_min, price_max, price_unit, price_classic_value, price_signature, price_prestige, price_royal, price_imperial, tag_new, tag_most_booked, city')
+            .select('id, category_id, name, description, image_url, display_order, price_min, price_max, price_unit, price_basic, price_classic_value, price_signature, price_prestige, price_royal, price_imperial, tag_new, tag_most_booked, city')
             .eq('is_active', true)
             .order('display_order', { ascending: true })
 

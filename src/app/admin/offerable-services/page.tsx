@@ -29,6 +29,7 @@ export default function OfferableServicesPage() {
             is_active?: boolean
             price_min?: number
             price_max?: number
+            price_basic?: number | null
             price_classic_value?: number | null
             price_signature?: number | null
             price_prestige?: number | null
@@ -101,6 +102,12 @@ export default function OfferableServicesPage() {
         },
         { header: 'Name', key: 'name' },
         { header: 'Category', key: 'category_id' },
+        {
+            header: 'Basic',
+            key: 'price_basic',
+            render: (v: number | null | undefined) =>
+                v != null ? `₹${Number(v).toLocaleString()}` : '—',
+        },
         {
             header: 'Classic',
             key: 'price_classic_value',

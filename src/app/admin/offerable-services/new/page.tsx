@@ -13,6 +13,7 @@ import { RichTextEditor } from '@/components/Common/RichTextEditor'
 import { toast } from 'sonner'
 
 const TIER_LABELS = [
+    { key: 'price_basic', label: 'Basic' },
     { key: 'price_classic_value', label: 'Classic Value' },
     { key: 'price_signature', label: 'Signature' },
     { key: 'price_prestige', label: 'Prestige' },
@@ -35,6 +36,7 @@ export default function NewOfferableServicePage() {
         description: '',
         display_order: 0,
         image_url: '',
+        price_basic: '' as string,
         price_classic_value: '' as string,
         price_signature: '' as string,
         price_prestige: '' as string,

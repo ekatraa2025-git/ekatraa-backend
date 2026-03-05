@@ -13,6 +13,7 @@ import { RichTextEditor } from '@/components/Common/RichTextEditor'
 import { toast } from 'sonner'
 
 const TIER_LABELS = [
+    { key: 'price_basic', label: 'Basic' },
     { key: 'price_classic_value', label: 'Classic Value' },
     { key: 'price_signature', label: 'Signature' },
     { key: 'price_prestige', label: 'Prestige' },
@@ -39,6 +40,7 @@ export default function EditOfferableServicePage() {
         description: '',
         display_order: 0,
         image_url: '',
+        price_basic: '' as string,
         price_classic_value: '' as string,
         price_signature: '' as string,
         price_prestige: '' as string,
@@ -90,6 +92,10 @@ export default function EditOfferableServicePage() {
                         description: (svc.description as string) ?? '',
                         display_order: Number(svc.display_order) ?? 0,
                         image_url: (svc.image_url as string) ?? '',
+                        price_basic:
+                            svc.price_basic != null
+                                ? String(svc.price_basic)
+                                : '',
                         price_classic_value:
                             svc.price_classic_value != null
                                 ? String(svc.price_classic_value)
@@ -136,6 +142,10 @@ export default function EditOfferableServicePage() {
                             description: (svc.description as string) ?? '',
                             display_order: Number(svc.display_order) ?? 0,
                             image_url: (svc.image_url as string) ?? '',
+                            price_basic:
+                                svc.price_basic != null
+                                    ? String(svc.price_basic)
+                                    : '',
                             price_classic_value:
                                 svc.price_classic_value != null
                                     ? String(svc.price_classic_value)

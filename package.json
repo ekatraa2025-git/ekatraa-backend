@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node tests/cart-order-lifecycle.mjs"
+    "test": "node tests/cart-order-lifecycle.mjs",
+    "seed": "node scripts/seed-offerable-services.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
