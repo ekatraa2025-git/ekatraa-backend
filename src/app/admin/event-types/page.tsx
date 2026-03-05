@@ -47,6 +47,10 @@ export default function EventTypesPage() {
         setFiltered((prev) => prev.filter((e) => !ids.includes(e.id)))
     }
 
+    const handleDelete = async (id: string) => {
+        await handleBulkDelete([id])
+    }
+
     const columns = [
         {
             header: 'Icon / Image',

@@ -257,7 +257,7 @@ export default function ServicesPage() {
                                                 </TableCell>
                                                 {columns.map((col, colIndex) => (
                                                     <TableCell key={colIndex}>
-                                                        {col.render ? col.render(item[col.key], item) : item[col.key]}
+                                                        {col.render ? col.render(item[col.key]) : item[col.key]}
                                                     </TableCell>
                                                 ))}
                                                 <TableCell className="text-right">
