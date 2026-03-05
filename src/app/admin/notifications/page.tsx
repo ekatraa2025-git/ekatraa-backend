@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -61,12 +62,12 @@ export default function NotificationsPage() {
     e.preventDefault()
     
     if (!title.trim() || !message.trim()) {
-      alert('Please fill in both title and message')
+      toast.error('Please fill in both title and message')
       return
     }
 
     if (selectedVendors.length === 0) {
-      alert('Please select at least one vendor')
+      toast.error('Please select at least one vendor')
       return
     }
 
@@ -90,7 +91,7 @@ export default function NotificationsPage() {
       const result = await response.json()
 
       if (result.error) {
-        alert(`Error: ${result.error}`)
+        toast.error(`Error: ${result.error}`)
       } else {
         setSuccess(true)
         setTitle('')
@@ -102,7 +103,7 @@ export default function NotificationsPage() {
         setTimeout(() => setSuccess(false), 3000)
       }
     } catch (error: any) {
-      alert(`Error sending notification: ${error.message}`)
+      toast.error(`Error sending notification: ${error.message}`)
     } finally {
       setLoading(false)
     }

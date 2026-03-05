@@ -5,6 +5,8 @@ import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import { useRouter } from 'next/navigation'
 import { Loader2, ImageIcon } from 'lucide-react'
 import { uploadFile } from '@/utils/storage'
+import { AdminImage } from '@/components/Common/AdminImage'
+import { toast } from 'sonner'
 
 export default function NewBannerPage() {
     const router = useRouter()
@@ -37,7 +39,7 @@ export default function NewBannerPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!formData.title || !formData.image_url) {
-            alert('Title and image are required.')
+            toast.error('Title and image are required.')
             return
         }
         setLoading(true)
@@ -48,7 +50,7 @@ export default function NewBannerPage() {
         })
         const result = await res.json()
         setLoading(false)
-        if (result.error) alert(result.error)
+        if (result.error) toast.error(result.error)
         else router.push('/admin/banners')
     }
 
@@ -79,7 +81,7 @@ export default function NewBannerPage() {
                                 {uploading && <Loader2 className="h-5 w-5 animate-spin" />}
                             </div>
                             {formData.image_url && (
-                                <img src={formData.image_url} alt="Preview" className="mt-2 h-24 w-40 rounded object-cover" />
+                                <AdminImage url={formData.image_url} alt="Preview" className="mt-2 h-24 w-40 rounded object-cover" placeholderClassName="h-24 w-40 rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs" />
                             )}
                             <input type="hidden" value={formData.image_url} readOnly />
                         </div>

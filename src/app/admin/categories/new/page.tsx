@@ -4,6 +4,7 @@ import React from 'react'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import Form from '@/components/Common/Form'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 export default function NewCategoryPage() {
     const [loading, setLoading] = React.useState(false)
@@ -25,7 +26,7 @@ export default function NewCategoryPage() {
         setLoading(false)
 
         if (result.error) {
-            alert(result.error)
+            toast.error(result.error)
         } else {
             router.push('/admin/categories')
         }

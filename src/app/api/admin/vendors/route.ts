@@ -20,10 +20,9 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Fetch categories to manually join (workaround for missing DB relationship)
-    const { data: categories } = await supabase.from('vendor_categories').select('id, name')
-
-    const categoriesMap = new Map(categories?.map(c => [c.id, c.name]) || [])
+    // Resolve category name from catalog categories (categories table)
+    const { data: catalogCategories } = await supabase.from('categories').select('id, name')
+    const categoriesMap = new Map(catalogCategories?.map(c => [c.id, c.name]) || [])
 
     const data = vendors.map(vendor => ({
         ...vendor,

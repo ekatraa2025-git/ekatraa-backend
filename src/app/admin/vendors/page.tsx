@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from 'react'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
+import { ConfirmDialog } from '@/components/Common/ConfirmDialog'
+import { toast } from 'sonner'
 import { DataTableView } from '@/components/admin-panel/data-table-view'
 import { createClient } from '@/utils/supabase/client'
 import { Edit, Trash2, Loader2, MoreHorizontal, Eye } from 'lucide-react'
@@ -21,6 +23,7 @@ export default function VendorsPage() {
     const [vendors, setVendors] = useState<any[]>([])
     const [filteredVendors, setFilteredVendors] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
+    const [deleteTarget, setDeleteTarget] = useState<{id: string; name: string} | null>(null)
     const supabase = createClient()
 
     useEffect(() => {
@@ -65,19 +68,28 @@ export default function VendorsPage() {
         },
     ]
 
-    const handleDelete = async (id: string) => {
-        if (confirm('Are you sure you want to delete this vendor?')) {
-            const res = await fetch(`/api/admin/vendors/${id}`, {
-                method: 'DELETE'
-            })
-            const result = await res.json()
-            if (result.error) {
-                alert(result.error)
-            } else {
-                setVendors(vendors.filter(v => v.id !== id))
-                setFilteredVendors(filteredVendors.filter(v => v.id !== id))
-            }
+    const handleDelete = (id: string, name: string) => {
+        setDeleteTarget({ id, name })
+    }
+
+    const confirmDelete = async () => {
+        if (!deleteTarget) return
+        const res = await fetch(`/api/admin/vendors/${deleteTarget.id}`, { method: 'DELETE' })
+        const result = await res.json()
+        if (result.error) {
+            toast.error(result.error)
+        } else {
+            setVendors(vendors.filter(v => v.id !== deleteTarget.id))
+            setFilteredVendors(filteredVendors.filter(v => v.id !== deleteTarget.id))
+            toast.success('Deleted successfully')
         }
+        setDeleteTarget(null)
+    }
+
+    const handleBulkDelete = async (ids: string[]) => {
+        await Promise.all(ids.map((id) => fetch(`/api/admin/vendors/${id}`, { method: 'DELETE' }).then((r) => r.json())))
+        setVendors((prev) => prev.filter((v) => !ids.includes(v.id)))
+        setFilteredVendors((prev) => prev.filter((v) => !ids.includes(v.id)))
     }
 
     if (loading) {
@@ -100,6 +112,10 @@ export default function VendorsPage() {
                 onSearch={handleSearch}
                 addNewLink="/admin/vendors/new"
                 addNewLabel="Add Vendor"
+                selectable
+                onBulkDelete={handleBulkDelete}
+                editLinkBase="/admin/vendors"
+                editLinkSuffix=""
                 actions={(item) => (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -118,7 +134,7 @@ export default function VendorsPage() {
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                                onClick={() => handleDelete(item.id)}
+                                onClick={() => handleDelete(item.id, item.business_name)}
                                 className="text-destructive focus:bg-destructive/10 focus:text-destructive"
                             >
                                 <Trash2 className="mr-2 h-4 w-4" />
@@ -127,6 +143,13 @@ export default function VendorsPage() {
                         </DropdownMenuContent>
                     </DropdownMenu>
                 )}
+            />
+            <ConfirmDialog
+                open={!!deleteTarget}
+                onOpenChange={(open) => !open && setDeleteTarget(null)}
+                title="Delete Vendor"
+                description={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+                onConfirm={confirmDelete}
             />
         </DefaultLayout>
     )

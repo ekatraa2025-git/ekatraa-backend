@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import Form from '@/components/Common/Form'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 export default function NewBookingPage() {
     const [loading, setLoading] = useState(false)
@@ -44,7 +45,7 @@ export default function NewBookingPage() {
         setLoading(false)
 
         if (result.error) {
-            alert(result.error)
+            toast.error(result.error)
         } else {
             router.push('/admin/bookings')
         }

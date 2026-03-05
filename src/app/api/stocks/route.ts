@@ -1,7 +1,10 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
-// Public endpoint for mobile app to fetch service stocks/items
+/**
+ * @deprecated Use /api/public/services (new flow). Stocks not in active model.
+ * Public endpoint for mobile app to fetch service stocks/items (legacy).
+ */
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const subcategoryId = searchParams.get('subcategory_id')

@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from 'react'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
+import { ConfirmDialog } from '@/components/Common/ConfirmDialog'
+import { toast } from 'sonner'
 import { DataTableView } from '@/components/admin-panel/data-table-view'
 import { Edit, Trash2, Loader2, MoreHorizontal, Image as ImageIcon } from 'lucide-react'
 import Link from 'next/link'
@@ -20,6 +22,7 @@ export default function BannersPage() {
     const [banners, setBanners] = useState<any[]>([])
     const [filteredBanners, setFilteredBanners] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
+    const [deleteTarget, setDeleteTarget] = useState<{id: string; name: string} | null>(null)
 
     useEffect(() => {
         fetchBanners()
@@ -44,12 +47,25 @@ export default function BannersPage() {
         setFilteredBanners(filtered)
     }
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this banner?')) return
-        const res = await fetch(`/api/admin/banners/${id}`, { method: 'DELETE' })
+    const handleBulkDelete = async (ids: string[]) => {
+        await Promise.all(ids.map((id) => fetch(`/api/admin/banners/${id}`, { method: 'DELETE' }).then((r) => r.json())))
+        fetchBanners()
+    }
+
+    const handleDelete = (id: string, name: string) => {
+        setDeleteTarget({ id, name })
+    }
+
+    const confirmDelete = async () => {
+        if (!deleteTarget) return
+        const res = await fetch(`/api/admin/banners/${deleteTarget.id}`, { method: 'DELETE' })
         const result = await res.json()
-        if (result.error) alert(result.error)
-        else fetchBanners()
+        if (result.error) toast.error(result.error)
+        else {
+            fetchBanners()
+            toast.success('Deleted successfully')
+        }
+        setDeleteTarget(null)
     }
 
     const columns = [
@@ -91,6 +107,10 @@ export default function BannersPage() {
                 onSearch={handleSearch}
                 addNewLink="/admin/banners/new"
                 addNewLabel="Add Banner"
+                selectable
+                onBulkDelete={handleBulkDelete}
+                editLinkBase="/admin/banners"
+                editLinkSuffix="/edit"
                 actions={(item) => (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -109,7 +129,7 @@ export default function BannersPage() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                                 className="text-destructive focus:bg-destructive/10"
-                                onClick={() => handleDelete(item.id)}
+                                onClick={() => handleDelete(item.id, item.title)}
                             >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 Delete
@@ -117,6 +137,13 @@ export default function BannersPage() {
                         </DropdownMenuContent>
                     </DropdownMenu>
                 )}
+            />
+            <ConfirmDialog
+                open={!!deleteTarget}
+                onOpenChange={(open) => !open && setDeleteTarget(null)}
+                title="Delete Banner"
+                description={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+                onConfirm={confirmDelete}
             />
         </DefaultLayout>
     )

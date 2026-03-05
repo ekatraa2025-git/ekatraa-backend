@@ -41,15 +41,10 @@ export default function EventTypesPage() {
         setFiltered(f)
     }
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Delete this get-together type? It may break app if in use.')) return
-        const res = await fetch(`/api/admin/event-types/${id}`, { method: 'DELETE' })
-        const result = await res.json()
-        if (result.error) alert(result.error)
-        else {
-            setEventTypes(prev => prev.filter(e => e.id !== id))
-            setFiltered(prev => prev.filter(e => e.id !== id))
-        }
+    const handleBulkDelete = async (ids: string[]) => {
+        await Promise.all(ids.map((id) => fetch(`/api/admin/event-types/${id}`, { method: 'DELETE' }).then((r) => r.json())))
+        setEventTypes((prev) => prev.filter((e) => !ids.includes(e.id)))
+        setFiltered((prev) => prev.filter((e) => !ids.includes(e.id)))
     }
 
     const columns = [
@@ -98,6 +93,10 @@ export default function EventTypesPage() {
                 onSearch={handleSearch}
                 addNewLink="/admin/event-types/new"
                 addNewLabel="Add Get Together Type"
+                selectable
+                onBulkDelete={handleBulkDelete}
+                editLinkBase="/admin/event-types"
+                editLinkSuffix="/edit"
                 actions={(item) => (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import Form from '@/components/Common/Form'
 import { useRouter } from 'next/navigation'
@@ -46,7 +47,7 @@ export default function NewSubcategoryPage() {
         setLoading(false)
 
         if (result.error) {
-            alert(result.error)
+            toast.error(result.error)
         } else {
             router.push('/admin/subcategories')
         }

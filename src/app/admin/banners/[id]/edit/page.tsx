@@ -5,6 +5,8 @@ import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import { useRouter, useParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { uploadFile } from '@/utils/storage'
+import { AdminImage } from '@/components/Common/AdminImage'
+import { toast } from 'sonner'
 
 export default function EditBannerPage() {
     const router = useRouter()
@@ -29,7 +31,7 @@ export default function EditBannerPage() {
             .then(r => r.json())
             .then(data => {
                 if (data.error) {
-                    alert(data.error)
+                    toast.error(data.error)
                     router.push('/admin/banners')
                     return
                 }
@@ -63,7 +65,7 @@ export default function EditBannerPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!formData.title || !formData.image_url) {
-            alert('Title and image are required.')
+            toast.error('Title and image are required.')
             return
         }
         setLoading(true)
@@ -74,7 +76,7 @@ export default function EditBannerPage() {
         })
         const result = await res.json()
         setLoading(false)
-        if (result.error) alert(result.error)
+        if (result.error) toast.error(result.error)
         else router.push('/admin/banners')
     }
 
@@ -113,7 +115,7 @@ export default function EditBannerPage() {
                                 <input type="file" accept="image/*" onChange={handleImageChange} className="text-sm" />
                                 {uploading && <Loader2 className="h-5 w-5 animate-spin" />}
                             </div>
-                            {formData.image_url && <img src={formData.image_url} alt="Preview" className="mt-2 h-24 w-40 rounded object-cover" />}
+                            {formData.image_url && <AdminImage url={formData.image_url} alt="Preview" className="mt-2 h-24 w-40 rounded object-cover" placeholderClassName="h-24 w-40 rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs" />}
                             <input type="url" value={formData.image_url} onChange={e => handleChange('image_url', e.target.value)} className={inputClass + ' mt-2'} placeholder="Or paste image URL" />
                         </div>
                         <div>

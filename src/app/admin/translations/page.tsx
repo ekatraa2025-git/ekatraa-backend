@@ -1,7 +1,9 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
+import { ConfirmDialog } from '@/components/Common/ConfirmDialog'
 import { DataTableView } from '@/components/admin-panel/data-table-view'
 import { Loader2, Plus, Edit, Save, X, Languages, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -31,6 +33,7 @@ export default function TranslationsPage() {
     const [newTranslation, setNewTranslation] = useState<Translation>({ key: '', en: '', hi: '', or: '' })
     const [showAddForm, setShowAddForm] = useState(false)
     const [deletingKey, setDeletingKey] = useState<string | null>(null)
+    const [deleteTarget, setDeleteTarget] = useState<{key: string} | null>(null)
 
     useEffect(() => {
         fetchTranslations()
@@ -87,7 +90,7 @@ export default function TranslationsPage() {
             const result = await res.json()
 
             if (result.error) {
-                alert(result.error)
+                toast.error(result.error)
             } else {
                 // Update local state
                 const updated = translations.map(t =>
@@ -99,7 +102,7 @@ export default function TranslationsPage() {
                 setEditData(null)
             }
         } catch (error: any) {
-            alert('Failed to save: ' + error.message)
+            toast.error('Failed to save: ' + error.message)
         } finally {
             setSaving(false)
         }
@@ -107,7 +110,7 @@ export default function TranslationsPage() {
 
     const handleAddNew = async () => {
         if (!newTranslation.key) {
-            alert('Key is required')
+            toast.error('Key is required')
             return
         }
 
@@ -122,7 +125,7 @@ export default function TranslationsPage() {
             const result = await res.json()
 
             if (result.error) {
-                alert(result.error)
+                toast.error(result.error)
             } else {
                 // Add to local state
                 const updated = [...translations, newTranslation]
@@ -132,16 +135,19 @@ export default function TranslationsPage() {
                 setShowAddForm(false)
             }
         } catch (error: any) {
-            alert('Failed to add: ' + error.message)
+            toast.error('Failed to add: ' + error.message)
         } finally {
             setSaving(false)
         }
     }
 
-    const handleDelete = async (key: string) => {
-        if (!confirm(`Are you sure you want to delete the translation key "${key}"?`)) {
-            return
-        }
+    const handleDelete = (key: string) => {
+        setDeleteTarget({ key })
+    }
+
+    const confirmDelete = async () => {
+        if (!deleteTarget) return
+        const key = deleteTarget.key
 
         setDeletingKey(key)
         try {
@@ -152,17 +158,18 @@ export default function TranslationsPage() {
             const result = await res.json()
 
             if (result.error) {
-                alert(result.error)
+                toast.error(result.error)
             } else {
-                // Remove from local state
                 const updated = translations.filter(t => t.key !== key)
                 setTranslations(updated)
                 setFilteredTranslations(updated)
+                toast.success('Deleted successfully')
             }
         } catch (error: any) {
-            alert('Failed to delete: ' + error.message)
+            toast.error('Failed to delete: ' + error.message)
         } finally {
             setDeletingKey(null)
+            setDeleteTarget(null)
         }
     }
 
@@ -335,6 +342,13 @@ export default function TranslationsPage() {
                     )}
                 />
             </div>
+            <ConfirmDialog
+                open={!!deleteTarget}
+                onOpenChange={(open) => !open && setDeleteTarget(null)}
+                title="Delete Translation"
+                description={`Are you sure you want to delete the translation key "${deleteTarget?.key}"? This action cannot be undone.`}
+                onConfirm={confirmDelete}
+            />
         </DefaultLayout>
     )
 }

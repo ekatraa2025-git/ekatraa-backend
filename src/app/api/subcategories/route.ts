@@ -1,7 +1,10 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
-// Public endpoint for mobile app to fetch subcategories
+/**
+ * @deprecated Use /api/public/categories and /api/public/services (new flow). Subcategory not in active model.
+ * Public endpoint for mobile app to fetch subcategories (legacy).
+ */
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const categoryId = searchParams.get('category_id')

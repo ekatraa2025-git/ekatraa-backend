@@ -5,6 +5,7 @@ import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import Form from '@/components/Common/Form'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function NewStockPage() {
     const [loading, setLoading] = useState(false)
@@ -61,7 +62,7 @@ export default function NewStockPage() {
         setLoading(false)
 
         if (result.error) {
-            alert(result.error)
+            toast.error(result.error)
         } else {
             router.push('/admin/stocks')
         }

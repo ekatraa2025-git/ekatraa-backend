@@ -1,7 +1,9 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
+import { ConfirmDialog } from '@/components/Common/ConfirmDialog'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2, ArrowLeft, CheckCircle, XCircle, Calendar, User, MapPin, Phone, Mail, FileText, Building2, DollarSign, Package, Truck, CreditCard, ClipboardList, Image as ImageIcon, ExternalLink, Clock } from 'lucide-react'
@@ -22,6 +24,7 @@ export default function QuotationDetailPage() {
     const [quotation, setQuotation] = useState<any>(null)
     const [loading, setLoading] = useState(true)
     const [processing, setProcessing] = useState(false)
+    const [statusAction, setStatusAction] = useState<'accepted' | 'rejected' | null>(null)
 
     useEffect(() => {
         const fetchQuotation = async () => {
@@ -29,7 +32,7 @@ export default function QuotationDetailPage() {
             const data = await res.json()
 
             if (data.error) {
-                alert(data.error)
+                toast.error(data.error)
                 router.push('/admin/quotations')
             } else {
                 setQuotation(data)
@@ -39,31 +42,34 @@ export default function QuotationDetailPage() {
         fetchQuotation()
     }, [id, router])
 
-    const handleStatusUpdate = async (status: 'accepted' | 'rejected') => {
-        if (!confirm(`Are you sure you want to ${status} this quotation?`)) {
-            return
-        }
+    const handleStatusUpdate = (status: 'accepted' | 'rejected') => {
+        setStatusAction(status)
+    }
+
+    const confirmStatusUpdate = async () => {
+        if (!statusAction) return
 
         setProcessing(true)
         try {
             const res = await fetch(`/api/admin/quotations/${id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status })
+                body: JSON.stringify({ status: statusAction })
             })
 
             const result = await res.json()
 
             if (result.error) {
-                alert(result.error)
+                toast.error(result.error)
             } else {
                 setQuotation(result)
-                alert(`Quotation ${status} successfully!`)
+                toast.success(`Quotation ${statusAction} successfully!`)
             }
         } catch (error: any) {
-            alert(`Failed to update quotation: ${error.message}`)
+            toast.error(`Failed to update quotation: ${error.message}`)
         } finally {
             setProcessing(false)
+            setStatusAction(null)
         }
     }
 
@@ -593,6 +599,15 @@ export default function QuotationDetailPage() {
                     </Card>
                 </div>
             </div>
+            <ConfirmDialog
+                open={!!statusAction}
+                onOpenChange={(open) => !open && setStatusAction(null)}
+                title={`${statusAction === 'accepted' ? 'Accept' : 'Reject'} Quotation`}
+                description={`Are you sure you want to ${statusAction} this quotation?`}
+                confirmLabel={statusAction === 'accepted' ? 'Accept' : 'Reject'}
+                variant={statusAction === 'rejected' ? 'destructive' : 'default'}
+                onConfirm={confirmStatusUpdate}
+            />
         </DefaultLayout>
     )
 }

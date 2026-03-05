@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 const DEFAULT_EVENT_TYPE_IDS = ['wedding', 'janayu', 'social', 'birthday', 'corporate', 'funeral']
 
@@ -46,7 +47,7 @@ export default function NewAppServiceCatalogPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!formData.id.trim() || !formData.name.trim()) {
-            alert('ID and name are required.')
+            toast.error('ID and name are required.')
             return
         }
         setLoading(true)
@@ -57,7 +58,7 @@ export default function NewAppServiceCatalogPage() {
         })
         const result = await res.json()
         setLoading(false)
-        if (result.error) alert(result.error)
+        if (result.error) toast.error(result.error)
         else router.push('/admin/app-service-catalog')
     }
 

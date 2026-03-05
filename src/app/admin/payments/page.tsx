@@ -20,6 +20,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { toast } from 'sonner'
 
 export default function PaymentsPage() {
     const [vendorPayouts, setVendorPayouts] = useState<any[]>([])
@@ -75,9 +76,9 @@ export default function PaymentsPage() {
         const result = await res.json()
 
         if (result.error) {
-            alert(result.error)
+            toast.error(result.error)
         } else {
-            alert('Payment processed successfully!')
+            toast.success('Payment processed successfully!')
             fetchPayments()
         }
     }

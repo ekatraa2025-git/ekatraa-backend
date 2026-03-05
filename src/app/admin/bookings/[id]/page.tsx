@@ -5,6 +5,7 @@ import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import Form from '@/components/Common/Form'
 import { useRouter, useParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function EditBookingPage() {
     const [loading, setLoading] = useState(false)
@@ -19,7 +20,7 @@ export default function EditBookingPage() {
             const bData = await bookingRes.json()
 
             if (bData.error) {
-                alert(bData.error)
+                toast.error(bData.error)
                 router.push('/admin/bookings')
             } else {
                 setBookingData(bData)
@@ -63,7 +64,7 @@ export default function EditBookingPage() {
         setLoading(false)
 
         if (result.error) {
-            alert(result.error)
+            toast.error(result.error)
         } else {
             router.push('/admin/bookings')
         }

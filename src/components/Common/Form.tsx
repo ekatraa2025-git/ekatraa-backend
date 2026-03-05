@@ -3,12 +3,14 @@
 import React from 'react'
 import { Loader2 } from 'lucide-react'
 import { uploadFile } from '@/utils/storage'
+import { AdminImage } from '@/components/Common/AdminImage'
+import { RichTextEditor } from '@/components/Common/RichTextEditor'
 import { Switch } from '@/components/ui/switch'
 
 interface Field {
     name: string;
     label: string;
-    type: 'text' | 'email' | 'password' | 'select' | 'textarea' | 'number' | 'checkbox' | 'file' | 'switch';
+    type: 'text' | 'email' | 'password' | 'select' | 'textarea' | 'number' | 'checkbox' | 'file' | 'switch' | 'richtext';
     options?: { label: string; value: any }[];
     placeholder?: string;
     required?: boolean;
@@ -131,7 +133,7 @@ const Form = ({ fields, onSubmit, initialData = {}, title, loading }: FormProps)
                 <div className="p-6">
                     <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                         {fields.map((field) => (
-                            <div key={field.name} className={field.type === 'textarea' || field.type === 'checkbox' || field.type === 'switch' ? 'md:col-span-2' : ''}>
+                            <div key={field.name} className={field.type === 'textarea' || field.type === 'checkbox' || field.type === 'switch' || field.type === 'richtext' ? 'md:col-span-2' : ''}>
                                 <label className="mb-3 block text-sm font-medium text-black dark:text-white">
                                     {field.label} {field.required && <span className="text-red-500 ml-1">*</span>}
                                 </label>
@@ -184,6 +186,13 @@ const Form = ({ fields, onSubmit, initialData = {}, title, loading }: FormProps)
                                             {formData[field.name] ? 'Active' : 'Inactive'}
                                         </span>
                                     </div>
+                                ) : field.type === 'richtext' ? (
+                                    <RichTextEditor
+                                        value={formData[field.name] || ''}
+                                        onChange={(html) => setFormData((prev: any) => ({ ...prev, [field.name]: html }))}
+                                        placeholder={field.placeholder}
+                                        minHeight="140px"
+                                    />
                                 ) : field.type === 'file' ? (
                                     <div>
                                         <input
@@ -199,7 +208,19 @@ const Form = ({ fields, onSubmit, initialData = {}, title, loading }: FormProps)
                                             <p className="mt-2 text-sm text-blue-600 dark:text-blue-400">Uploading...</p>
                                         )}
                                         {formData[field.name] && !uploading[field.name] && (
-                                            <p className="mt-2 text-sm text-green-600 dark:text-green-400">File uploaded successfully</p>
+                                            <>
+                                                <p className="mt-2 text-sm text-green-600 dark:text-green-400">File uploaded successfully</p>
+                                                {field.accept?.includes('image') && (
+                                                    <div className="mt-2">
+                                                        <AdminImage
+                                                            url={formData[field.name]}
+                                                            alt={field.label}
+                                                            className="h-20 w-20 rounded-lg object-cover border border-stroke dark:border-strokedark"
+                                                            placeholderClassName="h-20 w-20 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs"
+                                                        />
+                                                    </div>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 ) : (

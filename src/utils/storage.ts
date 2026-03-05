@@ -27,12 +27,7 @@ export async function uploadFile(
             return null
         }
 
-        // Get public URL
-        const { data: { publicUrl } } = supabase.storage
-            .from(BUCKET_NAME)
-            .getPublicUrl(filePath)
-
-        return publicUrl
+        return filePath
     } catch (error) {
         console.error('File upload error:', error)
         return null
@@ -72,12 +67,7 @@ export async function uploadFileFromServer(
             return null
         }
 
-        // Get public URL
-        const { data: { publicUrl } } = supabase.storage
-            .from(BUCKET_NAME)
-            .getPublicUrl(filePath)
-
-        return publicUrl
+        return filePath
     } catch (error) {
         console.error('File upload error:', error)
         return null

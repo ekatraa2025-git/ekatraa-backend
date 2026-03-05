@@ -5,6 +5,7 @@ import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import Form from '@/components/Common/Form'
 import { useRouter, useParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function EditCategoryPage() {
     const [loading, setLoading] = useState(false)
@@ -23,7 +24,7 @@ export default function EditCategoryPage() {
             const res = await fetch(`/api/admin/categories/${id}`)
             const data = await res.json()
             if (data.error) {
-                alert(data.error)
+                toast.error(data.error)
                 router.push('/admin/categories')
             } else {
                 setCategoryData(data)
@@ -44,7 +45,7 @@ export default function EditCategoryPage() {
         setLoading(false)
 
         if (result.error) {
-            alert(result.error)
+            toast.error(result.error)
         } else {
             router.push('/admin/categories')
         }

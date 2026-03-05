@@ -5,6 +5,7 @@ import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import Form from '@/components/Common/Form'
 import { useRouter, useParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function EditStockPage() {
     const [loading, setLoading] = useState(false)
@@ -25,7 +26,7 @@ export default function EditStockPage() {
             const subcatResult = await subcatRes.json()
 
             if (stockResult.error) {
-                alert(stockResult.error)
+                toast.error(stockResult.error)
                 router.push('/admin/stocks')
             } else {
                 setStockData(stockResult)
@@ -77,7 +78,7 @@ export default function EditStockPage() {
         setLoading(false)
 
         if (result.error) {
-            alert(result.error)
+            toast.error(result.error)
         } else {
             router.push('/admin/stocks')
         }

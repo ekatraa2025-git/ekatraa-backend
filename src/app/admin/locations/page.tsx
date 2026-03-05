@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import { MapPin, Check, Search, Calendar as CalendarIcon, User, Info } from 'lucide-react'
 import {
@@ -100,17 +101,17 @@ export default function BookingAllocationPage() {
             const result = await res.json()
 
             if (result.error) {
-                alert(result.error)
+                toast.error(result.error)
             } else {
                 // Successfully allocated - booking is now assigned to the selected vendor
-                alert(`Booking allocated to vendor successfully!`)
+                toast.success(`Booking allocated to vendor successfully!`)
                 setSelectedBooking(null)
                 setShowAllVendors(false)
                 fetchData()
             }
         } catch (error: any) {
             console.error('Error allocating booking:', error)
-            alert(`Failed to allocate booking: ${error.message}`)
+            toast.error(`Failed to allocate booking: ${error.message}`)
         }
     }
 

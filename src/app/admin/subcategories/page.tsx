@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
+import { ConfirmDialog } from '@/components/Common/ConfirmDialog'
+import { toast } from 'sonner'
 import { MoreHorizontal, Edit, Trash2, Tag, Layers } from 'lucide-react'
 import { DataTableView } from '@/components/admin-panel/data-table-view'
 import Link from 'next/link'
@@ -20,6 +22,7 @@ export default function SubcategoriesPage() {
     const [subcategories, setSubcategories] = useState<any[]>([])
     const [filteredSubcategories, setFilteredSubcategories] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
+    const [deleteTarget, setDeleteTarget] = useState<{id: string; name: string} | null>(null)
 
     useEffect(() => {
         fetchSubcategories()
@@ -46,17 +49,21 @@ export default function SubcategoriesPage() {
         setFilteredSubcategories(filtered)
     }
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this subcategory? This will also delete all associated service items.')) return
+    const handleDelete = (id: string, name: string) => {
+        setDeleteTarget({ id, name })
+    }
 
-        const res = await fetch(`/api/admin/subcategories/${id}`, { method: 'DELETE' })
+    const confirmDelete = async () => {
+        if (!deleteTarget) return
+        const res = await fetch(`/api/admin/subcategories/${deleteTarget.id}`, { method: 'DELETE' })
         const result = await res.json()
-
         if (result.error) {
-            alert(result.error)
+            toast.error(result.error)
         } else {
             fetchSubcategories()
+            toast.success('Deleted successfully')
         }
+        setDeleteTarget(null)
     }
 
     const columns = [
@@ -121,7 +128,7 @@ export default function SubcategoriesPage() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                                 className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                                onClick={() => handleDelete(item.id)}
+                                onClick={() => handleDelete(item.id, item.name)}
                             >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 Delete Subcategory
@@ -129,6 +136,13 @@ export default function SubcategoriesPage() {
                         </DropdownMenuContent>
                     </DropdownMenu>
                 )}
+            />
+            <ConfirmDialog
+                open={!!deleteTarget}
+                onOpenChange={(open) => !open && setDeleteTarget(null)}
+                title="Delete Subcategory"
+                description={`Are you sure you want to delete "${deleteTarget?.name}"? This will also delete all associated service items.`}
+                onConfirm={confirmDelete}
             />
         </DefaultLayout>
     )

@@ -5,6 +5,8 @@ import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { uploadFile } from '@/utils/storage'
+import { AdminImage } from '@/components/Common/AdminImage'
+import { toast } from 'sonner'
 
 const PRESET_COLORS = ['#FF4117', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899', '#F59E0B', '#6366F1', '#14B8A6']
 
@@ -38,7 +40,7 @@ export default function NewEventTypePage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!formData.id.trim() || !formData.name.trim()) {
-            alert('ID and name are required.')
+            toast.error('ID and name are required.')
             return
         }
         setLoading(true)
@@ -49,7 +51,7 @@ export default function NewEventTypePage() {
         })
         const result = await res.json()
         setLoading(false)
-        if (result.error) alert(result.error)
+        if (result.error) toast.error(result.error)
         else router.push('/admin/event-types')
     }
 
@@ -83,7 +85,7 @@ export default function NewEventTypePage() {
                                 <input type="file" accept="image/*" onChange={handleImageChange} className="text-sm" />
                                 {uploading && <Loader2 className="h-5 w-5 animate-spin" />}
                             </div>
-                            {formData.image_url && <img src={formData.image_url} alt="Preview" className="mt-2 h-16 w-16 rounded object-cover" />}
+                            {formData.image_url && <AdminImage url={formData.image_url} alt="Preview" className="mt-2 h-16 w-16 rounded object-cover" placeholderClassName="h-16 w-16 rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs" />}
                             <input type="url" value={formData.image_url} onChange={e => handleChange('image_url', e.target.value)} className={inputClass + ' mt-2'} placeholder="Or paste image URL" />
                         </div>
                         <div>

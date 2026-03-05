@@ -5,6 +5,7 @@ import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import Form from '@/components/Common/Form'
 import { useRouter, useParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function EditServicePage() {
     const [loading, setLoading] = useState(false)
@@ -29,7 +30,7 @@ export default function EditServicePage() {
             }
 
             if (sData.error) {
-                alert(sData.error)
+                toast.error(sData.error)
                 router.push('/admin/services')
             } else {
                 setServiceData(sData)
@@ -43,7 +44,7 @@ export default function EditServicePage() {
         { name: 'vendor_id', label: 'Vendor', type: 'select', options: vendors, required: true },
         { name: 'name', label: 'Service Name', type: 'text', required: true, placeholder: 'e.g. Catering, Photography' },
         { name: 'base_price', label: 'Starting Price', type: 'number', required: true, placeholder: '0.00' },
-        { name: 'description', label: 'Description', type: 'textarea', placeholder: 'Tell us about this service...' },
+        { name: 'description', label: 'Description', type: 'richtext', placeholder: 'Tell us about this service...' },
         { name: 'image_url', label: 'Service Image', type: 'file', uploadFolder: 'services', accept: 'image/*' },
         { name: 'is_active', label: 'Is Active?', type: 'checkbox' },
     ]
@@ -59,7 +60,7 @@ export default function EditServicePage() {
         setLoading(false)
 
         if (result.error) {
-            alert(result.error)
+            toast.error(result.error)
         } else {
             router.push('/admin/services')
         }

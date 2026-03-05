@@ -7,8 +7,11 @@ import {
     Calendar,
     Briefcase,
     FileText,
-    TrendingUp
+    TrendingUp,
+    Database,
 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
 import {
     Card,
     CardContent,
@@ -30,6 +33,21 @@ export default function DashboardPage() {
     const [recentBookings, setRecentBookings] = useState<any[]>([])
     const [chartData, setChartData] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
+    const [seeding, setSeeding] = useState(false)
+
+    const handleSeed = async () => {
+        setSeeding(true)
+        try {
+            const res = await fetch('/api/admin/seed', { method: 'POST' })
+            const data = await res.json()
+            if (data.error) toast.error(data.error)
+            else toast.success('Database seeded successfully!')
+        } catch {
+            toast.error('Failed to seed database')
+        } finally {
+            setSeeding(false)
+        }
+    }
 
     useEffect(() => {
         const fetchDashboardData = async () => {
@@ -82,9 +100,15 @@ export default function DashboardPage() {
     return (
         <DefaultLayout>
             <div className="flex flex-col gap-8">
-                <div>
-                    <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-                    <p className="text-muted-foreground">Manage your event ecosystem and track performance.</p>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+                        <p className="text-muted-foreground">Manage your event ecosystem and track performance.</p>
+                    </div>
+                    <Button onClick={handleSeed} disabled={seeding} variant="outline" size="sm">
+                        <Database className="mr-2 h-4 w-4" />
+                        {seeding ? 'Seeding...' : 'Seed Data'}
+                    </Button>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

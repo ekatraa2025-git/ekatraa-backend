@@ -2,7 +2,9 @@
 
 import React, { useEffect, useState } from 'react'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
-import { Edit, Trash2, Loader2, MoreHorizontal, Eye, Power, Plus, Search } from 'lucide-react'
+import { ConfirmDialog } from '@/components/Common/ConfirmDialog'
+import { toast } from 'sonner'
+import { Edit, Trash2, Loader2, MoreHorizontal, Plus, Search } from 'lucide-react'
 import Link from 'next/link'
 import {
     Table,
@@ -35,6 +37,10 @@ export default function ServicesPage() {
     const [vendors, setVendors] = useState<{ label: string, value: any }[]>([])
     const [selectedVendor, setSelectedVendor] = useState<string>('')
     const [loading, setLoading] = useState(true)
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+    const [bulkDeleting, setBulkDeleting] = useState(false)
+    const [deleteTarget, setDeleteTarget] = useState<{id: string; name: string} | null>(null)
+    const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
 
     useEffect(() => {
         const fetchData = async () => {
@@ -107,19 +113,55 @@ export default function ServicesPage() {
         },
     ]
 
-    const handleDelete = async (id: string) => {
-        if (confirm('Are you sure you want to delete this service?')) {
-            const res = await fetch(`/api/admin/services/${id}`, {
-                method: 'DELETE'
-            })
-            const result = await res.json()
-            if (result.error) {
-                alert(result.error)
-            } else {
-                setServices(services.filter(s => s.id !== id))
-                setFilteredServices(filteredServices.filter(s => s.id !== id))
-            }
+    const handleDelete = (id: string, name: string) => {
+        setDeleteTarget({ id, name })
+    }
+
+    const confirmDelete = async () => {
+        if (!deleteTarget) return
+        const res = await fetch(`/api/admin/services/${deleteTarget.id}`, { method: 'DELETE' })
+        const result = await res.json()
+        if (result.error) {
+            toast.error(result.error)
+        } else {
+            setServices(services.filter(s => s.id !== deleteTarget.id))
+            setFilteredServices(filteredServices.filter(s => s.id !== deleteTarget.id))
+            toast.success('Deleted successfully')
         }
+        setDeleteTarget(null)
+    }
+
+    const handleBulkDelete = () => {
+        if (selectedIds.size === 0) return
+        setBulkDeleteConfirm(true)
+    }
+
+    const confirmBulkDelete = async () => {
+        setBulkDeleting(true)
+        try {
+            await Promise.all(Array.from(selectedIds).map((id) => fetch(`/api/admin/services/${id}`, { method: 'DELETE' }).then((r) => r.json())))
+            setServices((prev) => prev.filter((s) => !selectedIds.has(s.id)))
+            setFilteredServices((prev) => prev.filter((s) => !selectedIds.has(s.id)))
+            setSelectedIds(new Set())
+            toast.success('Deleted successfully')
+        } finally {
+            setBulkDeleting(false)
+            setBulkDeleteConfirm(false)
+        }
+    }
+
+    const toggleRow = (id: string) => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+    }
+
+    const toggleAll = () => {
+        if (selectedIds.size === filteredServices.length) setSelectedIds(new Set())
+        else setSelectedIds(new Set(filteredServices.map((s) => s.id)))
     }
 
     if (loading) {
@@ -140,12 +182,20 @@ export default function ServicesPage() {
                         <h2 className="text-3xl font-bold tracking-tight">Services Management</h2>
                         <p className="text-muted-foreground">Browse and manage the catalog of services offered by vendors.</p>
                     </div>
-                    <Button asChild>
-                        <Link href="/admin/services/new">
-                            <Plus className="mr-2 h-4 w-4" />
-                            Add Service
-                        </Link>
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        {selectedIds.size > 0 && (
+                            <Button variant="destructive" size="sm" onClick={handleBulkDelete} disabled={bulkDeleting}>
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                {bulkDeleting ? 'Deleting...' : `Delete selected (${selectedIds.size})`}
+                            </Button>
+                        )}
+                        <Button asChild>
+                            <Link href="/admin/services/new">
+                                <Plus className="mr-2 h-4 w-4" />
+                                Add Service
+                            </Link>
+                        </Button>
+                    </div>
                 </div>
 
                 <Card>
@@ -177,6 +227,10 @@ export default function ServicesPage() {
                             <Table>
                                 <TableHeader>
                                     <TableRow>
+                                        <TableHead className="w-10">
+                                            <input type="checkbox" checked={filteredServices.length > 0 && selectedIds.size === filteredServices.length} onChange={toggleAll} className="h-4 w-4 rounded border-gray-300" />
+                                        </TableHead>
+                                        <TableHead className="w-10">Edit</TableHead>
                                         {columns.map((col, index) => (
                                             <TableHead key={index}>{col.header}</TableHead>
                                         ))}
@@ -186,19 +240,24 @@ export default function ServicesPage() {
                                 <TableBody>
                                     {filteredServices.length === 0 ? (
                                         <TableRow>
-                                            <TableCell
-                                                colSpan={columns.length + 1}
-                                                className="h-24 text-center"
-                                            >
+                                            <TableCell colSpan={columns.length + 3} className="h-24 text-center">
                                                 No records found.
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        filteredServices.map((item, index) => (
-                                            <TableRow key={index}>
+                                        filteredServices.map((item) => (
+                                            <TableRow key={item.id}>
+                                                <TableCell className="w-10">
+                                                    <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleRow(item.id)} className="h-4 w-4 rounded border-gray-300" />
+                                                </TableCell>
+                                                <TableCell className="w-10">
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                                                        <Link href={`/admin/services/${item.id}/edit`}><Edit className="h-4 w-4" /></Link>
+                                                    </Button>
+                                                </TableCell>
                                                 {columns.map((col, colIndex) => (
                                                     <TableCell key={colIndex}>
-                                                        {col.render ? col.render(item[col.key]) : item[col.key]}
+                                                        {col.render ? col.render(item[col.key], item) : item[col.key]}
                                                     </TableCell>
                                                 ))}
                                                 <TableCell className="text-right">
@@ -217,12 +276,8 @@ export default function ServicesPage() {
                                                                 </Link>
                                                             </DropdownMenuItem>
                                                             <DropdownMenuSeparator />
-                                                            <DropdownMenuItem className="text-amber-600 focus:bg-amber-50 focus:text-amber-600">
-                                                                <Power className="mr-2 h-4 w-4" />
-                                                                {item.is_active ? 'Deactivate' : 'Activate'}
-                                                            </DropdownMenuItem>
                                                             <DropdownMenuItem
-                                                                onClick={() => handleDelete(item.id)}
+                                                                onClick={() => handleDelete(item.id, item.name)}
                                                                 className="text-destructive focus:bg-destructive/10 focus:text-destructive"
                                                             >
                                                                 <Trash2 className="mr-2 h-4 w-4" />
@@ -240,6 +295,20 @@ export default function ServicesPage() {
                     </CardContent>
                 </Card>
             </div>
+            <ConfirmDialog
+                open={!!deleteTarget}
+                onOpenChange={(open) => !open && setDeleteTarget(null)}
+                title="Delete Service"
+                description={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+                onConfirm={confirmDelete}
+            />
+            <ConfirmDialog
+                open={bulkDeleteConfirm}
+                onOpenChange={(open) => !open && setBulkDeleteConfirm(false)}
+                title="Delete Selected Services"
+                description={`Are you sure you want to delete ${selectedIds.size} selected service(s)? This action cannot be undone.`}
+                onConfirm={confirmBulkDelete}
+            />
         </DefaultLayout>
     )
 }

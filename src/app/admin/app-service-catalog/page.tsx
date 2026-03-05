@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from 'react'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
+import { ConfirmDialog } from '@/components/Common/ConfirmDialog'
+import { toast } from 'sonner'
 import { DataTableView } from '@/components/admin-panel/data-table-view'
 import { Edit, Trash2, Loader2, MoreHorizontal } from 'lucide-react'
 import Link from 'next/link'
@@ -20,6 +22,7 @@ export default function AppServiceCatalogPage() {
     const [items, setItems] = useState<any[]>([])
     const [filtered, setFiltered] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
+    const [deleteTarget, setDeleteTarget] = useState<{id: string; name: string} | null>(null)
 
     useEffect(() => {
         fetch('/api/admin/app-service-catalog')
@@ -41,15 +44,21 @@ export default function AppServiceCatalogPage() {
         setFiltered(f)
     }
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Delete this service from the catalog?')) return
-        const res = await fetch(`/api/admin/app-service-catalog/${id}`, { method: 'DELETE' })
+    const handleDelete = (id: string, name: string) => {
+        setDeleteTarget({ id, name })
+    }
+
+    const confirmDelete = async () => {
+        if (!deleteTarget) return
+        const res = await fetch(`/api/admin/app-service-catalog/${deleteTarget.id}`, { method: 'DELETE' })
         const result = await res.json()
-        if (result.error) alert(result.error)
+        if (result.error) toast.error(result.error)
         else {
-            setItems(prev => prev.filter(i => i.id !== id))
-            setFiltered(prev => prev.filter(i => i.id !== id))
+            setItems(prev => prev.filter(i => i.id !== deleteTarget.id))
+            setFiltered(prev => prev.filter(i => i.id !== deleteTarget.id))
+            toast.success('Deleted successfully')
         }
+        setDeleteTarget(null)
     }
 
     const columns = [
@@ -107,7 +116,7 @@ export default function AppServiceCatalogPage() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                                 className="text-destructive focus:bg-destructive/10"
-                                onClick={() => handleDelete(item.id)}
+                                onClick={() => handleDelete(item.id, item.name)}
                             >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 Delete
@@ -115,6 +124,13 @@ export default function AppServiceCatalogPage() {
                         </DropdownMenuContent>
                     </DropdownMenu>
                 )}
+            />
+            <ConfirmDialog
+                open={!!deleteTarget}
+                onOpenChange={(open) => !open && setDeleteTarget(null)}
+                title="Delete Service"
+                description={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+                onConfirm={confirmDelete}
             />
         </DefaultLayout>
     )

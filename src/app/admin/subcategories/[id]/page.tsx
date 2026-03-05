@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import Form from '@/components/Common/Form'
 import { useRouter, useParams } from 'next/navigation'
@@ -25,7 +26,7 @@ export default function EditSubcategoryPage() {
             const catData = await catRes.json()
 
             if (subcatData.error) {
-                alert(subcatData.error)
+                toast.error(subcatData.error)
                 router.push('/admin/subcategories')
             } else {
                 setSubcategoryData(subcatData)
@@ -62,7 +63,7 @@ export default function EditSubcategoryPage() {
         setLoading(false)
 
         if (result.error) {
-            alert(result.error)
+            toast.error(result.error)
         } else {
             router.push('/admin/subcategories')
         }

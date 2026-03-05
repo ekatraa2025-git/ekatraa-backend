@@ -12,35 +12,33 @@ import {
     FileText,
     MapPin,
     CreditCard,
-    ChevronLeft,
     Layers,
     Languages,
     Bell,
-    Tag,
-    Package,
     ImageIcon,
     Sparkles,
-    ListChecks
+    ListChecks,
+    Gift,
+    ShoppingCart,
+    Tags,
+    Link2
 } from 'lucide-react'
-
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
-interface SidebarProps {
-    className?: string
-}
-
-// Define menu items outside component to ensure stability
+// New flow: Occasion → Category → Service → Cart → Order. Catalog categories used for vendors; no separate Vendor Categories.
 const MENU_ITEMS = [
     { name: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
+    { name: 'Occasions', icon: Gift, path: '/admin/occasions' },
+    { name: 'Catalog Categories', icon: Tags, path: '/admin/catalog-categories' },
+    { name: 'Services', icon: ListChecks, path: '/admin/offerable-services' },
+    { name: 'Orders', icon: ShoppingCart, path: '/admin/orders' },
     { name: 'Vendors', icon: Users, path: '/admin/vendors' },
-    { name: 'Categories', icon: Layers, path: '/admin/categories' },
-    { name: 'Subcategories', icon: Tag, path: '/admin/subcategories' },
-    { name: 'Service Items', icon: Package, path: '/admin/stocks' },
     { name: 'Banners', icon: ImageIcon, path: '/admin/banners' },
-    { name: 'Get Together Types', icon: Sparkles, path: '/admin/event-types' },
-    { name: 'Event Services Catalog', icon: ListChecks, path: '/admin/app-service-catalog' },
+    // Legacy admin sections (kept routes/APIs but hidden from main sidebar)
+    // { name: 'Event Types (legacy)', icon: Sparkles, path: '/admin/event-types' },
+    // { name: 'App Catalog (legacy)', icon: ListChecks, path: '/admin/app-service-catalog' },
     { name: 'Bookings', icon: Calendar, path: '/admin/bookings' },
     { name: 'Bookings Allocation', icon: MapPin, path: '/admin/locations' },
     { name: 'Quotations', icon: FileText, path: '/admin/quotations' },
@@ -49,6 +47,10 @@ const MENU_ITEMS = [
     { name: 'Translations', icon: Languages, path: '/admin/translations' },
     { name: 'Settings', icon: Settings, path: '/admin/settings' },
 ] as const
+
+interface SidebarProps {
+    className?: string
+}
 
 export function Sidebar({ className }: SidebarProps) {
     const pathname = usePathname()

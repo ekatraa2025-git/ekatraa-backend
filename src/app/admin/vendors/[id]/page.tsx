@@ -5,33 +5,11 @@ import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import { useRouter, useParams } from 'next/navigation'
 import { Loader2, CheckCircle2, AlertCircle, Shield } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { uploadFile } from '@/utils/storage'
-
-// Renders image from full URL or fetches signed URL when value is a storage path (private bucket)
-function AdminImage({ url, alt, className, placeholderClassName }: { url: string | null | undefined; alt: string; className?: string; placeholderClassName?: string }) {
-    const [resolvedUrl, setResolvedUrl] = useState<string | null>(null)
-    useEffect(() => {
-        if (!url) {
-            setResolvedUrl(null)
-            return
-        }
-        if (url.startsWith('http://') || url.startsWith('https://')) {
-            setResolvedUrl(url)
-            return
-        }
-        let cancelled = false
-        fetch(`/api/admin/storage/signed-url?path=${encodeURIComponent(url)}`)
-            .then((res) => res.json())
-            .then((data) => {
-                if (!cancelled && data?.url) setResolvedUrl(data.url)
-            })
-            .catch(() => { if (!cancelled) setResolvedUrl(null) })
-        return () => { cancelled = true }
-    }, [url])
-    if (!url) return <div className={placeholderClassName || 'h-12 w-12 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs'}>{'No img'}</div>
-    if (!resolvedUrl) return <div className={placeholderClassName || 'h-12 w-12 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs'}>{'No img'}</div>
-    return <img src={resolvedUrl} alt={alt} className={className} />
-}
+import { AdminImage } from '@/components/Common/AdminImage'
+import { toast } from 'sonner'
+import { ConfirmDialog } from '@/components/Common/ConfirmDialog'
 
 export default function EditVendorPage() {
     const [loading, setLoading] = useState(false)
@@ -39,10 +17,12 @@ export default function EditVendorPage() {
     const router = useRouter()
     const { id } = useParams()
 
-    // Categories, subcategories, stocks
-    const [categories, setCategories] = useState<any[]>([])
-    const [subcategories, setSubcategories] = useState<any[]>([])
-    const [stocks, setStocks] = useState<any[]>([])
+    // Catalog categories and offerable services (replacing vendor_categories + subcategories + stocks)
+    const [catalogCategories, setCatalogCategories] = useState<{ id: string; name: string }[]>([])
+    const [offerableServices, setOfferableServices] = useState<any[]>([])
+    const [selectedOfferableService, setSelectedOfferableService] = useState<any>(null)
+    const [serviceTierKey, setServiceTierKey] = useState('')
+    const [servicePriceAmount, setServicePriceAmount] = useState('')
 
     // Form data
     const [formData, setFormData] = useState<any>({})
@@ -61,7 +41,7 @@ export default function EditVendorPage() {
     const [uploadingBack, setUploadingBack] = useState(false)
     const [uploadingLogo, setUploadingLogo] = useState(false)
 
-    // Selected stock for pricing tiers
+    // Selected stock for pricing tiers (legacy name kept for add-service flow)
     const [selectedStock, setSelectedStock] = useState<any>(null)
 
     // Vendor services (multiple service items with pricing and images)
@@ -70,6 +50,7 @@ export default function EditVendorPage() {
     const [serviceImageForAdd, setServiceImageForAdd] = useState('')
     const [uploadingServiceForAdd, setUploadingServiceForAdd] = useState(false)
     const [addingServiceFromCatalog, setAddingServiceFromCatalog] = useState(false)
+    const [deleteServiceTarget, setDeleteServiceTarget] = useState<string | null>(null)
 
     useEffect(() => {
         fetchInitialData()
@@ -78,19 +59,19 @@ export default function EditVendorPage() {
     const fetchInitialData = async () => {
         setFetching(true)
         try {
-            const [vendorRes, categoryRes] = await Promise.all([
+            const [vendorRes, catalogRes] = await Promise.all([
                 fetch(`/api/admin/vendors/${id}`),
-                fetch('/api/admin/categories'),
+                fetch('/api/admin/catalog-categories'),
             ])
             const vendorData = await vendorRes.json()
-            const categoriesData = await categoryRes.json()
+            const catalogData = await catalogRes.json()
 
-            if (categoriesData && !categoriesData.error) {
-                setCategories(categoriesData)
+            if (catalogData && !catalogData.error && Array.isArray(catalogData)) {
+                setCatalogCategories(catalogData)
             }
 
             if (vendorData.error) {
-                alert(vendorData.error)
+                toast.error(vendorData.error)
                 router.push('/admin/vendors')
                 return
             }
@@ -99,22 +80,21 @@ export default function EditVendorPage() {
                 ...vendorData,
                 status: vendorData.status === 'active',
                 is_verified: vendorData.is_verified === true,
+                category: (catalogData && Array.isArray(catalogData) && catalogData.find((c: any) => c.id === vendorData.category_id)?.name) || vendorData.category || '',
             })
 
             if (vendorData.is_verified) {
                 setAadhaarVerified(true)
             }
 
-            // Load subcategories if category is set
             if (vendorData.category_id) {
-                const subRes = await fetch(`/api/subcategories?category_id=${vendorData.category_id}`)
-                const subData = await subRes.json()
-                if (subData && !subData.error) {
-                    setSubcategories(subData)
+                const offerRes = await fetch(`/api/admin/offerable-services?category_id=${vendorData.category_id}`)
+                const offerData = await offerRes.json()
+                if (offerData && !offerData.error && Array.isArray(offerData)) {
+                    setOfferableServices(offerData)
                 }
             }
 
-            // Load services for this vendor
             const svcRes = await fetch(`/api/admin/services?vendor_id=${id}`)
             const svcData = await svcRes.json()
             if (svcData && !svcData.error && Array.isArray(svcData)) {
@@ -135,17 +115,20 @@ export default function EditVendorPage() {
     }
 
     const handleAddServiceFromCatalog = async () => {
-        if (!selectedStock || !formData.service_price_amount || !formData.service_pricing_type) {
-            alert('Select a service item and a pricing tier first.')
+        const name = selectedOfferableService?.name || formData.service_stock_name || selectedStock?.name
+        const price = servicePriceAmount || formData.service_price_amount
+        if (!name || !price) {
+            toast.error('Select a catalog service and a pricing tier first.')
             return
         }
         setAddingServiceFromCatalog(true)
         try {
             const body: any = {
                 vendor_id: id,
-                name: formData.service_stock_name || selectedStock.name,
-                price_amount: parseFloat(formData.service_price_amount),
+                name,
+                price_amount: parseFloat(String(price)),
                 price_unit: 'event',
+                category: formData.category || '',
             }
             if (serviceImageForAdd) body.image_url = serviceImageForAdd
             const res = await fetch('/api/admin/services', {
@@ -164,9 +147,12 @@ export default function EditVendorPage() {
                 service_price_amount: '',
             }))
             setSelectedStock(null)
+            setSelectedOfferableService(null)
+            setServiceTierKey('')
+            setServicePriceAmount('')
             await fetchVendorServices()
         } catch (err: any) {
-            alert(err?.message || 'Failed to add service')
+            toast.error(err?.message || 'Failed to add service')
         } finally {
             setAddingServiceFromCatalog(false)
         }
@@ -186,37 +172,35 @@ export default function EditVendorPage() {
         }
     }
 
-    const handleDeleteService = async (serviceId: string) => {
-        if (!confirm('Delete this service?')) return
+    const handleDeleteService = (serviceId: string) => {
+        setDeleteServiceTarget(serviceId)
+    }
+
+    const confirmDeleteService = async () => {
+        if (!deleteServiceTarget) return
         try {
-            const res = await fetch(`/api/admin/services/${serviceId}`, { method: 'DELETE' })
+            const res = await fetch(`/api/admin/services/${deleteServiceTarget}`, { method: 'DELETE' })
             const result = await res.json()
             if (result.error) throw new Error(result.error)
             await fetchVendorServices()
+            toast.success('Service deleted successfully')
         } catch (err: any) {
-            alert(err?.message || 'Failed to delete')
+            toast.error(err?.message || 'Failed to delete')
+        } finally {
+            setDeleteServiceTarget(null)
         }
     }
 
-    const fetchSubcategories = async (categoryId: string) => {
-        setSubcategories([])
-        setStocks([])
+    const fetchOfferableServices = async (categoryId: string) => {
+        setOfferableServices([])
+        setSelectedOfferableService(null)
         setSelectedStock(null)
-        const res = await fetch(`/api/subcategories?category_id=${categoryId}`)
+        setServiceTierKey('')
+        setServicePriceAmount('')
+        if (!categoryId) return
+        const res = await fetch(`/api/admin/offerable-services?category_id=${categoryId}`)
         const data = await res.json()
-        if (data && !data.error) {
-            setSubcategories(data)
-        }
-    }
-
-    const fetchStocks = async (subcategoryId: string) => {
-        setStocks([])
-        setSelectedStock(null)
-        const res = await fetch(`/api/stocks?subcategory_id=${subcategoryId}`)
-        const data = await res.json()
-        if (data && !data.error) {
-            setStocks(data)
-        }
+        if (data && !data.error && Array.isArray(data)) setOfferableServices(data)
     }
 
     const handleChange = (name: string, value: any) => {
@@ -224,37 +208,32 @@ export default function EditVendorPage() {
     }
 
     const handleCategoryChange = (categoryId: string) => {
-        const cat = categories.find((c: any) => c.id === categoryId)
+        const cat = catalogCategories.find((c) => c.id === categoryId)
         setFormData((prev: any) => ({ ...prev, category_id: categoryId, category: cat?.name || '' }))
-        if (categoryId) {
-            fetchSubcategories(categoryId)
-        }
+        if (categoryId) fetchOfferableServices(categoryId)
     }
 
-    const handleSubcategoryChange = (subcategoryName: string) => {
-        const sub = subcategories.find((s: any) => s.name === subcategoryName)
-        setFormData((prev: any) => ({ ...prev, service_subcategory: subcategoryName }))
-        if (sub) {
-            fetchStocks(sub.id)
-        }
-    }
-
-    const handleStockSelect = (stock: any) => {
-        setSelectedStock(stock)
+    const handleOfferableServiceSelect = (svc: any) => {
+        setSelectedOfferableService(svc)
+        setSelectedStock(svc)
         setFormData((prev: any) => ({
             ...prev,
-            service_stock_id: stock.id,
-            service_stock_name: stock.name,
+            service_stock_id: svc.id,
+            service_stock_name: svc.name,
             service_pricing_type: '',
             service_price_amount: '',
         }))
+        setServiceTierKey('')
+        setServicePriceAmount('')
     }
 
-    const handlePricingTierSelect = (tier: string, price: number) => {
+    const handlePricingTierSelect = (tierKey: string, price: number) => {
+        setServiceTierKey(tierKey)
+        setServicePriceAmount(String(price))
         setFormData((prev: any) => ({
             ...prev,
-            service_pricing_type: tier,
-            service_price_amount: price.toString(),
+            service_pricing_type: tierKey,
+            service_price_amount: String(price),
         }))
     }
 
@@ -384,7 +363,7 @@ export default function EditVendorPage() {
         setLoading(false)
 
         if (result.error) {
-            alert(result.error)
+            toast.error(result.error)
         } else {
             router.push('/admin/vendors')
         }
@@ -412,7 +391,16 @@ export default function EditVendorPage() {
                 </div>
 
                 <form onSubmit={handleSubmit}>
-                    {/* Section 1: Basic Info */}
+                    <Tabs defaultValue="business" className="w-full">
+                        <TabsList className="grid w-full grid-cols-4 mb-6">
+                            <TabsTrigger value="business">Business Info</TabsTrigger>
+                            <TabsTrigger value="services">Categories & Services</TabsTrigger>
+                            <TabsTrigger value="kyc">KYC</TabsTrigger>
+                            <TabsTrigger value="status">Status</TabsTrigger>
+                        </TabsList>
+
+                    {/* Tab: Business Info */}
+                    <TabsContent value="business">
                     <div className="rounded-lg border border-stroke bg-white shadow-lg dark:border-strokedark dark:bg-boxdark mb-6">
                         <div className="border-b border-stroke px-6 py-4 dark:border-strokedark bg-gradient-to-r from-gray-50 to-white dark:from-gray-900 dark:to-boxdark">
                             <h3 className="text-lg font-semibold text-black dark:text-white">Business Information</h3>
@@ -438,10 +426,10 @@ export default function EditVendorPage() {
                                     <input type="text" value={formData.business_name || ''} onChange={(e) => handleChange('business_name', e.target.value)} required className={inputClass} />
                                 </div>
                                 <div>
-                                    <label className={labelClass}>Vendor Category <span className="text-red-500">*</span></label>
+                                    <label className={labelClass}>Catalog Category <span className="text-red-500">*</span></label>
                                     <select value={formData.category_id || ''} onChange={(e) => handleCategoryChange(e.target.value)} required className={selectClass}>
-                                        <option value="">Select Category</option>
-                                        {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        <option value="">Select Catalog Category</option>
+                                        {catalogCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                                     </select>
                                 </div>
                                 <div>
@@ -484,116 +472,95 @@ export default function EditVendorPage() {
                             </div>
                         </div>
                     </div>
+                    </TabsContent>
 
-                    {/* Section 2: Service Catalog (Cascading Dropdowns) */}
+                    {/* Tab: Categories & Services — Catalog Category → offerable services → add to vendor */}
+                    <TabsContent value="services">
                     <div className="rounded-lg border border-stroke bg-white shadow-lg dark:border-strokedark dark:bg-boxdark mb-6">
                         <div className="border-b border-stroke px-6 py-4 dark:border-strokedark bg-gradient-to-r from-blue-50 to-white dark:from-blue-950 dark:to-boxdark">
-                            <h3 className="text-lg font-semibold text-black dark:text-white">Add New Service (Optional)</h3>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Add a new service listing for this vendor. Category &rarr; Sub Category &rarr; Service Item &rarr; Pricing Tier</p>
+                            <h3 className="text-lg font-semibold text-black dark:text-white">Add New Service</h3>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Select Catalog Category, then a service and pricing tier from the catalog.</p>
                         </div>
                         <div className="p-6">
                             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                                {/* Subcategory dropdown */}
                                 <div>
-                                    <label className={labelClass}>Sub Category</label>
+                                    <label className={labelClass}>Catalog Category</label>
                                     {!formData.category_id ? (
-                                        <p className="text-sm text-gray-400 dark:text-gray-500 italic py-3">Select a Vendor Category above first</p>
-                                    ) : subcategories.length === 0 ? (
-                                        <p className="text-sm text-gray-400 dark:text-gray-500 italic py-3">No subcategories found for this category</p>
+                                        <p className="text-sm text-gray-400 dark:text-gray-500 italic py-3">Select a Catalog Category in Business Info first</p>
                                     ) : (
-                                        <select value={formData.service_subcategory || ''} onChange={(e) => handleSubcategoryChange(e.target.value)} className={selectClass}>
-                                            <option value="">Select Sub Category</option>
-                                            {subcategories.map((s: any) => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                        <select value={formData.category_id} onChange={(e) => handleCategoryChange(e.target.value)} className={selectClass}>
+                                            <option value="">Select category</option>
+                                            {catalogCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                                         </select>
                                     )}
                                 </div>
-
-                                {/* Stock/Service Item dropdown */}
                                 <div>
-                                    <label className={labelClass}>Service Item</label>
-                                    {!formData.service_subcategory ? (
-                                        <p className="text-sm text-gray-400 dark:text-gray-500 italic py-3">Select a Sub Category first</p>
-                                    ) : stocks.length === 0 ? (
-                                        <p className="text-sm text-gray-400 dark:text-gray-500 italic py-3">No service items found for this subcategory</p>
+                                    <label className={labelClass}>Service (from catalog)</label>
+                                    {!formData.category_id ? (
+                                        <p className="text-sm text-gray-400 dark:text-gray-500 italic py-3">Select category first</p>
+                                    ) : offerableServices.length === 0 ? (
+                                        <p className="text-sm text-gray-400 dark:text-gray-500 italic py-3">No services in this category</p>
                                     ) : (
                                         <select
-                                            value={formData.service_stock_id || ''}
+                                            value={selectedOfferableService?.id || ''}
                                             onChange={(e) => {
-                                                const stock = stocks.find((s: any) => s.id === e.target.value)
-                                                if (stock) handleStockSelect(stock)
+                                                const svc = offerableServices.find((s: any) => s.id === e.target.value)
+                                                if (svc) handleOfferableServiceSelect(svc)
                                             }}
                                             className={selectClass}
                                         >
-                                            <option value="">Select Service Item</option>
-                                            {stocks.map((s: any) => (
-                                                <option key={s.id} value={s.id}>
-                                                    {s.name} (Classic Value: ₹{s.price_classic_value ?? 0} | Signature: ₹{s.price_signature ?? 0} | Prestige: ₹{s.price_prestige ?? 0} | Royal: ₹{s.price_royal ?? 0} | Imperial: ₹{s.price_imperial ?? 0})
-                                                </option>
+                                            <option value="">Select service</option>
+                                            {offerableServices.map((s: any) => (
+                                                <option key={s.id} value={s.id}>{s.name}</option>
                                             ))}
                                         </select>
                                     )}
                                 </div>
 
-                                {/* Pricing Tier */}
-                                {selectedStock && (
+                                {/* Pricing tiers from selected offerable service */}
+                                {(selectedOfferableService || selectedStock) && (
                                     <div className="md:col-span-2">
                                         <label className={labelClass}>Pricing Tier</label>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                                             {[
-                                                { key: 'classic_value', label: 'Classic Value', price: selectedStock.price_classic_value ?? 0, desc: 'Economy option' },
-                                                { key: 'signature', label: 'Signature', price: selectedStock.price_signature ?? 0, desc: 'Popular choice' },
-                                                { key: 'prestige', label: 'Prestige', price: selectedStock.price_prestige ?? 0, desc: 'Premium quality' },
-                                                { key: 'royal', label: 'Royal', price: selectedStock.price_royal ?? 0, desc: 'Luxury tier' },
-                                                { key: 'imperial', label: 'Imperial', price: selectedStock.price_imperial ?? 0, desc: 'Top tier' },
+                                                { key: 'classic_value', label: 'Classic Value', price: selectedOfferableService?.price_classic_value ?? selectedStock?.price_classic_value ?? 0 },
+                                                { key: 'signature', label: 'Signature', price: selectedOfferableService?.price_signature ?? selectedStock?.price_signature ?? 0 },
+                                                { key: 'prestige', label: 'Prestige', price: selectedOfferableService?.price_prestige ?? selectedStock?.price_prestige ?? 0 },
+                                                { key: 'royal', label: 'Royal', price: selectedOfferableService?.price_royal ?? selectedStock?.price_royal ?? 0 },
+                                                { key: 'imperial', label: 'Imperial', price: selectedOfferableService?.price_imperial ?? selectedStock?.price_imperial ?? 0 },
                                             ].map((tier) => (
                                                 <button
                                                     key={tier.key}
                                                     type="button"
-                                                    onClick={() => handlePricingTierSelect(tier.key, tier.price)}
-                                                    className={`p-4 rounded-lg border-2 text-left transition-all ${formData.service_pricing_type === tier.key
+                                                    onClick={() => handlePricingTierSelect(tier.key, Number(tier.price) || 0)}
+                                                    className={`p-4 rounded-lg border-2 text-left transition-all ${serviceTierKey === tier.key || formData.service_pricing_type === tier.key
                                                         ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
                                                         : 'border-stroke hover:border-gray-300 dark:border-strokedark dark:hover:border-gray-600'
                                                         }`}
                                                 >
                                                     <div className="flex justify-between items-center mb-1">
-                                                        <span className={`font-bold ${formData.service_pricing_type === tier.key ? 'text-primary' : 'text-black dark:text-white'}`}>
-                                                            {tier.label}
-                                                        </span>
-                                                        <span className={`text-lg font-bold ${formData.service_pricing_type === tier.key ? 'text-primary' : 'text-black dark:text-white'}`}>
-                                                            ₹{tier.price}
-                                                        </span>
+                                                        <span className={`font-bold ${serviceTierKey === tier.key ? 'text-primary' : 'text-black dark:text-white'}`}>{tier.label}</span>
+                                                        <span className={`text-lg font-bold ${serviceTierKey === tier.key ? 'text-primary' : 'text-black dark:text-white'}`}>₹{Number(tier.price).toLocaleString()}</span>
                                                     </div>
-                                                    <p className="text-xs text-gray-500">{tier.desc}</p>
-                                                    {formData.service_pricing_type === tier.key && (
-                                                        <div className="mt-2 flex items-center text-primary text-xs font-semibold">
-                                                            <CheckCircle2 size={14} className="mr-1" /> Selected
-                                                        </div>
-                                                    )}
+                                                    {serviceTierKey === tier.key && <div className="mt-2 flex items-center text-primary text-xs font-semibold"><CheckCircle2 size={14} className="mr-1" /> Selected</div>}
                                                 </button>
                                             ))}
                                         </div>
                                     </div>
                                 )}
 
-                                {/* Price summary + image upload + Add this service */}
-                                {formData.service_price_amount && formData.service_pricing_type && selectedStock && (
+                                {(servicePriceAmount || formData.service_price_amount) && (selectedOfferableService || selectedStock) && (
                                     <div className="md:col-span-2 space-y-4">
                                         <div className="rounded-lg bg-primary/5 border border-primary/20 p-4">
                                             <p className="text-xs font-bold uppercase tracking-widest text-primary mb-1">Selected Service</p>
-                                            <p className="text-2xl font-bold text-primary">₹{formData.service_price_amount}</p>
-                                            <p className="text-sm text-gray-500 mt-1">
-                                                {formData.category} &rarr; {formData.service_subcategory} &rarr; {formData.service_stock_name}
-                                            </p>
-                                            <p className="text-sm font-semibold text-gray-500">
-                                                Tier: {formData.service_pricing_type.charAt(0).toUpperCase() + formData.service_pricing_type.slice(1)}
-                                            </p>
+                                            <p className="text-2xl font-bold text-primary">₹{(servicePriceAmount || formData.service_price_amount).toLocaleString()}</p>
+                                            <p className="text-sm text-gray-500 mt-1">{formData.category} → {selectedOfferableService?.name || selectedStock?.name}</p>
+                                            <p className="text-sm font-semibold text-gray-500">Tier: {(serviceTierKey || formData.service_pricing_type || '').replace(/_/g, ' ')}</p>
                                         </div>
                                         <div>
                                             <label className={labelClass}>Service image (optional)</label>
                                             <div className="flex items-center gap-4 mt-2">
-                                                {serviceImageForAdd && (
-                                                    <img src={serviceImageForAdd} alt="Service" className="h-16 w-16 rounded-lg object-cover border border-neutral-200 dark:border-neutral-700 flex-shrink-0" />
-                                                )}
+                                                {serviceImageForAdd && <AdminImage url={serviceImageForAdd} alt="Service" className="h-16 w-16 rounded-lg object-cover border border-neutral-200 dark:border-neutral-700 flex-shrink-0" placeholderClassName="h-16 w-16 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs flex-shrink-0" />}
                                                 <div className="flex-1 min-w-0">
                                                     <input type="file" accept="image/*" onChange={handleServiceImageForAddUpload} disabled={uploadingServiceForAdd} className={inputClass + ' file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white'} />
                                                     {uploadingServiceForAdd && <p className="mt-1 text-sm text-blue-600">Uploading...</p>}
@@ -603,14 +570,13 @@ export default function EditVendorPage() {
                                         <button type="button" onClick={handleAddServiceFromCatalog} disabled={addingServiceFromCatalog} className="px-4 py-2 rounded-lg bg-primary text-white font-semibold text-sm hover:bg-primary/90 disabled:opacity-50">
                                             {addingServiceFromCatalog ? 'Adding...' : 'Add this service'}
                                         </button>
-                                        <p className="text-xs text-gray-500">You can add more services by selecting another item and tier above, then Add this service again.</p>
                                     </div>
                                 )}
                             </div>
                         </div>
                     </div>
 
-                    {/* Section 2b: Vendor Services (multiple service items with pricing and images) */}
+                    {/* Vendor Services list (same tab) */}
                     <div className="rounded-lg border border-stroke bg-white shadow-lg dark:border-strokedark dark:bg-boxdark mb-6">
                         <div className="border-b border-stroke px-6 py-4 dark:border-strokedark bg-gradient-to-r from-emerald-50 to-white dark:from-emerald-950 dark:to-boxdark">
                             <h3 className="text-lg font-semibold text-black dark:text-white">Vendor Services &amp; Pricing</h3>
@@ -640,8 +606,10 @@ export default function EditVendorPage() {
                             )}
                         </div>
                     </div>
+                    </TabsContent>
 
-                    {/* Section 3: Aadhaar KYC Verification */}
+                    {/* Tab: KYC */}
+                    <TabsContent value="kyc">
                     <div className="rounded-lg border border-stroke bg-white shadow-lg dark:border-strokedark dark:bg-boxdark mb-6">
                         <div className="border-b border-stroke px-6 py-4 dark:border-strokedark bg-gradient-to-r from-orange-50 to-white dark:from-orange-950 dark:to-boxdark">
                             <div className="flex items-center justify-between">
@@ -781,7 +749,10 @@ export default function EditVendorPage() {
                             </div>
                         </div>
                     </div>
+                    </TabsContent>
 
+                    {/* Tab: Status */}
+                    <TabsContent value="status">
                     {/* Section 4: Status */}
                     <div className="rounded-lg border border-stroke bg-white shadow-lg dark:border-strokedark dark:bg-boxdark mb-6">
                         <div className="border-b border-stroke px-6 py-4 dark:border-strokedark bg-gradient-to-r from-green-50 to-white dark:from-green-950 dark:to-boxdark">
@@ -799,6 +770,9 @@ export default function EditVendorPage() {
                             </div>
                         </div>
                     </div>
+                    </TabsContent>
+
+                    </Tabs>
 
                     {/* Submit */}
                     <button
@@ -810,6 +784,13 @@ export default function EditVendorPage() {
                     </button>
                 </form>
             </div>
+            <ConfirmDialog
+                open={!!deleteServiceTarget}
+                onOpenChange={(open) => !open && setDeleteServiceTarget(null)}
+                title="Delete Service"
+                description="Are you sure you want to delete this service? This action cannot be undone."
+                onConfirm={confirmDeleteService}
+            />
         </DefaultLayout>
     )
 }

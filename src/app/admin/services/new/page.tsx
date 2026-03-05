@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import Form from '@/components/Common/Form'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 export default function NewServicePage() {
     const [loading, setLoading] = useState(false)
@@ -26,7 +27,7 @@ export default function NewServicePage() {
         { name: 'vendor_id', label: 'Vendor', type: 'select', options: vendors, required: true, placeholder: 'Select a vendor' },
         { name: 'name', label: 'Service Name', type: 'text', required: true, placeholder: 'e.g. Catering, Photography' },
         { name: 'base_price', label: 'Starting Price', type: 'number', required: true, placeholder: '0.00' },
-        { name: 'description', label: 'Description', type: 'textarea', placeholder: 'Tell us about this service...' },
+        { name: 'description', label: 'Description', type: 'richtext', placeholder: 'Tell us about this service...' },
         { name: 'image_url', label: 'Service Image', type: 'file', uploadFolder: 'services', accept: 'image/*' },
         { name: 'is_active', label: 'Is Active?', type: 'checkbox', initialValue: true },
     ]
@@ -42,7 +43,7 @@ export default function NewServicePage() {
         setLoading(false)
 
         if (result.error) {
-            alert(result.error)
+            toast.error(result.error)
         } else {
             router.push('/admin/services')
         }
