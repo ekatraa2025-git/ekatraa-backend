@@ -8,7 +8,6 @@ import {
     LayoutDashboard,
     Users,
     Settings,
-    Calendar,
     FileText,
     MapPin,
     CreditCard,
@@ -58,8 +57,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
     const menuItems = [
         { name: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
         { name: 'Vendors', icon: Users, path: '/admin/vendors' },
-        { name: 'Bookings', icon: Calendar, path: '/admin/bookings' },
-        { name: 'Bookings Allocation', icon: MapPin, path: '/admin/locations' },
+        { name: 'Order Allocation', icon: MapPin, path: '/admin/locations' },
         { name: 'Quotations', icon: FileText, path: '/admin/quotations' },
         { name: 'Payments', icon: CreditCard, path: '/admin/payments' },
         { name: 'Settings', icon: Settings, path: '/admin/settings' },

@@ -20,17 +20,17 @@ import {
     CardDescription
 } from '@/components/ui/card'
 import { Overview } from './components/overview'
-import { RecentBookings } from './components/recent-bookings'
+import { RecentOrders } from './components/recent-orders'
 import { format, eachDayOfInterval, subDays } from 'date-fns'
 
 export default function DashboardPage() {
     const [stats, setStats] = useState([
         { label: 'Total Vendors', value: '...', icon: Users, color: 'text-blue-600', description: 'Total registered partners' },
-        { label: 'Active Bookings', value: '...', icon: Calendar, color: 'text-emerald-600', description: 'Confirmed upcoming events' },
+        { label: 'Active Orders', value: '...', icon: Calendar, color: 'text-emerald-600', description: 'Confirmed upcoming events' },
         { label: 'Total Services', value: '...', icon: Briefcase, color: 'text-indigo-600', description: 'Available service offerings' },
         { label: 'New Quotations', value: '...', icon: FileText, color: 'text-amber-600', description: 'Pending price requests' },
     ])
-    const [recentBookings, setRecentBookings] = useState<any[]>([])
+    const [recentOrders, setRecentOrders] = useState<any[]>([])
     const [chartData, setChartData] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [seeding, setSeeding] = useState(false)
@@ -59,32 +59,24 @@ export default function DashboardPage() {
 
                 setStats([
                     { label: 'Total Vendors', value: String(data.vendors || 0), icon: Users, color: 'text-blue-600', description: 'Total registered partners' },
-                    { label: 'Active Bookings', value: String(data.bookings || 0), icon: Calendar, color: 'text-emerald-600', description: 'Confirmed upcoming events' },
+                    { label: 'Active Orders', value: String(data.orders || 0), icon: Calendar, color: 'text-emerald-600', description: 'Confirmed upcoming events' },
                     { label: 'Total Services', value: String(data.services || 0), icon: Briefcase, color: 'text-indigo-600', description: 'Available service offerings' },
                     { label: 'New Quotations', value: String(data.quotations || 0), icon: FileText, color: 'text-amber-600', description: 'Pending price requests' },
                 ])
 
-                // Fetch Recent Bookings from API
-                const bookingsRes = await fetch('/api/admin/bookings')
-                const bookingsData = await bookingsRes.json()
-                if (bookingsData) setRecentBookings(bookingsData.slice(0, 5))
+                const ordersRes = await fetch('/api/admin/orders')
+                const ordersData = await ordersRes.json()
+                if (ordersData) setRecentOrders(ordersData.slice(0, 5))
 
-                // Process Chart Data (Last 7 days) remains client-side for now or we could move it to API
                 const last7Days = eachDayOfInterval({
                     start: subDays(new Date(), 6),
                     end: new Date()
                 })
-
-                // Reuse fetched bookings for trend to avoid extra calls
                 const processedTrend = last7Days.map(date => {
                     const dateStr = format(date, 'yyyy-MM-dd')
-                    const count = bookingsData?.filter((b: any) => b.booking_date === dateStr).length || 0
-                    return {
-                        name: format(date, 'EEE'),
-                        total: count
-                    }
+                    const count = ordersData?.filter((o: any) => o.event_date && o.event_date.startsWith(dateStr)).length || 0
+                    return { name: format(date, 'EEE'), total: count }
                 })
-
                 setChartData(processedTrend)
 
             } catch (error) {
@@ -135,7 +127,7 @@ export default function DashboardPage() {
                         <CardHeader>
                             <CardTitle>Overview</CardTitle>
                             <CardDescription>
-                                Booking trends for the past week.
+                                Order trends for the past week.
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="pl-2">
@@ -148,14 +140,14 @@ export default function DashboardPage() {
                                 <div>
                                     <CardTitle>Recent Activity</CardTitle>
                                     <CardDescription>
-                                        Latest bookings and event requests.
+                                        Latest orders and event requests.
                                     </CardDescription>
                                 </div>
                                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
                             </div>
                         </CardHeader>
                         <CardContent>
-                            <RecentBookings bookings={recentBookings} />
+                            <RecentOrders orders={recentOrders} />
                         </CardContent>
                     </Card>
                 </div>

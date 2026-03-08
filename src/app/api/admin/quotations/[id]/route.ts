@@ -16,9 +16,9 @@ export async function GET(
         return NextResponse.json({ error: error.message }, { status: 404 })
     }
 
-    // Fetch vendor, booking, and service information
+    // Fetch vendor, order, and service information
     let vendor = null
-    let booking = null
+    let order = null
     let service = null
 
     if (quotation.vendor_id) {
@@ -30,30 +30,39 @@ export async function GET(
         vendor = vendorData
     }
 
-    if (quotation.booking_id) {
-        const { data: bookingData, error: bookingError } = await supabase
-            .from('bookings')
-            .select('id, customer_name, customer_email, customer_phone, booking_date, booking_time, city, venue, details, status, service_id, vendor_id')
-            .eq('id', quotation.booking_id)
+    if (quotation.order_id) {
+        const { data: orderData, error: orderError } = await supabase
+            .from('orders')
+            .select('id, contact_name, contact_email, contact_mobile, event_date, location_preference, venue_preference, event_name, status, vendor_id')
+            .eq('id', quotation.order_id)
             .single()
-        
-        if (bookingError) {
-            console.error('[BOOKING FETCH ERROR]', bookingError, 'booking_id:', quotation.booking_id)
-        }
-        booking = bookingData
 
-        // Also fetch service details if booking has a service_id
-        if (bookingData?.service_id) {
-            const { data: serviceData } = await supabase
-                .from('services')
-                .select('id, name, description, base_price, category')
-                .eq('id', bookingData.service_id)
-                .single()
-            service = serviceData
+        if (orderError) {
+            console.error('[ORDER FETCH ERROR]', orderError, 'order_id:', quotation.order_id)
+        }
+        order = orderData
+
+        if (orderData?.id) {
+            const { data: items } = await supabase
+                .from('order_items')
+                .select('service_id, name')
+                .eq('order_id', orderData.id)
+                .limit(1)
+            const firstItem = items?.[0]
+            if (firstItem?.service_id) {
+                const { data: serviceData } = await supabase
+                    .from('services')
+                    .select('id, name, description, base_price, category')
+                    .eq('id', firstItem.service_id)
+                    .single()
+                service = serviceData
+            }
+            if (!service && firstItem?.name) {
+                service = { id: null, name: firstItem.name, description: null, base_price: null, category: null }
+            }
         }
     }
 
-    // If quotation has service_id directly
     if (quotation.service_id && !service) {
         const { data: serviceData } = await supabase
             .from('services')
@@ -109,7 +118,7 @@ export async function GET(
         ...quotation,
         attachments: attachmentsWithSignedUrls,
         vendor,
-        booking,
+        order,
         service
     })
 }
@@ -121,7 +130,7 @@ export async function PATCH(
     try {
         const { id } = await params
         const body = await req.json()
-        
+
         // Get current quotation to check vendor_id and amount
         const { data: currentQuotation } = await supabase
             .from('quotations')
@@ -148,7 +157,7 @@ export async function PATCH(
         // If status changed to 'accepted', update vendor revenue
         if (body.status === 'accepted' && currentQuotation.status !== 'accepted' && currentQuotation.vendor_id) {
             const quotationAmount = parseFloat(data.amount || '0') || 0
-            
+
             // Get current vendor revenue
             const { data: vendorData } = await supabase
                 .from('vendors')

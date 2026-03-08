@@ -36,11 +36,7 @@ const MENU_ITEMS = [
     { name: 'Orders', icon: ShoppingCart, path: '/admin/orders' },
     { name: 'Vendors', icon: Users, path: '/admin/vendors' },
     { name: 'Banners', icon: ImageIcon, path: '/admin/banners' },
-    // Legacy admin sections (kept routes/APIs but hidden from main sidebar)
-    // { name: 'Event Types (legacy)', icon: Sparkles, path: '/admin/event-types' },
-    // { name: 'App Catalog (legacy)', icon: ListChecks, path: '/admin/app-service-catalog' },
-    { name: 'Bookings', icon: Calendar, path: '/admin/bookings' },
-    { name: 'Bookings Allocation', icon: MapPin, path: '/admin/locations' },
+    { name: 'Order Allocation', icon: MapPin, path: '/admin/locations' },
     { name: 'Quotations', icon: FileText, path: '/admin/quotations' },
     { name: 'Payments', icon: CreditCard, path: '/admin/payments' },
     { name: 'Notifications', icon: Bell, path: '/admin/notifications' },

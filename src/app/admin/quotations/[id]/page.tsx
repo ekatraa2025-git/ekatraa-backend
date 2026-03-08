@@ -211,10 +211,10 @@ export default function QuotationDetailPage() {
                                     )}
                                 </div>
                             )}
-                            {(quotation.customer_name || quotation.booking?.customer_name) && (
+                            {(quotation.customer_name || quotation.order?.contact_name) && (
                                 <div>
                                     <p className="text-sm text-muted-foreground">Customer Name</p>
-                                    <p className="font-semibold">{quotation.customer_name || quotation.booking?.customer_name}</p>
+                                    <p className="font-semibold">{quotation.customer_name || quotation.order?.contact_name}</p>
                                 </div>
                             )}
                             {quotation.quotation_date && (
@@ -244,19 +244,19 @@ export default function QuotationDetailPage() {
                                     </p>
                                 </div>
                             )}
-                            {(quotation.venue_address || quotation.booking?.venue) && (
+                            {(quotation.venue_address || quotation.order?.venue_preference) && (
                                 <div>
                                     <p className="text-sm text-muted-foreground">Venue Address</p>
                                     <p className="flex items-center gap-2">
                                         <MapPin className="h-4 w-4" />
-                                        {quotation.venue_address || quotation.booking?.venue}
+                                        {quotation.venue_address || quotation.order?.venue_preference}
                                     </p>
                                 </div>
                             )}
-                            {quotation.booking_id && (
+                            {quotation.order_id && (
                                 <div>
-                                    <p className="text-sm text-muted-foreground">Linked Booking</p>
-                                    <p className="font-mono text-sm text-primary">{quotation.booking_id.slice(0, 8)}...</p>
+                                    <p className="text-sm text-muted-foreground">Linked Order</p>
+                                    <p className="font-mono text-sm text-primary">{quotation.order_id.slice(0, 8)}...</p>
                                 </div>
                             )}
                         </CardContent>
@@ -412,118 +412,94 @@ export default function QuotationDetailPage() {
                         </CardContent>
                     </Card>
 
-                    {/* Booking Information */}
+                    {/* Order Information */}
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
                                 <Calendar className="h-5 w-5" />
-                                Linked Booking Information
+                                Linked Order Information
                             </CardTitle>
                             <CardDescription>
-                                {(quotation.booking || quotation.booking_id) ? 'Booking details for which this quotation was created' : 'No booking linked'}
+                                {(quotation.order || quotation.order_id) ? 'Order details for which this quotation was created' : 'No order linked'}
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            {(quotation.booking || quotation.booking_id) ? (
+                            {(quotation.order || quotation.order_id) ? (
                                 <>
                                     <div className="p-3 bg-muted/50 rounded-lg border">
-                                        <p className="text-xs text-muted-foreground mb-1">Booking ID</p>
-                                        <Link 
-                                            href={`/admin/bookings/${quotation.booking?.id || quotation.booking_id}`}
+                                        <p className="text-xs text-muted-foreground mb-1">Order ID</p>
+                                        <Link
+                                            href={`/admin/orders/${quotation.order?.id || quotation.order_id}`}
                                             className="font-mono text-sm font-semibold text-primary hover:underline"
                                         >
-                                            {quotation.booking?.id || quotation.booking_id}
+                                            {quotation.order?.id || quotation.order_id}
                                         </Link>
                                     </div>
-                                    <Button 
-                                        variant="outline" 
+                                    <Button
+                                        variant="outline"
                                         size="sm"
-                                        onClick={() => router.push(`/admin/bookings/${quotation.booking?.id || quotation.booking_id}`)}
+                                        onClick={() => router.push(`/admin/orders/${quotation.order?.id || quotation.order_id}`)}
                                         className="w-full"
                                     >
                                         <ExternalLink className="mr-2 h-4 w-4" />
-                                        View Full Booking Details
+                                        View Full Order Details
                                     </Button>
-                                    {quotation.booking && (
+                                    {quotation.order && (
                                         <>
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>
-                                                    <p className="text-sm text-muted-foreground">Customer Name</p>
-                                                    <p className="font-semibold">{quotation.booking.customer_name || quotation.customer_name || 'N/A'}</p>
+                                                    <p className="text-sm text-muted-foreground">Contact Name</p>
+                                                    <p className="font-semibold">{quotation.order.contact_name || quotation.customer_name || 'N/A'}</p>
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm text-muted-foreground">Booking Status</p>
-                                                    <Badge variant={quotation.booking.status === 'confirmed' ? 'secondary' : 'outline'}>
-                                                        {quotation.booking.status || 'Pending'}
+                                                    <p className="text-sm text-muted-foreground">Order Status</p>
+                                                    <Badge variant={quotation.order.status === 'confirmed' ? 'secondary' : 'outline'}>
+                                                        {quotation.order.status || 'Pending'}
                                                     </Badge>
                                                 </div>
                                             </div>
-                                            {quotation.booking.customer_email && (
+                                            {quotation.order.contact_email && (
                                                 <div>
-                                                    <p className="text-sm text-muted-foreground">Customer Email</p>
+                                                    <p className="text-sm text-muted-foreground">Contact Email</p>
                                                     <p className="flex items-center gap-2">
                                                         <Mail className="h-4 w-4" />
-                                                        <a href={`mailto:${quotation.booking.customer_email}`} className="text-primary hover:underline">
-                                                            {quotation.booking.customer_email}
+                                                        <a href={`mailto:${quotation.order.contact_email}`} className="text-primary hover:underline">
+                                                            {quotation.order.contact_email}
                                                         </a>
                                                     </p>
                                                 </div>
                                             )}
-                                            {quotation.booking.customer_phone && (
+                                            {quotation.order.contact_mobile && (
                                                 <div>
-                                                    <p className="text-sm text-muted-foreground">Customer Phone</p>
+                                                    <p className="text-sm text-muted-foreground">Contact Phone</p>
                                                     <p className="flex items-center gap-2">
                                                         <Phone className="h-4 w-4" />
-                                                        <a href={`tel:${quotation.booking.customer_phone}`} className="text-primary hover:underline">
-                                                            {quotation.booking.customer_phone}
+                                                        <a href={`tel:${quotation.order.contact_mobile}`} className="text-primary hover:underline">
+                                                            {quotation.order.contact_mobile}
                                                         </a>
                                                     </p>
                                                 </div>
                                             )}
                                             <div className="grid grid-cols-2 gap-4">
-                                                {quotation.booking.booking_date && (
+                                                {quotation.order.event_date && (
                                                     <div>
                                                         <p className="text-sm text-muted-foreground">Event Date</p>
                                                         <p className="flex items-center gap-2 font-medium">
                                                             <Calendar className="h-4 w-4" />
-                                                            {format(new Date(quotation.booking.booking_date), 'MMM d, yyyy')}
-                                                        </p>
-                                                    </div>
-                                                )}
-                                                {quotation.booking.booking_time && (
-                                                    <div>
-                                                        <p className="text-sm text-muted-foreground">Event Time</p>
-                                                        <p className="flex items-center gap-2 font-medium">
-                                                            <Clock className="h-4 w-4" />
-                                                            {quotation.booking.booking_time}
+                                                            {format(new Date(quotation.order.event_date), 'MMM d, yyyy')}
                                                         </p>
                                                     </div>
                                                 )}
                                             </div>
-                                            {(quotation.booking.venue || quotation.booking.city) && (
+                                            {(quotation.order.venue_preference || quotation.order.location_preference || quotation.order.event_name) && (
                                                 <div>
-                                                    <p className="text-sm text-muted-foreground">Venue / Location</p>
+                                                    <p className="text-sm text-muted-foreground">Venue / Location / Event</p>
                                                     <p className="flex items-center gap-2">
                                                         <MapPin className="h-4 w-4" />
-                                                        {quotation.booking.venue || quotation.booking.city}
+                                                        {quotation.order.venue_preference || quotation.order.location_preference || quotation.order.event_name}
                                                     </p>
                                                 </div>
                                             )}
-                                            {quotation.booking.details && (
-                                                <div>
-                                                    <p className="text-sm text-muted-foreground mb-2">Event Details / Requirements</p>
-                                                    <p className="text-sm bg-muted p-3 rounded-lg whitespace-pre-wrap">{quotation.booking.details}</p>
-                                                </div>
-                                            )}
-                                        </>
-                                    )}
-                                    {!quotation.booking && quotation.booking_id && (
-                                        <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                                            <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                                                Booking details could not be loaded. Click the button above to view the booking.
-                                            </p>
-                                        </div>
-                                    )}
                                     {quotation.service && (
                                         <div className="pt-2 border-t">
                                             <p className="text-sm text-muted-foreground mb-2">Service Requested</p>
@@ -543,12 +519,21 @@ export default function QuotationDetailPage() {
                                             </div>
                                         </div>
                                     )}
+                                        </>
+                                    )}
+                                    {!quotation.order && quotation.order_id && (
+                                        <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                                            <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                                                Order details could not be loaded. Click the button above to view the order.
+                                            </p>
+                                        </div>
+                                    )}
                                 </>
                             ) : (
                                 <div className="text-center py-6 text-muted-foreground">
                                     <Calendar className="h-10 w-10 mx-auto mb-2 opacity-50" />
-                                    <p>No booking linked to this quotation</p>
-                                    <p className="text-xs mt-1">This quotation may have been created independently</p>
+                                    <p>No order linked to this quotation</p>
+                                    <p className="text-xs mt-1">This quotation may have been created for an allocated order</p>
                                 </div>
                             )}
                         </CardContent>

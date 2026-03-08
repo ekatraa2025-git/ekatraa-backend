@@ -16,10 +16,10 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import { format } from 'date-fns'
 
-export default function BookingAllocationPage() {
-    const [bookings, setBookings] = useState<any[]>([])
+export default function OrderAllocationPage() {
+    const [orders, setOrders] = useState<any[]>([])
     const [vendors, setVendors] = useState<any[]>([])
-    const [selectedBooking, setSelectedBooking] = useState<any>(null)
+    const [selectedOrder, setSelectedOrder] = useState<any>(null)
     const [showAllVendors, setShowAllVendors] = useState(false)
     const [selectedCity, setSelectedCity] = useState<string>('')
 
@@ -29,120 +29,84 @@ export default function BookingAllocationPage() {
 
     const fetchData = async () => {
         try {
-            // Fetch ALL bookings (both allocated and unallocated) for allocation management
-            const bookingsRes = await fetch('/api/admin/bookings', {
+            const ordersRes = await fetch('/api/admin/orders', {
                 method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 cache: 'no-store'
             })
-            
             const vendorsRes = await fetch('/api/admin/vendors?status=active', {
                 method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 cache: 'no-store'
             })
 
-            if (!bookingsRes.ok) {
-                throw new Error(`Bookings API error: ${bookingsRes.status}`)
-            }
-            
-            if (!vendorsRes.ok) {
-                throw new Error(`Vendors API error: ${vendorsRes.status}`)
-            }
+            if (!ordersRes.ok) throw new Error(`Orders API error: ${ordersRes.status}`)
+            if (!vendorsRes.ok) throw new Error(`Vendors API error: ${vendorsRes.status}`)
 
-            const bData = await bookingsRes.json()
+            const oData = await ordersRes.json()
             const vData = await vendorsRes.json()
 
-            // Handle API errors
-            if (bData?.error) {
-                console.error('Bookings API Error:', bData.error)
-                setBookings([])
+            if (oData?.error) {
+                console.error('Orders API Error:', oData.error)
+                setOrders([])
             } else {
-                // Show all bookings - both allocated and unallocated for management
-                // The API already includes vendor_name for allocated bookings
-                const bookingsArray = Array.isArray(bData) ? bData : []
-                setBookings(bookingsArray)
+                setOrders(Array.isArray(oData) ? oData : [])
             }
-
             if (vData?.error) {
                 console.error('Vendors API Error:', vData.error)
                 setVendors([])
             } else {
-                const vendorsArray = Array.isArray(vData) ? vData : []
-                setVendors(vendorsArray)
+                setVendors(Array.isArray(vData) ? vData : [])
             }
         } catch (error) {
             console.error('Error fetching data:', error)
-            setBookings([])
+            setOrders([])
             setVendors([])
         }
     }
 
     const handleAllocate = async (vendorId: string) => {
-        if (!selectedBooking || !vendorId) return
-
+        if (!selectedOrder || !vendorId) return
         try {
-            const res = await fetch(`/api/admin/bookings/${selectedBooking.id}`, {
+            const res = await fetch(`/api/admin/orders/${selectedOrder.id}`, {
                 method: 'PATCH',
-                headers: { 
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ vendor_id: vendorId, status: 'confirmed' })
             })
-
-            if (!res.ok) {
-                throw new Error(`Failed to allocate booking: ${res.status}`)
-            }
-
+            if (!res.ok) throw new Error(`Failed to allocate order: ${res.status}`)
             const result = await res.json()
-
             if (result.error) {
                 toast.error(result.error)
             } else {
-                // Successfully allocated - booking is now assigned to the selected vendor
-                toast.success(`Booking allocated to vendor successfully!`)
-                setSelectedBooking(null)
+                toast.success('Order allocated to vendor successfully!')
+                setSelectedOrder(null)
                 setShowAllVendors(false)
                 fetchData()
             }
         } catch (error: any) {
-            console.error('Error allocating booking:', error)
-            toast.error(`Failed to allocate booking: ${error.message}`)
+            console.error('Error allocating order:', error)
+            toast.error(`Failed to allocate order: ${error.message}`)
         }
     }
 
     const getSuggestedVendors = () => {
-        if (!selectedBooking) return []
-
+        if (!selectedOrder) return []
         let filteredVendors = vendors
-
-        // Apply city filter if selected
         if (selectedCity) {
             filteredVendors = filteredVendors.filter(v =>
                 v.city?.toLowerCase() === selectedCity.toLowerCase() ||
                 v.service_area?.toLowerCase() === selectedCity.toLowerCase()
             )
         }
-
-        const bookingCity = selectedBooking.city?.toLowerCase() || ''
+        const orderLocation = (selectedOrder.location_preference || selectedOrder.venue_preference || '').toLowerCase()
         const matchingVendors = filteredVendors.filter(v =>
-            v.city?.toLowerCase().includes(bookingCity) ||
-            v.service_area?.toLowerCase().includes(bookingCity)
+            v.city?.toLowerCase().includes(orderLocation) ||
+            v.service_area?.toLowerCase().includes(orderLocation)
         )
-
-        // If showAllVendors is true or no matches, show all filtered vendors
-        if (showAllVendors || matchingVendors.length === 0) {
-            return filteredVendors
-        }
-
+        if (showAllVendors || matchingVendors.length === 0) return filteredVendors
         return matchingVendors
     }
 
-    // Get unique cities from vendors for filter
     const getUniqueCities = () => {
         const cities = new Set<string>()
         vendors.forEach(v => {
@@ -152,63 +116,60 @@ export default function BookingAllocationPage() {
         return Array.from(cities).sort()
     }
 
-    // Reset showAllVendors and city filter when booking selection changes
     useEffect(() => {
         setShowAllVendors(false)
         setSelectedCity('')
-    }, [selectedBooking])
+    }, [selectedOrder])
 
     return (
         <DefaultLayout>
             <div className="flex flex-col gap-6">
                 <div>
-                    <h2 className="text-3xl font-bold tracking-tight">Booking Allocation</h2>
-                    <p className="text-muted-foreground">Match unallocated bookings with service providers based on location.</p>
+                    <h2 className="text-3xl font-bold tracking-tight">Order Allocation</h2>
+                    <p className="text-muted-foreground">Match unallocated orders with service providers based on location.</p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                    {/* Bookings List */}
                     <Card className="flex flex-col h-[600px]">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
                                 <CalendarIcon className="h-5 w-5 text-primary" />
-                                Bookings
+                                Orders
                             </CardTitle>
                             <CardDescription>
-                                {bookings.filter((b: any) => !b.vendor_id).length} unallocated, {bookings.filter((b: any) => b.vendor_id).length} allocated
+                                {orders.filter((o: any) => !o.vendor_id).length} unallocated, {orders.filter((o: any) => o.vendor_id).length} allocated
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="flex-1 overflow-hidden">
                             <ScrollArea className="h-full pr-4">
                                 <div className="space-y-3">
-                                    {bookings.length === 0 ? (
+                                    {orders.length === 0 ? (
                                         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
                                             <Check className="h-10 w-10 mb-2 opacity-20" />
-                                            <p>No bookings found.</p>
+                                            <p>No orders found.</p>
                                         </div>
                                     ) : (
-                                        bookings.map((booking) => {
-                                            const isAllocated = booking.vendor_id && booking.vendor_id !== null && booking.vendor_id !== ''
+                                        orders.map((order) => {
+                                            const isAllocated = order.vendor_id && order.vendor_id !== null && order.vendor_id !== ''
                                             return (
                                                 <div
-                                                    key={booking.id}
-                                                    onClick={() => setSelectedBooking(booking)}
-                                                    className={`group cursor-pointer rounded-lg border p-4 transition-all hover:shadow-sm ${selectedBooking?.id === booking.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border'
-                                                        }`}
+                                                    key={order.id}
+                                                    onClick={() => setSelectedOrder(order)}
+                                                    className={`group cursor-pointer rounded-lg border p-4 transition-all hover:shadow-sm ${selectedOrder?.id === order.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border'}`}
                                                 >
                                                     <div className="flex items-center justify-between">
                                                         <div className="space-y-1">
-                                                            <p className="font-semibold leading-none">{booking.customer_name}</p>
+                                                            <p className="font-semibold leading-none">{order.contact_name || order.event_name || 'Order'}</p>
                                                             <div className="flex items-center gap-4 text-sm text-muted-foreground">
                                                                 <span className="flex items-center gap-1">
-                                                                    <MapPin className="h-3 w-3" /> {booking.city || 'TBD'}
+                                                                    <MapPin className="h-3 w-3" /> {order.location_preference || order.venue_preference || 'TBD'}
                                                                 </span>
                                                                 <span className="flex items-center gap-1">
-                                                                    <CalendarIcon className="h-3 w-3" /> {format(new Date(booking.booking_date), 'MMM d, yyyy')}
+                                                                    <CalendarIcon className="h-3 w-3" /> {order.event_date ? format(new Date(order.event_date), 'MMM d, yyyy') : 'TBD'}
                                                                 </span>
                                                             </div>
-                                                            {isAllocated && booking.vendor_name && (
-                                                                <p className="text-xs text-muted-foreground">Vendor: {booking.vendor_name}</p>
+                                                            {isAllocated && order.vendor_name && (
+                                                                <p className="text-xs text-muted-foreground">Vendor: {order.vendor_name}</p>
                                                             )}
                                                         </div>
                                                         <Badge variant={isAllocated ? 'secondary' : 'outline'}>
@@ -224,7 +185,6 @@ export default function BookingAllocationPage() {
                         </CardContent>
                     </Card>
 
-                    {/* Vendor Matching Section */}
                     <Card className="flex flex-col h-[600px]">
                         <CardHeader>
                             <div className="flex items-center justify-between">
@@ -234,15 +194,15 @@ export default function BookingAllocationPage() {
                                         Suggested Vendors
                                     </CardTitle>
                                     <CardDescription>
-                                        {selectedBooking ? (
-                                            selectedBooking.vendor_id ? 
-                                                `Change allocation for ${selectedBooking.customer_name}. Current vendor: ${selectedBooking.vendor_name || 'Unknown'}` :
-                                                `Matching partners for ${selectedBooking.city || 'this location'}`
-                                        ) : 'Select a booking to allocate or change vendor'}
+                                        {selectedOrder ? (
+                                            selectedOrder.vendor_id
+                                                ? `Change allocation for ${selectedOrder.contact_name || 'this order'}. Current vendor: ${selectedOrder.vendor_name || 'Unknown'}`
+                                                : `Matching partners for ${selectedOrder.location_preference || selectedOrder.venue_preference || 'this location'}`
+                                        ) : 'Select an order to allocate or change vendor'}
                                     </CardDescription>
                                 </div>
                             </div>
-                            {selectedBooking && (
+                            {selectedOrder && (
                                 <div className="mt-4">
                                     <label className="text-sm font-medium text-muted-foreground mb-2 block">Filter by City</label>
                                     <select
@@ -252,19 +212,17 @@ export default function BookingAllocationPage() {
                                     >
                                         <option value="">All Cities</option>
                                         {getUniqueCities().map((city) => (
-                                            <option key={city} value={city}>
-                                                {city}
-                                            </option>
+                                            <option key={city} value={city}>{city}</option>
                                         ))}
                                     </select>
                                 </div>
                             )}
                         </CardHeader>
                         <CardContent className="flex-1 overflow-hidden">
-                            {!selectedBooking ? (
+                            {!selectedOrder ? (
                                 <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
                                     <Search className="mb-4 h-12 w-12 opacity-10" />
-                                    <p>Select a booking from the left to begin allocation</p>
+                                    <p>Select an order from the left to begin allocation</p>
                                 </div>
                             ) : (
                                 <ScrollArea className="h-full pr-4">
@@ -278,12 +236,7 @@ export default function BookingAllocationPage() {
                                             <>
                                                 {!showAllVendors && getSuggestedVendors().length < vendors.length && (
                                                     <div className="mb-4">
-                                                        <Button 
-                                                            variant="outline" 
-                                                            size="sm" 
-                                                            onClick={() => setShowAllVendors(true)}
-                                                            className="w-full"
-                                                        >
+                                                        <Button variant="outline" size="sm" onClick={() => setShowAllVendors(true)} className="w-full">
                                                             View All Active Vendors ({vendors.length})
                                                         </Button>
                                                     </div>
@@ -300,10 +253,10 @@ export default function BookingAllocationPage() {
                                                             size="sm"
                                                             onClick={() => handleAllocate(vendor.id)}
                                                             className="h-8 ml-4"
-                                                            variant={selectedBooking?.vendor_id === vendor.id ? 'secondary' : 'default'}
+                                                            variant={selectedOrder?.vendor_id === vendor.id ? 'secondary' : 'default'}
                                                         >
                                                             <Check className="mr-1 h-3 w-3" />
-                                                            {selectedBooking?.vendor_id === vendor.id ? 'Current' : 'Allocate'}
+                                                            {selectedOrder?.vendor_id === vendor.id ? 'Current' : 'Allocate'}
                                                         </Button>
                                                     </div>
                                                 ))}
@@ -319,4 +272,3 @@ export default function BookingAllocationPage() {
         </DefaultLayout>
     )
 }
-
