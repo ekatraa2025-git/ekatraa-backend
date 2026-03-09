@@ -13,12 +13,12 @@ import { RichTextEditor } from '@/components/Common/RichTextEditor'
 import { toast } from 'sonner'
 
 const TIER_LABELS = [
-    { key: 'price_basic', label: 'Basic' },
-    { key: 'price_classic_value', label: 'Classic Value' },
-    { key: 'price_signature', label: 'Signature' },
-    { key: 'price_prestige', label: 'Prestige' },
-    { key: 'price_royal', label: 'Royal' },
-    { key: 'price_imperial', label: 'Imperial' },
+    { key: 'price_basic', label: 'Basic', qtyKey: 'qty_label_basic' },
+    { key: 'price_classic_value', label: 'Classic Value', qtyKey: 'qty_label_classic_value' },
+    { key: 'price_signature', label: 'Signature', qtyKey: 'qty_label_signature' },
+    { key: 'price_prestige', label: 'Prestige', qtyKey: 'qty_label_prestige' },
+    { key: 'price_royal', label: 'Royal', qtyKey: 'qty_label_royal' },
+    { key: 'price_imperial', label: 'Imperial', qtyKey: 'qty_label_imperial' },
 ] as const
 
 type Occasion = { id: string; name: string }
@@ -46,6 +46,12 @@ export default function EditOfferableServicePage() {
         price_prestige: '' as string,
         price_royal: '' as string,
         price_imperial: '' as string,
+        qty_label_basic: '' as string,
+        qty_label_classic_value: '' as string,
+        qty_label_signature: '' as string,
+        qty_label_prestige: '' as string,
+        qty_label_royal: '' as string,
+        qty_label_imperial: '' as string,
         is_active: true,
     })
     const categories = form.occasion_id
@@ -92,30 +98,18 @@ export default function EditOfferableServicePage() {
                         description: (svc.description as string) ?? '',
                         display_order: Number(svc.display_order) ?? 0,
                         image_url: (svc.image_url as string) ?? '',
-                        price_basic:
-                            svc.price_basic != null
-                                ? String(svc.price_basic)
-                                : '',
-                        price_classic_value:
-                            svc.price_classic_value != null
-                                ? String(svc.price_classic_value)
-                                : '',
-                        price_signature:
-                            svc.price_signature != null
-                                ? String(svc.price_signature)
-                                : '',
-                        price_prestige:
-                            svc.price_prestige != null
-                                ? String(svc.price_prestige)
-                                : '',
-                        price_royal:
-                            svc.price_royal != null
-                                ? String(svc.price_royal)
-                                : '',
-                        price_imperial:
-                            svc.price_imperial != null
-                                ? String(svc.price_imperial)
-                                : '',
+                        price_basic: svc.price_basic != null ? String(svc.price_basic) : '',
+                        price_classic_value: svc.price_classic_value != null ? String(svc.price_classic_value) : '',
+                        price_signature: svc.price_signature != null ? String(svc.price_signature) : '',
+                        price_prestige: svc.price_prestige != null ? String(svc.price_prestige) : '',
+                        price_royal: svc.price_royal != null ? String(svc.price_royal) : '',
+                        price_imperial: svc.price_imperial != null ? String(svc.price_imperial) : '',
+                        qty_label_basic: (svc.qty_label_basic as string) ?? '',
+                        qty_label_classic_value: (svc.qty_label_classic_value as string) ?? '',
+                        qty_label_signature: (svc.qty_label_signature as string) ?? '',
+                        qty_label_prestige: (svc.qty_label_prestige as string) ?? '',
+                        qty_label_royal: (svc.qty_label_royal as string) ?? '',
+                        qty_label_imperial: (svc.qty_label_imperial as string) ?? '',
                         is_active: svc.is_active !== false,
                     })
                     return
@@ -142,30 +136,18 @@ export default function EditOfferableServicePage() {
                             description: (svc.description as string) ?? '',
                             display_order: Number(svc.display_order) ?? 0,
                             image_url: (svc.image_url as string) ?? '',
-                            price_basic:
-                                svc.price_basic != null
-                                    ? String(svc.price_basic)
-                                    : '',
-                            price_classic_value:
-                                svc.price_classic_value != null
-                                    ? String(svc.price_classic_value)
-                                    : '',
-                            price_signature:
-                                svc.price_signature != null
-                                    ? String(svc.price_signature)
-                                    : '',
-                            price_prestige:
-                                svc.price_prestige != null
-                                    ? String(svc.price_prestige)
-                                    : '',
-                            price_royal:
-                                svc.price_royal != null
-                                    ? String(svc.price_royal)
-                                    : '',
-                            price_imperial:
-                                svc.price_imperial != null
-                                    ? String(svc.price_imperial)
-                                    : '',
+                            price_basic: svc.price_basic != null ? String(svc.price_basic) : '',
+                            price_classic_value: svc.price_classic_value != null ? String(svc.price_classic_value) : '',
+                            price_signature: svc.price_signature != null ? String(svc.price_signature) : '',
+                            price_prestige: svc.price_prestige != null ? String(svc.price_prestige) : '',
+                            price_royal: svc.price_royal != null ? String(svc.price_royal) : '',
+                            price_imperial: svc.price_imperial != null ? String(svc.price_imperial) : '',
+                            qty_label_basic: (svc.qty_label_basic as string) ?? '',
+                            qty_label_classic_value: (svc.qty_label_classic_value as string) ?? '',
+                            qty_label_signature: (svc.qty_label_signature as string) ?? '',
+                            qty_label_prestige: (svc.qty_label_prestige as string) ?? '',
+                            qty_label_royal: (svc.qty_label_royal as string) ?? '',
+                            qty_label_imperial: (svc.qty_label_imperial as string) ?? '',
                             is_active: svc.is_active !== false,
                         })
                         if (occasionId) {
@@ -214,6 +196,12 @@ export default function EditOfferableServicePage() {
             is_active: form.is_active,
             price_min,
             price_max,
+            qty_label_basic: form.qty_label_basic || null,
+            qty_label_classic_value: form.qty_label_classic_value || null,
+            qty_label_signature: form.qty_label_signature || null,
+            qty_label_prestige: form.qty_label_prestige || null,
+            qty_label_royal: form.qty_label_royal || null,
+            qty_label_imperial: form.qty_label_imperial || null,
             ...tierValues,
         }
         const res = await fetch(`/api/admin/offerable-services/${id}`, {
@@ -333,10 +321,10 @@ export default function EditOfferableServicePage() {
                         </div>
                         <div>
                             <label className="text-sm font-medium mb-2 block">
-                                Pricing (tiers) — leave empty if not applicable
+                                Pricing (tiers) — leave empty if not applicable. Qty label appears alongside the price (e.g. &quot;Upto 100&quot;, &quot;1 set&quot;).
                             </label>
                             <div className="space-y-2 rounded-md border p-3">
-                                {TIER_LABELS.map(({ key, label }) => (
+                                {TIER_LABELS.map(({ key, label, qtyKey }) => (
                                     <div
                                         key={key}
                                         className="flex items-center gap-3"
@@ -357,6 +345,18 @@ export default function EditOfferableServicePage() {
                                                 }))
                                             }
                                             className="max-w-40"
+                                        />
+                                        <Input
+                                            type="text"
+                                            placeholder="e.g. Upto 100"
+                                            value={form[qtyKey as keyof typeof form] as string}
+                                            onChange={(e) =>
+                                                setForm((p) => ({
+                                                    ...p,
+                                                    [qtyKey]: e.target.value,
+                                                }))
+                                            }
+                                            className="max-w-48"
                                         />
                                     </div>
                                 ))}
