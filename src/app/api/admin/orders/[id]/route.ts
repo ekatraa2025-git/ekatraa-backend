@@ -71,7 +71,7 @@ export async function PATCH(
         return NextResponse.json({ error: updateError.message }, { status: 400 })
     }
 
-    if (status) {
+    if (status != null) {
         await supabase.from('order_status_history').insert([
             { order_id: id, status, note: note ?? `Status updated to ${status}` },
         ])
@@ -79,7 +79,7 @@ export async function PATCH(
 
     const contactName = currentOrder?.contact_name || 'customer'
 
-    if (status && currentOrder?.vendor_id && body.status !== currentOrder.status) {
+    if (status != null && currentOrder?.vendor_id && status !== currentOrder.status) {
         const statusMessages: Record<string, { title: string; message: string }> = {
             confirmed: { title: 'Order Confirmed', message: `Order for ${contactName} has been confirmed.` },
             cancelled: { title: 'Order Cancelled', message: `Order for ${contactName} has been cancelled.` },
@@ -87,13 +87,13 @@ export async function PATCH(
             pending: { title: 'Order Status Updated', message: `Order for ${contactName} status has been updated to pending.` },
             in_progress: { title: 'Order In Progress', message: `Order for ${contactName} is now in progress.` },
         }
-        const statusInfo = statusMessages[body.status] ?? { title: 'Order Updated', message: `Order for ${contactName} has been updated.` }
+        const statusInfo = statusMessages[status] ?? { title: 'Order Updated', message: `Order for ${contactName} has been updated.` }
         await sendNotificationToVendor({
             vendor_id: currentOrder.vendor_id,
             type: 'booking_update',
             title: statusInfo.title,
             message: statusInfo.message,
-            data: { order_id: id, status: body.status, previous_status: currentOrder.status },
+            data: { order_id: id, status, previous_status: currentOrder.status },
         })
     }
 

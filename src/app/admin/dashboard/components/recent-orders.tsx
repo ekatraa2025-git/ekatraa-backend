@@ -27,10 +27,11 @@ export function RecentOrders({ orders }: RecentOrdersProps) {
                         </p>
                     </div>
                     <div className="ml-auto font-medium">
-                        <span className={`text-xs px-2 py-1 rounded-full ${order.status === 'confirmed' ? 'bg-green-50 text-green-700' :
-                                order.status === 'pending' ? 'bg-yellow-50 text-yellow-700' :
-                                    'bg-slate-50 text-slate-700'
-                            }`}>
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                            order.status === 'confirmed' ? 'bg-green-50 text-green-700'
+                            : order.status === 'pending' ? 'bg-yellow-50 text-yellow-700'
+                            : 'bg-slate-50 text-slate-700'
+                        }`}>
                             {order.status}
                         </span>
                     </div>
