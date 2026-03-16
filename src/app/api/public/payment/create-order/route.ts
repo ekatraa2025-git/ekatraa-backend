@@ -65,14 +65,14 @@ export async function POST(req: Request) {
         )
 
         const advanceAmount = Math.round((totalAmount * ADVANCE_PERCENT) / 100)
-        const amountInPaise = advanceAmount * 100
+        const amountInPaise = Math.max(advanceAmount * 100, 100)
 
         const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret })
         const order = await razorpay.orders.create({
             amount: amountInPaise,
             currency: 'INR',
-            receipt: `cart_${cart_id}`,
-            notes: { cart_id, user_id: orderUser },
+            receipt: `cart_${String(cart_id).slice(-8)}_${Date.now().toString(36)}`,
+            notes: { cart_id: String(cart_id), user_id: String(orderUser) },
         })
 
         return NextResponse.json({
@@ -83,6 +83,8 @@ export async function POST(req: Request) {
             key: keyId,
         })
     } catch (e) {
-        return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+        const err = e as Error & { error?: { description?: string }; statusCode?: number }
+        const msg = err?.error?.description || err?.message || String(e)
+        return NextResponse.json({ error: msg }, { status: 500 })
     }
 }
