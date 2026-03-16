@@ -14,21 +14,14 @@ export async function GET(
         return NextResponse.json({ error: 'Cart id required' }, { status: 400 })
     }
 
-    const { data: cart, error: cartError } = await supabase
-        .from('carts')
-        .select('*')
-        .eq('id', id)
-        .single()
+    const [{ data: cart, error: cartError }, { data: items, error: itemsError }] = await Promise.all([
+        supabase.from('carts').select('*').eq('id', id).single(),
+        supabase.from('cart_items').select('id, service_id, quantity, unit_price, options, created_at, offerable_services(id, name, image_url, price_min, price_max)').eq('cart_id', id),
+    ])
 
     if (cartError || !cart) {
         return NextResponse.json({ error: 'Cart not found' }, { status: 404 })
     }
-
-    const { data: items, error: itemsError } = await supabase
-        .from('cart_items')
-        .select('id, service_id, quantity, unit_price, options, created_at, offerable_services(id, name, image_url, price_min, price_max)')
-        .eq('cart_id', id)
-
     if (itemsError) {
         return NextResponse.json({ ...cart, items: [] })
     }

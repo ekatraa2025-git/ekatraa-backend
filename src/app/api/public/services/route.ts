@@ -33,24 +33,22 @@ export async function GET(req: Request) {
             query = query.or(`name.ilike.%${search.trim()}%,description.ilike.%${search.trim()}%`)
         }
 
-        const { data: services, error: svcError } = await query
-
-        if (svcError) {
-            return NextResponse.json({ error: svcError.message }, { status: 500 })
-        }
-
-        let list = services ?? []
-
-        if (occasionId && list.length > 0) {
-            const { data: links } = await supabase
-                .from('service_occasions')
-                .select('service_id')
-                .eq('occasion_id', occasionId)
+        if (occasionId) {
+            const [{ data: links }, { data: services, error: svcError }] = await Promise.all([
+                supabase.from('service_occasions').select('service_id').eq('occasion_id', occasionId),
+                query,
+            ])
+            if (svcError) return NextResponse.json({ error: svcError.message }, { status: 500 })
             const allowedIds = new Set((links ?? []).map((l: { service_id: string }) => l.service_id))
-            list = list.filter((s: { id: string }) => allowedIds.has(s.id))
+            const list = allowedIds.size > 0
+                ? (services ?? []).filter((s: { id: string }) => allowedIds.has(s.id))
+                : (services ?? [])
+            return NextResponse.json(list)
         }
 
-        return NextResponse.json(list)
+        const { data: services, error: svcError } = await query
+        if (svcError) return NextResponse.json({ error: svcError.message }, { status: 500 })
+        return NextResponse.json(services ?? [])
     }
 
     // Legacy: eventType + app_service_catalog

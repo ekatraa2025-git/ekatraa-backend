@@ -17,6 +17,10 @@ export default function OrderDetailPage() {
         id: string
         status: string
         total_amount?: number
+        advance_amount?: number
+        advance_paid_at?: string
+        razorpay_payment_id?: string
+        razorpay_order_id?: string
         contact_name?: string
         contact_mobile?: string
         contact_email?: string
@@ -97,6 +101,18 @@ export default function OrderDetailPage() {
                             <p className="text-sm text-muted-foreground">Total</p>
                             <p className="text-lg font-semibold">₹{Number(order.total_amount ?? 0).toLocaleString()}</p>
                         </div>
+                        {order.advance_amount != null && Number(order.advance_amount) > 0 && (
+                            <div className="pt-4 border-t space-y-2">
+                                <p className="text-sm font-medium">Advance Payment</p>
+                                <p className="text-lg font-semibold text-green-600">₹{Number(order.advance_amount).toLocaleString()} paid</p>
+                                {order.advance_paid_at && (
+                                    <p className="text-xs text-muted-foreground">Paid at {new Date(order.advance_paid_at).toLocaleString()}</p>
+                                )}
+                                {order.razorpay_payment_id && (
+                                    <p className="text-xs font-mono text-muted-foreground">Payment ID: {order.razorpay_payment_id}</p>
+                                )}
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 

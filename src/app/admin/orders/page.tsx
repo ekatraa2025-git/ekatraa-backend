@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
 export default function OrdersPage() {
-    const [items, setItems] = useState<{ id: string; user_id: string; status: string; total_amount?: number; created_at?: string; contact_name?: string }[]>([])
+    const [items, setItems] = useState<{ id: string; user_id: string; status: string; total_amount?: number; advance_amount?: number; advance_paid_at?: string; razorpay_payment_id?: string; created_at?: string; contact_name?: string }[]>([])
     const [filtered, setFiltered] = useState<typeof items>([])
     const [loading, setLoading] = useState(true)
 
@@ -48,6 +48,7 @@ export default function OrdersPage() {
         { header: 'Order ID', key: 'id', render: (v: string) => <span className="font-mono text-xs">{v?.slice(0, 8)}…</span> },
         { header: 'Contact', key: 'contact_name' },
         { header: 'Total', key: 'total_amount', render: (v: number) => (v != null ? `₹${Number(v).toLocaleString()}` : '—') },
+        { header: 'Advance', key: 'advance_amount', render: (v: number) => (v != null && v > 0 ? `₹${Number(v).toLocaleString()}` : '—') },
         {
             header: 'Status',
             key: 'status',

@@ -1,18 +1,34 @@
+import crypto from 'crypto'
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
+const ADVANCE_PERCENT = 20
+
 /**
- * POST /api/public/checkout
- * Create order from cart: body { cart_id, user_id }
- * Copies cart event context and items to order/order_items, then optionally clears cart.
+ * POST /api/public/payment/verify
+ * Verifies Razorpay signature and creates order with advance payment. Body: { razorpay_payment_id, razorpay_order_id, razorpay_signature, cart_id, user_id }
  */
 export async function POST(req: Request) {
     try {
-        const body = await req.json()
-        const { cart_id, user_id } = body
+        const keySecret = process.env.RAZORPAY_KEY_SECRET
+        if (!keySecret) {
+            return NextResponse.json({ error: 'Razorpay not configured' }, { status: 503 })
+        }
 
-        if (!cart_id) {
-            return NextResponse.json({ error: 'cart_id is required' }, { status: 400 })
+        const body = await req.json()
+        const { razorpay_payment_id, razorpay_order_id, razorpay_signature, cart_id, user_id } = body
+
+        if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature || !cart_id) {
+            return NextResponse.json({ error: 'Missing payment or cart details' }, { status: 400 })
+        }
+
+        const expectedSignature = crypto
+            .createHmac('sha256', keySecret)
+            .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+            .digest('hex')
+
+        if (expectedSignature !== razorpay_signature) {
+            return NextResponse.json({ error: 'Payment verification failed' }, { status: 400 })
         }
 
         const { data: cart, error: cartError } = await supabase
@@ -27,10 +43,7 @@ export async function POST(req: Request) {
 
         const orderUser = user_id ?? cart.user_id
         if (!orderUser) {
-            return NextResponse.json(
-                { error: 'user_id is required for checkout (or cart must have user_id)' },
-                { status: 400 }
-            )
+            return NextResponse.json({ error: 'user_id is required' }, { status: 400 })
         }
 
         const { data: items, error: itemsError } = await supabase
@@ -39,10 +52,7 @@ export async function POST(req: Request) {
             .eq('cart_id', cart_id)
 
         if (itemsError || !items?.length) {
-            return NextResponse.json(
-                { error: 'Cart has no items' },
-                { status: 400 }
-            )
+            return NextResponse.json({ error: 'Cart has no items' }, { status: 400 })
         }
 
         const totalAmount = items.reduce(
@@ -50,6 +60,8 @@ export async function POST(req: Request) {
                 sum + (Number(i.quantity) * Number(i.unit_price || 0)),
             0
         )
+
+        const advanceAmount = Math.round((totalAmount * ADVANCE_PERCENT) / 100)
 
         const { data: order, error: orderError } = await supabase
             .from('orders')
@@ -66,7 +78,10 @@ export async function POST(req: Request) {
                     contact_mobile: cart.contact_mobile,
                     contact_email: cart.contact_email,
                     total_amount: totalAmount,
-                    advance_amount: 0,
+                    advance_amount: advanceAmount,
+                    advance_paid_at: new Date().toISOString(),
+                    razorpay_payment_id: razorpay_payment_id,
+                    razorpay_order_id: razorpay_order_id,
                     status: 'pending',
                 },
             ])
@@ -99,7 +114,7 @@ export async function POST(req: Request) {
         }
 
         await supabase.from('order_status_history').insert([
-            { order_id: order.id, status: 'pending', note: 'Order created' },
+            { order_id: order.id, status: 'pending', note: `Order created. Advance (${ADVANCE_PERCENT}%) paid via Razorpay.` },
         ])
 
         return NextResponse.json(order, { status: 201 })
