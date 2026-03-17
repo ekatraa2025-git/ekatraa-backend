@@ -8,6 +8,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const status = searchParams.get('status')
     const allocated = searchParams.get('allocated')
+    const vendorId = searchParams.get('vendor_id')
 
     let query = supabase
         .from('orders')
@@ -15,6 +16,7 @@ export async function GET(req: Request) {
         .order('created_at', { ascending: false })
 
     if (status) query = query.eq('status', status)
+    if (vendorId) query = query.eq('vendor_id', vendorId)
 
     const { data: orders, error } = await query
 
@@ -26,6 +28,10 @@ export async function GET(req: Request) {
     if (allocated === 'false') {
         result = result.filter(
             (o: { vendor_id?: string | null }) => !o.vendor_id || o.vendor_id === '' || o.vendor_id === null
+        )
+    } else if (allocated === 'true') {
+        result = result.filter(
+            (o: { vendor_id?: string | null }) => !!o.vendor_id && o.vendor_id !== ''
         )
     }
 

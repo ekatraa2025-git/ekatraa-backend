@@ -1,14 +1,19 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getVendorFromRequest } from '@/lib/vendor-auth'
 
 /**
- * GET /api/public/orders/[id]
- * Order detail with items and status history.
+ * GET /api/vendor/orders/[id]
+ * Order detail for the authenticated vendor (only if allocated to them).
+ * Requires: Authorization: Bearer <supabase_access_token>
  */
 export async function GET(
-    _req: Request,
+    req: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const auth = await getVendorFromRequest(req)
+    if (auth.error) return auth.error
+
     const { id } = await params
     if (!id) {
         return NextResponse.json({ error: 'Order id required' }, { status: 400 })
@@ -18,6 +23,7 @@ export async function GET(
         .from('orders')
         .select('*')
         .eq('id', id)
+        .eq('vendor_id', auth.vendorId!)
         .single()
 
     if (orderError || !order) {
@@ -37,29 +43,26 @@ export async function GET(
 
     const { data: quotations } = await supabase
         .from('quotations')
-        .select('id, vendor_id, service_type, amount, status, created_at')
+        .select('*')
         .eq('order_id', id)
+        .eq('vendor_id', auth.vendorId!)
         .order('created_at', { ascending: false })
 
-    let quotes = quotations ?? []
-    if (quotes.length > 0) {
-        const vendorIds = [...new Set(quotes.map((q: { vendor_id?: string }) => q.vendor_id).filter(Boolean))]
-        const { data: vendors } = await supabase
-            .from('vendors')
-            .select('id, business_name')
-            .in('id', vendorIds)
-        const vendorMap = new Map((vendors ?? []).map((v: { id: string; business_name: string }) => [v.id, v.business_name]))
-        quotes = quotes.map((q: { vendor_id?: string; [k: string]: unknown }) => ({
-            ...q,
-            vendor_name: q.vendor_id ? vendorMap.get(q.vendor_id) ?? null : null,
-        }))
-    }
+    const totalOrderPrice = (items ?? []).reduce(
+        (sum: number, i: { quantity?: number | string; unit_price?: number | string }) =>
+            sum + ((Number(i.quantity) || 0) * (Number(i.unit_price) || 0)),
+        0
+    ) || Number((order as { total_amount?: number | string }).total_amount ?? 0)
+    const advancePaid = Number((order as { advance_amount?: number | string }).advance_amount ?? 0)
 
     return NextResponse.json({
         ...order,
         items: items ?? [],
         status_history: history ?? [],
-        quotes,
-        vendor_quotes: quotes,
+        quotations: quotations ?? [],
+        quotation: (quotations ?? [])[0] ?? null,
+        total_order_price: totalOrderPrice,
+        advance_paid: advancePaid,
+        balance_due: totalOrderPrice - advancePaid,
     })
 }

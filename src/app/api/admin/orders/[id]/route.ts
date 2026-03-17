@@ -109,3 +109,25 @@ export async function PATCH(
 
     return NextResponse.json(order)
 }
+
+export async function DELETE(
+    _req: Request,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    const { id } = await params
+    if (!id) {
+        return NextResponse.json({ error: 'Order id required' }, { status: 400 })
+    }
+
+    // Remove related data first to avoid FK issues.
+    await supabase.from('quotations').delete().eq('order_id', id)
+    await supabase.from('order_status_history').delete().eq('order_id', id)
+    await supabase.from('order_items').delete().eq('order_id', id)
+
+    const { error } = await supabase.from('orders').delete().eq('id', id)
+    if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+
+    return NextResponse.json({ success: true })
+}

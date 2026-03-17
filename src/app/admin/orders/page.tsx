@@ -14,11 +14,13 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { toast } from 'sonner'
 
 export default function OrdersPage() {
-    const [items, setItems] = useState<{ id: string; user_id: string; status: string; total_amount?: number; advance_amount?: number; advance_paid_at?: string; razorpay_payment_id?: string; created_at?: string; contact_name?: string }[]>([])
-    const [filtered, setFiltered] = useState<typeof items>([])
+    const [items, setItems] = useState<{ id: string; user_id: string; status: string; vendor_id?: string | null; vendor_name?: string | null; total_amount?: number; advance_amount?: number; advance_paid_at?: string; razorpay_payment_id?: string; created_at?: string; contact_name?: string }[]>([])
     const [loading, setLoading] = useState(true)
+    const [allocationFilter, setAllocationFilter] = useState<'all' | 'allocated' | 'unallocated'>('all')
+    const [searchValue, setSearchValue] = useState('')
 
     useEffect(() => {
         fetch('/api/admin/orders')
@@ -27,21 +29,62 @@ export default function OrdersPage() {
                 if (!data.error) {
                     const list = Array.isArray(data) ? data : []
                     setItems(list)
-                    setFiltered(list)
                 }
                 setLoading(false)
             })
     }, [])
 
     const handleSearch = (val: string) => {
-        const v = val.toLowerCase()
-        const f = items.filter(
-            (e) =>
-                e.id?.toLowerCase().includes(v) ||
-                e.status?.toLowerCase().includes(v) ||
-                e.contact_name?.toLowerCase().includes(v)
+        setSearchValue(val)
+    }
+
+    const refreshOrders = async () => {
+        const r = await fetch('/api/admin/orders')
+        const data = await r.json()
+        if (!data?.error) {
+            const list = Array.isArray(data) ? data : []
+            setItems(list)
+        }
+    }
+
+    const filtered = items.filter((e) => {
+        const isAllocated = !!e.vendor_id && e.vendor_id !== ''
+        if (allocationFilter === 'allocated' && !isAllocated) return false
+        if (allocationFilter === 'unallocated' && isAllocated) return false
+        if (!searchValue.trim()) return true
+        const v = searchValue.toLowerCase()
+        return (
+            e.id?.toLowerCase().includes(v) ||
+            e.status?.toLowerCase().includes(v) ||
+            e.contact_name?.toLowerCase().includes(v)
         )
-        setFiltered(f)
+    })
+
+    const handleUnallocate = async (id: string) => {
+        const res = await fetch(`/api/admin/orders/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vendor_id: null }),
+        })
+        const data = await res.json()
+        if (data?.error) {
+            toast.error(data.error)
+            return
+        }
+        toast.success('Allocation reversed successfully')
+        await refreshOrders()
+    }
+
+    const handleDeleteOrder = async (id: string) => {
+        if (!window.confirm('Delete this order? This action cannot be undone.')) return
+        const res = await fetch(`/api/admin/orders/${id}`, { method: 'DELETE' })
+        const data = await res.json()
+        if (data?.error) {
+            toast.error(data.error)
+            return
+        }
+        toast.success('Order deleted successfully')
+        await refreshOrders()
     }
 
     const columns = [
@@ -73,6 +116,17 @@ export default function OrdersPage() {
 
     return (
         <DefaultLayout>
+            <div className="mb-4 flex gap-2">
+                <Button variant={allocationFilter === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setAllocationFilter('all')}>
+                    All
+                </Button>
+                <Button variant={allocationFilter === 'allocated' ? 'default' : 'outline'} size="sm" onClick={() => setAllocationFilter('allocated')}>
+                    Allocated
+                </Button>
+                <Button variant={allocationFilter === 'unallocated' ? 'default' : 'outline'} size="sm" onClick={() => setAllocationFilter('unallocated')}>
+                    Unallocated
+                </Button>
+            </div>
             <DataTableView
                 title="Orders"
                 description="Orders from the new cart/checkout flow."
@@ -93,6 +147,15 @@ export default function OrdersPage() {
                                     <Eye className="mr-2 h-4 w-4" />
                                     View / Update status
                                 </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => handleUnallocate(item.id)}
+                                disabled={!item.vendor_id}
+                            >
+                                Reverse Allocation
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDeleteOrder(item.id)}>
+                                Delete Order
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>

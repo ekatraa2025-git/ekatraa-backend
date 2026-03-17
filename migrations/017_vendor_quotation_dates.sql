@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE quotations ADD COLUMN IF NOT EXISTS confirmation_date TIMESTAMPTZ;
+ALTER TABLE quotations ADD COLUMN IF NOT EXISTS quotation_submitted_at TIMESTAMPTZ;
+
+COMMIT;
