@@ -37,7 +37,7 @@ export async function GET(
 
     const { data: quotations } = await supabase
         .from('quotations')
-        .select('id, vendor_id, service_type, amount, status, created_at')
+        .select('*')
         .eq('order_id', id)
         .order('created_at', { ascending: false })
 
@@ -53,6 +53,32 @@ export async function GET(
             ...q,
             vendor_name: q.vendor_id ? vendorMap.get(q.vendor_id as string) ?? null : null,
         }))
+
+        // Generate signed URLs for quotation attachments
+        for (const q of quotes) {
+            const att = q.attachments
+            if (att && typeof att === 'object') {
+                const signed: Record<string, string[]> = {}
+                for (const [category, urls] of Object.entries(att)) {
+                    if (Array.isArray(urls)) {
+                        const resolved = await Promise.all(
+                            (urls as string[]).map(async (url: string) => {
+                                if (url.startsWith('http') && url.includes('token=')) return url
+                                let fileName = url
+                                if (url.startsWith('http')) {
+                                    const m = url.match(/\/ekatraa2025\/([^/?]+)/)
+                                    fileName = m?.[1] || url.split('/').pop()?.split('?')[0] || url
+                                }
+                                const { data } = await supabase.storage.from('ekatraa2025').createSignedUrl(fileName, 86400)
+                                return data?.signedUrl || supabase.storage.from('ekatraa2025').getPublicUrl(fileName).data?.publicUrl || url
+                            })
+                        )
+                        signed[category] = resolved
+                    }
+                }
+                q.attachments = signed
+            }
+        }
     }
 
     return NextResponse.json({
