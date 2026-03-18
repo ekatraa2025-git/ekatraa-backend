@@ -1,9 +1,10 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { toast } from 'sonner'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
-import { MapPin, Check, Search, Calendar as CalendarIcon, User, Info } from 'lucide-react'
+import { MapPin, Check, Search, Calendar as CalendarIcon, User, Info, ListChecks } from 'lucide-react'
 import {
     Card,
     CardContent,
@@ -137,7 +138,7 @@ export default function OrderAllocationPage() {
                                 Orders
                             </CardTitle>
                             <CardDescription>
-                                {orders.filter((o: any) => !o.vendor_id).length} unallocated, {orders.filter((o: any) => o.vendor_id).length} allocated
+                                {orders.filter((o: any) => !o.vendor_id && (o.allocation_count ?? 0) === 0).length} unallocated, {orders.filter((o: any) => o.vendor_id || (o.allocation_count ?? 0) > 0).length} allocated
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="flex-1 overflow-hidden">
@@ -150,7 +151,7 @@ export default function OrderAllocationPage() {
                                         </div>
                                     ) : (
                                         orders.map((order) => {
-                                            const isAllocated = order.vendor_id && order.vendor_id !== null && order.vendor_id !== ''
+                                            const isAllocated = (order.vendor_id && order.vendor_id !== null && order.vendor_id !== '') || (order.allocation_count ?? 0) > 0
                                             return (
                                                 <div
                                                     key={order.id}
@@ -172,9 +173,18 @@ export default function OrderAllocationPage() {
                                                                 <p className="text-xs text-muted-foreground">Vendor: {order.vendor_name}</p>
                                                             )}
                                                         </div>
-                                                        <Badge variant={isAllocated ? 'secondary' : 'outline'}>
-                                                            {isAllocated ? 'Allocated' : 'Unallocated'}
-                                                        </Badge>
+                                                        <div className="flex items-center gap-2">
+                                                            <Link
+                                                                href={`/admin/orders/${order.id}`}
+                                                                className="text-xs text-primary hover:underline flex items-center gap-1"
+                                                            >
+                                                                <ListChecks className="h-3 w-3" />
+                                                                Allocate by service
+                                                            </Link>
+                                                            <Badge variant={isAllocated ? 'secondary' : 'outline'}>
+                                                                {isAllocated ? 'Allocated' : 'Unallocated'}
+                                                            </Badge>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             )

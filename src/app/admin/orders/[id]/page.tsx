@@ -6,8 +6,18 @@ import { useRouter, useParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Loader2 } from 'lucide-react'
+import { Loader2, MapPin, X } from 'lucide-react'
 import { toast } from 'sonner'
+
+type OrderItem = {
+    id: string
+    name: string
+    quantity: number
+    unit_price: number
+    allocated_vendor_id?: string | null
+    allocated_vendor_name?: string | null
+    allocated_vendor_city?: string | null
+}
 
 export default function OrderDetailPage() {
     const router = useRouter()
@@ -26,14 +36,17 @@ export default function OrderDetailPage() {
         contact_email?: string
         event_name?: string
         event_date?: string
-        items?: { name: string; quantity: number; unit_price: number }[]
+        items?: OrderItem[]
         status_history?: { status: string; note?: string; created_at: string }[]
     } | null>(null)
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [newStatus, setNewStatus] = useState('')
+    const [vendors, setVendors] = useState<{ id: string; business_name: string; city?: string }[]>([])
+    const [allocatingItemId, setAllocatingItemId] = useState<string | null>(null)
+    const [selectedVendorByItem, setSelectedVendorByItem] = useState<Record<string, string>>({})
 
-    useEffect(() => {
+    const loadOrder = () => {
         fetch(`/api/admin/orders/${id}`)
             .then((r) => r.json())
             .then((data) => {
@@ -46,7 +59,49 @@ export default function OrderDetailPage() {
                 }
                 setLoading(false)
             })
+    }
+
+    useEffect(() => {
+        loadOrder()
+        fetch('/api/admin/vendors?status=active')
+            .then((r) => r.json())
+            .then((data) => {
+                if (Array.isArray(data)) setVendors(data)
+            })
     }, [id, router])
+
+    const handleAllocateItem = async (orderItemId: string) => {
+        const vendorId = selectedVendorByItem[orderItemId]
+        if (!vendorId) {
+            toast.error('Select a vendor')
+            return
+        }
+        setAllocatingItemId(orderItemId)
+        const res = await fetch(`/api/admin/orders/${id}/allocate-item`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order_item_id: orderItemId, vendor_id: vendorId }),
+        })
+        const data = await res.json()
+        setAllocatingItemId(null)
+        if (data?.error) toast.error(data.error)
+        else {
+            toast.success('Item allocated')
+            loadOrder()
+        }
+    }
+
+    const handleDeallocateItem = async (orderItemId: string) => {
+        setAllocatingItemId(orderItemId)
+        const res = await fetch(`/api/admin/orders/${id}/allocate-item?order_item_id=${orderItemId}`, { method: 'DELETE' })
+        const data = await res.json()
+        setAllocatingItemId(null)
+        if (data?.error) toast.error(data.error)
+        else {
+            toast.success('Allocation removed')
+            loadOrder()
+        }
+    }
 
     const handleStatusUpdate = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -119,14 +174,61 @@ export default function OrderDetailPage() {
                 {order.items && order.items.length > 0 && (
                     <Card>
                         <CardHeader>
-                            <CardTitle>Items</CardTitle>
+                            <CardTitle className="flex items-center gap-2">
+                                Items
+                                <span className="text-sm font-normal text-muted-foreground">— allocate services to vendors by location</span>
+                            </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <ul className="space-y-2">
-                                {order.items.map((item, i) => (
-                                    <li key={i} className="flex justify-between">
-                                        <span>{item.name} × {item.quantity}</span>
-                                        <span>₹{Number(item.unit_price * item.quantity).toLocaleString()}</span>
+                            <ul className="space-y-4">
+                                {order.items.map((item) => (
+                                    <li key={item.id} className="flex flex-col gap-2 rounded-lg border p-4">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <span className="font-medium">{item.name} × {item.quantity}</span>
+                                                <span className="ml-2">₹{Number(item.unit_price * item.quantity).toLocaleString()}</span>
+                                            </div>
+                                            {item.allocated_vendor_id ? (
+                                                <div className="flex items-center gap-2">
+                                                    <Badge variant="secondary" className="flex items-center gap-1">
+                                                        <MapPin className="h-3 w-3" />
+                                                        {item.allocated_vendor_name || 'Vendor'}
+                                                        {item.allocated_vendor_city && ` (${item.allocated_vendor_city})`}
+                                                    </Badge>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-8 w-8 p-0 text-destructive"
+                                                        onClick={() => handleDeallocateItem(item.id)}
+                                                        disabled={!!allocatingItemId}
+                                                    >
+                                                        <X className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-2">
+                                                    <select
+                                                        className="rounded-md border px-3 py-1.5 text-sm min-w-[180px]"
+                                                        value={selectedVendorByItem[item.id] ?? ''}
+                                                        onChange={(e) => setSelectedVendorByItem((p) => ({ ...p, [item.id]: e.target.value }))}
+                                                    >
+                                                        <option value="">Select vendor (location)</option>
+                                                        {vendors.map((v) => (
+                                                            <option key={v.id} value={v.id}>
+                                                                {v.business_name} {v.city ? `— ${v.city}` : ''}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => handleAllocateItem(item.id)}
+                                                        disabled={!selectedVendorByItem[item.id] || allocatingItemId === item.id}
+                                                    >
+                                                        {allocatingItemId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Allocate'}
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </div>
                                     </li>
                                 ))}
                             </ul>

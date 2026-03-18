@@ -25,6 +25,42 @@ export async function GET(
         .select('*')
         .eq('order_id', id)
 
+    const itemIds = (items ?? []).map((i: { id: string }) => i.id)
+    let allocationsByItemId = new Map<string, { vendor_id: string }>()
+    if (itemIds.length > 0) {
+        const { data: allocations } = await supabase
+            .from('order_item_allocations')
+            .select('order_item_id, vendor_id')
+            .in('order_item_id', itemIds)
+        for (const a of allocations ?? []) {
+            allocationsByItemId.set((a as { order_item_id: string }).order_item_id, { vendor_id: (a as { vendor_id: string }).vendor_id })
+        }
+    }
+    const vendorIds = [...new Set([...allocationsByItemId.values()].map((v) => v.vendor_id))]
+    if (order.vendor_id) vendorIds.push(order.vendor_id)
+    let vendorsMap = new Map<string, { business_name: string; city?: string }>()
+    if (vendorIds.length > 0) {
+        const { data: vendors } = await supabase
+            .from('vendors')
+            .select('id, business_name, city')
+            .in('id', vendorIds)
+        for (const v of vendors ?? []) {
+            vendorsMap.set((v as { id: string }).id, {
+                business_name: (v as { business_name: string }).business_name,
+                city: (v as { city?: string }).city,
+            })
+        }
+    }
+    const itemsWithAllocation = (items ?? []).map((i: { id: string }) => {
+        const alloc = allocationsByItemId.get(i.id)
+        return {
+            ...i,
+            allocated_vendor_id: alloc?.vendor_id ?? null,
+            allocated_vendor_name: alloc ? vendorsMap.get(alloc.vendor_id)?.business_name ?? null : null,
+            allocated_vendor_city: alloc ? vendorsMap.get(alloc.vendor_id)?.city ?? null : null,
+        }
+    })
+
     const { data: history } = await supabase
         .from('order_status_history')
         .select('*')
@@ -33,7 +69,7 @@ export async function GET(
 
     return NextResponse.json({
         ...order,
-        items: items ?? [],
+        items: itemsWithAllocation,
         status_history: history ?? [],
     })
 }
@@ -48,7 +84,16 @@ export async function PATCH(
 
     const updatePayload: Record<string, unknown> = {}
     if (status != null) updatePayload.status = status
-    if (vendor_id !== undefined) updatePayload.vendor_id = vendor_id || null
+    if (vendor_id !== undefined) {
+        updatePayload.vendor_id = vendor_id || null
+        if (vendor_id === null || vendor_id === '') {
+            const { data: oi } = await supabase.from('order_items').select('id').eq('order_id', id)
+            const oiIds = (oi ?? []).map((x: { id: string }) => x.id)
+            if (oiIds.length > 0) {
+                await supabase.from('order_item_allocations').delete().in('order_item_id', oiIds)
+            }
+        }
+    }
 
     if (Object.keys(updatePayload).length === 0) {
         return NextResponse.json({ error: 'status or vendor_id required' }, { status: 400 })
@@ -120,6 +165,11 @@ export async function DELETE(
     }
 
     // Remove related data first to avoid FK issues.
+    const { data: orderItems } = await supabase.from('order_items').select('id').eq('order_id', id)
+    const itemIds = (orderItems ?? []).map((i: { id: string }) => i.id)
+    if (itemIds.length > 0) {
+        await supabase.from('order_item_allocations').delete().in('order_item_id', itemIds)
+    }
     await supabase.from('quotations').delete().eq('order_id', id)
     await supabase.from('order_status_history').delete().eq('order_id', id)
     await supabase.from('order_items').delete().eq('order_id', id)

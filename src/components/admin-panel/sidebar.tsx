@@ -8,20 +8,16 @@ import {
     LayoutDashboard,
     Users,
     Settings,
-    Calendar,
     FileText,
     MapPin,
     CreditCard,
-    Layers,
     Languages,
     Bell,
     ImageIcon,
-    Sparkles,
     ListChecks,
     Gift,
     ShoppingCart,
     Tags,
-    Link2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -34,9 +30,9 @@ const MENU_ITEMS = [
     { name: 'Catalog Categories', icon: Tags, path: '/admin/catalog-categories' },
     { name: 'Services', icon: ListChecks, path: '/admin/offerable-services' },
     { name: 'Orders', icon: ShoppingCart, path: '/admin/orders' },
+    { name: 'Order Allocation', icon: MapPin, path: '/admin/locations' },
     { name: 'Vendors', icon: Users, path: '/admin/vendors' },
     { name: 'Banners', icon: ImageIcon, path: '/admin/banners' },
-    { name: 'Order Allocation', icon: MapPin, path: '/admin/locations' },
     { name: 'Quotations', icon: FileText, path: '/admin/quotations' },
     { name: 'Payments', icon: CreditCard, path: '/admin/payments' },
     { name: 'Notifications', icon: Bell, path: '/admin/notifications' },

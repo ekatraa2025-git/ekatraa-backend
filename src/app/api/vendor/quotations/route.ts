@@ -58,7 +58,22 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
-    if (order.vendor_id !== auth.vendorId) {
+    const hasOrderLevelAllocation = order.vendor_id === auth.vendorId
+    let hasItemAllocation = false
+    if (!hasOrderLevelAllocation) {
+        const { data: items } = await supabase.from('order_items').select('id').eq('order_id', String(order_id))
+        const itemIds = (items ?? []).map((i: { id: string }) => i.id)
+        if (itemIds.length > 0) {
+            const { data: alloc } = await supabase
+                .from('order_item_allocations')
+                .select('id')
+                .eq('vendor_id', auth.vendorId!)
+                .in('order_item_id', itemIds)
+                .limit(1)
+            hasItemAllocation = (alloc?.length ?? 0) > 0
+        }
+    }
+    if (!hasOrderLevelAllocation && !hasItemAllocation) {
         return NextResponse.json({ error: 'Order is not allocated to you' }, { status: 403 })
     }
 

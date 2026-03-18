@@ -19,14 +19,32 @@ export async function GET(
         return NextResponse.json({ error: 'Order id required' }, { status: 400 })
     }
 
-    const { data: order, error: orderError } = await supabase
+    let { data: order, error: orderError } = await supabase
         .from('orders')
         .select('*')
         .eq('id', id)
-        .eq('vendor_id', auth.vendorId!)
         .single()
 
     if (orderError || !order) {
+        return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    }
+
+    const hasOrderLevelAllocation = (order as { vendor_id?: string }).vendor_id === auth.vendorId
+    let hasItemAllocation = false
+    if (!hasOrderLevelAllocation) {
+        const { data: items } = await supabase.from('order_items').select('id').eq('order_id', id)
+        const itemIds = (items ?? []).map((i: { id: string }) => i.id)
+        if (itemIds.length > 0) {
+            const { data: alloc } = await supabase
+                .from('order_item_allocations')
+                .select('id')
+                .eq('vendor_id', auth.vendorId!)
+                .in('order_item_id', itemIds)
+                .limit(1)
+            hasItemAllocation = (alloc?.length ?? 0) > 0
+        }
+    }
+    if (!hasOrderLevelAllocation && !hasItemAllocation) {
         return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 

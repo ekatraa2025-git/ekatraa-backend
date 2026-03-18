@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import { DataTableView } from '@/components/admin-panel/data-table-view'
-import { Eye, Loader2 } from 'lucide-react'
+import { Eye, Loader2, MapPin, ChevronDown } from 'lucide-react'
 import Link from 'next/link'
 import {
     DropdownMenu,
@@ -16,8 +16,37 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 
+function AllocationIndicator({ count, vendors }: { count: number; vendors: { vendor_id: string; vendor_name: string | null; city?: string | null }[] }) {
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <button className="flex flex-col items-start text-left hover:underline cursor-pointer">
+                    <span className="text-sm font-medium">{count} allocation{count !== 1 ? 's' : ''}</span>
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        {vendors.slice(0, 2).map((v) => v.vendor_name || 'Vendor').join(', ')}
+                        {vendors.length > 2 && ` +${vendors.length - 2}`}
+                        <ChevronDown className="h-3 w-3" />
+                    </span>
+                </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuLabel className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4" />
+                    Allocated to vendors
+                </DropdownMenuLabel>
+                {vendors.map((v) => (
+                    <DropdownMenuItem key={v.vendor_id} disabled className="flex flex-col items-start cursor-default">
+                        <span className="font-medium">{v.vendor_name || 'Unknown'}</span>
+                        {v.city && <span className="text-xs text-muted-foreground">{v.city}</span>}
+                    </DropdownMenuItem>
+                ))}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    )
+}
+
 export default function OrdersPage() {
-    const [items, setItems] = useState<{ id: string; user_id: string; status: string; vendor_id?: string | null; vendor_name?: string | null; total_amount?: number; advance_amount?: number; advance_paid_at?: string; razorpay_payment_id?: string; created_at?: string; contact_name?: string }[]>([])
+    const [items, setItems] = useState<{ id: string; user_id: string; status: string; vendor_id?: string | null; vendor_name?: string | null; total_amount?: number; advance_amount?: number; advance_paid_at?: string; razorpay_payment_id?: string; created_at?: string; contact_name?: string; allocation_count?: number; allocation_vendors?: { vendor_id: string; vendor_name: string | null; city?: string | null }[] }[]>([])
     const [loading, setLoading] = useState(true)
     const [allocationFilter, setAllocationFilter] = useState<'all' | 'allocated' | 'unallocated'>('all')
     const [searchValue, setSearchValue] = useState('')
@@ -48,7 +77,7 @@ export default function OrdersPage() {
     }
 
     const filtered = items.filter((e) => {
-        const isAllocated = !!e.vendor_id && e.vendor_id !== ''
+        const isAllocated = (!!e.vendor_id && e.vendor_id !== '') || (e.allocation_count ?? 0) > 0
         if (allocationFilter === 'allocated' && !isAllocated) return false
         if (allocationFilter === 'unallocated' && isAllocated) return false
         if (!searchValue.trim()) return true
@@ -101,6 +130,18 @@ export default function OrdersPage() {
                 </Badge>
             ),
         },
+        {
+            header: 'Allocation',
+            key: 'allocation_count',
+            render: (_v: unknown, item: { allocation_count?: number; allocation_vendors?: { vendor_id: string; vendor_name: string | null; city?: string | null }[] }) => {
+                const count = item.allocation_count ?? 0
+                const vendors = item.allocation_vendors ?? []
+                if (count === 0) return <span className="text-muted-foreground text-sm">—</span>
+                return (
+                    <AllocationIndicator count={count} vendors={vendors} />
+                )
+            },
+        },
         { header: 'Created', key: 'created_at', render: (v: string) => (v ? new Date(v).toLocaleDateString() : '—') },
     ]
 
@@ -150,7 +191,7 @@ export default function OrdersPage() {
                             </DropdownMenuItem>
                             <DropdownMenuItem
                                 onClick={() => handleUnallocate(item.id)}
-                                disabled={!item.vendor_id}
+                                disabled={!item.vendor_id && (item.allocation_count ?? 0) === 0}
                             >
                                 Reverse Allocation
                             </DropdownMenuItem>

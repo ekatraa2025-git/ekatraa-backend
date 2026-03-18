@@ -14,6 +14,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const status = searchParams.get('status')
 
+    // Orders allocated via orders.vendor_id
     let query = supabase
         .from('orders')
         .select('*')
@@ -24,13 +25,46 @@ export async function GET(req: Request) {
         query = query.eq('status', status)
     }
 
-    const { data: orders, error } = await query
+    const { data: ordersByVendorId, error } = await query
 
     if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const list = orders ?? []
+    // Orders where vendor has order_item_allocations (multi-vendor support)
+    const { data: allocations } = await supabase
+        .from('order_item_allocations')
+        .select('order_item_id')
+        .eq('vendor_id', auth.vendorId!)
+    const allocatedItemIds = (allocations ?? []).map((a: { order_item_id: string }) => a.order_item_id)
+    let orderIdsFromAllocations: string[] = []
+    if (allocatedItemIds.length > 0) {
+        const { data: items } = await supabase
+            .from('order_items')
+            .select('order_id')
+            .in('id', allocatedItemIds)
+        orderIdsFromAllocations = [...new Set((items ?? []).map((i: { order_id: string }) => i.order_id))]
+    }
+
+    const idsFromVendor = new Set((ordersByVendorId ?? []).map((o: { id: string }) => o.id))
+    const extraOrderIds = orderIdsFromAllocations.filter((oid) => !idsFromVendor.has(oid))
+    let list = ordersByVendorId ?? []
+
+    if (extraOrderIds.length > 0) {
+        const { data: extraOrders } = await supabase
+            .from('orders')
+            .select('*')
+            .in('id', extraOrderIds)
+            .order('created_at', { ascending: false })
+        if (status && status !== 'all') {
+            list = [...list, ...(extraOrders ?? []).filter((o: { status: string }) => o.status === status)]
+        } else {
+            list = [...list, ...(extraOrders ?? [])]
+        }
+        list.sort((a: { created_at?: string }, b: { created_at?: string }) =>
+            (b.created_at ?? '').localeCompare(a.created_at ?? '')
+        )
+    }
     if (list.length === 0) {
         return NextResponse.json([])
     }

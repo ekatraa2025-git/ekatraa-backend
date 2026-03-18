@@ -27,10 +27,28 @@ export async function POST(
         .from('orders')
         .select('id, vendor_id, status, user_id, contact_mobile')
         .eq('id', orderId)
-        .eq('vendor_id', auth.vendorId!)
         .single()
 
     if (orderError || !order) {
+        return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    }
+
+    const hasOrderLevelAllocation = (order as { vendor_id?: string }).vendor_id === auth.vendorId
+    let hasItemAllocation = false
+    if (!hasOrderLevelAllocation) {
+        const { data: items } = await supabase.from('order_items').select('id').eq('order_id', orderId)
+        const itemIds = (items ?? []).map((i: { id: string }) => i.id)
+        if (itemIds.length > 0) {
+            const { data: alloc } = await supabase
+                .from('order_item_allocations')
+                .select('id')
+                .eq('vendor_id', auth.vendorId!)
+                .in('order_item_id', itemIds)
+                .limit(1)
+            hasItemAllocation = (alloc?.length ?? 0) > 0
+        }
+    }
+    if (!hasOrderLevelAllocation && !hasItemAllocation) {
         return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 
 /**
  * Admin: list orders, filter by status and allocation. Joins vendors for vendor_name when allocated.
+ * Includes allocation_count and allocation_vendors from order_item_allocations (multi-vendor support).
  */
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
@@ -25,37 +26,84 @@ export async function GET(req: Request) {
     }
 
     let result = orders ?? []
-    if (allocated === 'false') {
-        result = result.filter(
-            (o: { vendor_id?: string | null }) => !o.vendor_id || o.vendor_id === '' || o.vendor_id === null
-        )
-    } else if (allocated === 'true') {
-        result = result.filter(
-            (o: { vendor_id?: string | null }) => !!o.vendor_id && o.vendor_id !== ''
-        )
+
+    // Fetch order_item_allocations for all orders
+    const orderIds = result.map((o: { id: string }) => o.id)
+    const { data: allItems } = await supabase
+        .from('order_items')
+        .select('id, order_id')
+        .in('order_id', orderIds)
+    const itemIds = (allItems ?? []).map((i: { id: string }) => i.id)
+    const itemToOrderId = new Map((allItems ?? []).map((i: { id: string; order_id: string }) => [i.id, i.order_id]))
+
+    let allocationsByOrderId = new Map<string, { vendor_id: string }[]>()
+    if (itemIds.length > 0) {
+        const { data: allocations } = await supabase
+            .from('order_item_allocations')
+            .select('order_item_id, vendor_id')
+            .in('order_item_id', itemIds)
+        for (const a of allocations ?? []) {
+            const oid = itemToOrderId.get((a as { order_item_id: string }).order_item_id)
+            if (oid) {
+                const list = allocationsByOrderId.get(oid) ?? []
+                list.push({ vendor_id: (a as { vendor_id: string }).vendor_id })
+                allocationsByOrderId.set(oid, list)
+            }
+        }
     }
 
-    if (!result.length) {
-        return NextResponse.json(result)
-    }
+    const allVendorIds = new Set<string>()
+    result.forEach((o: { vendor_id?: string | null }) => {
+        if (o.vendor_id) allVendorIds.add(o.vendor_id)
+    })
+    allocationsByOrderId.forEach((list) => {
+        list.forEach((a) => allVendorIds.add(a.vendor_id))
+    })
 
-    const vendorIds = result
-        .map((o: { vendor_id?: string | null }) => o.vendor_id)
-        .filter((id: string | null | undefined) => id != null && id !== '')
-
-    let vendorsMap = new Map<string, string>()
-    if (vendorIds.length > 0) {
+    let vendorsMap = new Map<string, { business_name: string; city?: string }>()
+    if (allVendorIds.size > 0) {
         const { data: vendors } = await supabase
             .from('vendors')
-            .select('id, business_name')
-            .in('id', vendorIds)
-        vendorsMap = new Map(vendors?.map((v: { id: string; business_name: string }) => [v.id, v.business_name]) ?? [])
+            .select('id, business_name, city')
+            .in('id', Array.from(allVendorIds))
+        for (const v of vendors ?? []) {
+            vendorsMap.set((v as { id: string }).id, {
+                business_name: (v as { business_name: string }).business_name,
+                city: (v as { city?: string }).city,
+            })
+        }
     }
 
-    const data = result.map((order: { vendor_id?: string | null; [k: string]: unknown }) => ({
-        ...order,
-        vendor_name: order.vendor_id ? vendorsMap.get(order.vendor_id) ?? null : null,
-    }))
+    const isAllocated = (o: { id: string; vendor_id?: string | null }) => {
+        const hasOrderVendor = !!o.vendor_id && o.vendor_id !== ''
+        const itemAllocs = allocationsByOrderId.get(o.id) ?? []
+        return hasOrderVendor || itemAllocs.length > 0
+    }
+
+    if (allocated === 'false') {
+        result = result.filter((o: { id: string; vendor_id?: string | null }) => !isAllocated(o))
+    } else if (allocated === 'true') {
+        result = result.filter((o: { id: string; vendor_id?: string | null }) => isAllocated(o))
+    }
+
+    const data = result.map((order: { vendor_id?: string | null; id: string; [k: string]: unknown }) => {
+        const itemAllocs = allocationsByOrderId.get(order.id as string) ?? []
+        const vendorIdsFromItems = [...new Set(itemAllocs.map((a) => a.vendor_id))]
+        const orderVendorId = order.vendor_id as string | null | undefined
+        const uniqueVendorIds = [...new Set([...(orderVendorId ? [orderVendorId] : []), ...vendorIdsFromItems])]
+        const allocationCount = uniqueVendorIds.length
+        const allocationVendors = uniqueVendorIds.map((vid) => ({
+            vendor_id: vid,
+            vendor_name: vendorsMap.get(vid)?.business_name ?? null,
+            city: vendorsMap.get(vid)?.city ?? null,
+        }))
+        return {
+            ...order,
+            vendor_name: orderVendorId ? vendorsMap.get(orderVendorId)?.business_name ?? null : (allocationCount > 0 ? allocationVendors[0]?.vendor_name ?? null : null),
+            allocation_count: allocationCount,
+            allocation_vendors: allocationVendors,
+        }
+    })
 
     return NextResponse.json(data)
 }
