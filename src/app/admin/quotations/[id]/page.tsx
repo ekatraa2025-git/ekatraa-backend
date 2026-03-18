@@ -217,21 +217,21 @@ export default function QuotationDetailPage() {
                                     <p className="font-semibold">{quotation.customer_name || quotation.order?.contact_name}</p>
                                 </div>
                             )}
-                            {quotation.quotation_date && (
+                            {(quotation.quotation_date || quotation.quotation_submitted_at || quotation.created_at) && (
                                 <div>
                                     <p className="text-sm text-muted-foreground">Quotation Date</p>
                                     <p className="flex items-center gap-2">
                                         <Calendar className="h-4 w-4" />
-                                        {format(new Date(quotation.quotation_date), 'MMM d, yyyy')}
+                                        {format(new Date(quotation.quotation_submitted_at || quotation.quotation_date || quotation.created_at), 'MMM d, yyyy')}
                                     </p>
                                 </div>
                             )}
-                            {quotation.delivery_date && (
+                            {(quotation.confirmation_date || quotation.delivery_date) && (
                                 <div>
-                                    <p className="text-sm text-muted-foreground">Delivery Date</p>
+                                    <p className="text-sm text-muted-foreground">Confirmation / Delivery Date</p>
                                     <p className="flex items-center gap-2">
                                         <Truck className="h-4 w-4" />
-                                        {format(new Date(quotation.delivery_date), 'MMM d, yyyy')}
+                                        {format(new Date(quotation.confirmation_date || quotation.delivery_date), 'MMM d, yyyy')}
                                     </p>
                                 </div>
                             )}

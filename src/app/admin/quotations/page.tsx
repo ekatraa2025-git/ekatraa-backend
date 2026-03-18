@@ -3,8 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import { DataTableView } from '@/components/admin-panel/data-table-view'
-import { createClient } from '@/utils/supabase/client'
-import { FileText, Loader2, MoreHorizontal, Eye, Download, Printer } from 'lucide-react'
+import { FileText, Loader2, MoreHorizontal, Eye, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import {
     DropdownMenu,
@@ -16,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { toast } from 'sonner'
 
 export default function QuotationsPage() {
     const [quotations, setQuotations] = useState<any[]>([])
@@ -37,6 +37,27 @@ export default function QuotationsPage() {
         }
         fetchQuotations()
     }, [])
+
+    const refreshQuotations = async () => {
+        const res = await fetch('/api/admin/quotations')
+        const data = await res.json()
+        if (data && !data.error) {
+            setQuotations(data)
+            setFilteredQuotations(data)
+        }
+    }
+
+    const handleDelete = async (id: string) => {
+        if (!window.confirm('Delete this quotation? This action cannot be undone.')) return
+        const res = await fetch(`/api/admin/quotations/${id}`, { method: 'DELETE' })
+        const data = await res.json()
+        if (data?.error) {
+            toast.error(data.error)
+            return
+        }
+        toast.success('Quotation deleted successfully')
+        await refreshQuotations()
+    }
 
     const handleSearch = (val: string) => {
         const filtered = quotations.filter(q =>
@@ -63,7 +84,7 @@ export default function QuotationsPage() {
         { header: 'Service', key: 'service_type', render: (val: string, row: any) => val || row?.order?.event_name?.slice(0, 30) || 'N/A' },
         { header: 'Vendor', key: 'vendor', render: (val: any) => val?.business_name || 'N/A' },
         { header: 'Customer', key: 'customer_name', render: (val: string, row: any) => val || row?.order?.contact_name || 'N/A' },
-        { header: 'Quotation Date', key: 'quotation_date', render: (val: string, row: any) => formatDate(val || row?.created_at) },
+        { header: 'Quotation Date', key: 'created_at', render: (_val: string, row: any) => formatDate(row?.quotation_submitted_at || row?.quotation_date || row?.created_at) },
         { header: 'Valid Until', key: 'valid_until', render: (val: string) => formatDate(val) },
         { header: 'Amount', key: 'amount', render: (val: number, row: any) => <span className="font-semibold text-primary">₹{val || row?.total_amount || 0}</span> },
         {
@@ -109,6 +130,14 @@ export default function QuotationsPage() {
                                     <Eye className="mr-2 h-4 w-4" />
                                     View Details
                                 </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                onClick={() => handleDelete(item.id)}
+                                className="text-destructive focus:text-destructive"
+                            >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete Quotation
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>

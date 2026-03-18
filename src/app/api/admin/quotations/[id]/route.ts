@@ -202,3 +202,56 @@ export async function PATCH(
     }
 }
 
+export async function DELETE(
+    _req: Request,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    const { id } = await params
+    if (!id) {
+        return NextResponse.json({ error: 'Quotation id required' }, { status: 400 })
+    }
+
+    const { data: quotation, error: fetchError } = await supabase
+        .from('quotations')
+        .select('id, vendor_id')
+        .eq('id', id)
+        .single()
+
+    if (fetchError || !quotation) {
+        return NextResponse.json({ error: 'Quotation not found' }, { status: 404 })
+    }
+
+    const { error: deleteError } = await supabase
+        .from('quotations')
+        .delete()
+        .eq('id', id)
+
+    if (deleteError) {
+        return NextResponse.json({ error: deleteError.message }, { status: 500 })
+    }
+
+    // Recalculate vendor expected revenue
+    if (quotation.vendor_id) {
+        try {
+            const { data: allQuotations } = await supabase
+                .from('quotations')
+                .select('amount, status')
+                .eq('vendor_id', quotation.vendor_id)
+
+            const expectedRevenue = (allQuotations ?? []).reduce((sum: number, q: { amount?: number; status?: string }) => {
+                if (q.status === 'rejected' || q.status === 'declined') return sum
+                return sum + (parseFloat(String(q.amount || '0')) || 0)
+            }, 0)
+
+            await supabase
+                .from('vendors')
+                .update({ expected_total_revenues: expectedRevenue })
+                .eq('id', quotation.vendor_id)
+        } catch {
+            // Non-fatal
+        }
+    }
+
+    return NextResponse.json({ success: true })
+}
+
