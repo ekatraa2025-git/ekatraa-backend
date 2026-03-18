@@ -32,7 +32,7 @@ export async function POST(req: Request) {
 
         const { data: order, error: orderErr } = await supabase
             .from('orders')
-            .select('id, user_id, advance_amount, total_amount')
+            .select('id, user_id, advance_amount, total_amount, status')
             .eq('id', order_id)
             .single()
 
@@ -42,6 +42,10 @@ export async function POST(req: Request) {
 
         if (user_id && order.user_id !== user_id) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+        }
+
+        if ((order.status as string) !== 'completed') {
+            return NextResponse.json({ error: 'Balance payment is only available after the order is marked complete by the vendor.' }, { status: 400 })
         }
 
         const advancePaid = Number(order.advance_amount || 0)

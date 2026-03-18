@@ -4,15 +4,19 @@ import { NextResponse } from 'next/server'
 /**
  * GET /api/public/orders/[id]
  * Order detail with items and status history.
+ * Query: user_id (optional) - when provided and matches order owner, includes completion_otp for vendor OTP flow.
  */
 export async function GET(
-    _req: Request,
+    req: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
     const { id } = await params
     if (!id) {
         return NextResponse.json({ error: 'Order id required' }, { status: 400 })
     }
+
+    const { searchParams } = new URL(req.url)
+    const userId = searchParams.get('user_id')
 
     const { data: order, error: orderError } = await supabase
         .from('orders')
@@ -81,11 +85,24 @@ export async function GET(
         }
     }
 
+    let completionOtp: string | null = null
+    if (userId && order.user_id === userId) {
+        const { data: otpRow } = await supabase
+            .from('order_completion_otp')
+            .select('otp, expires_at')
+            .eq('order_id', id)
+            .single()
+        if (otpRow && new Date(otpRow.expires_at) > new Date()) {
+            completionOtp = otpRow.otp
+        }
+    }
+
     return NextResponse.json({
         ...order,
         items: items ?? [],
         status_history: history ?? [],
         quotes,
         vendor_quotes: quotes,
+        ...(completionOtp ? { completion_otp: completionOtp } : {}),
     })
 }
