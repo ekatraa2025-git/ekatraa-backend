@@ -39,9 +39,9 @@ export async function getVendorFromRequest(req: Request): Promise<
         }
     }
 
-    // Verify user is a vendor
-    const { supabase } = await import('@/lib/supabase/server')
-    const { data: vendor } = await supabase
+    // Verify user is a vendor (use server client for DB access)
+    const { supabase: serverSupabase } = await import('@/lib/supabase/server')
+    const { data: vendor } = await serverSupabase
         .from('vendors')
         .select('id')
         .eq('id', user.id)

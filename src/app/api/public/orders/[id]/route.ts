@@ -41,17 +41,17 @@ export async function GET(
         .eq('order_id', id)
         .order('created_at', { ascending: false })
 
-    let quotes = quotations ?? []
+    let quotes: Array<Record<string, unknown>> = (quotations ?? []) as Array<Record<string, unknown>>
     if (quotes.length > 0) {
-        const vendorIds = [...new Set(quotes.map((q: { vendor_id?: string }) => q.vendor_id).filter(Boolean))]
+        const vendorIds = [...new Set(quotes.map((q) => q.vendor_id as string).filter(Boolean))]
         const { data: vendors } = await supabase
             .from('vendors')
             .select('id, business_name')
             .in('id', vendorIds)
         const vendorMap = new Map((vendors ?? []).map((v: { id: string; business_name: string }) => [v.id, v.business_name]))
-        quotes = quotes.map((q: { vendor_id?: string; [k: string]: unknown }) => ({
+        quotes = quotes.map((q) => ({
             ...q,
-            vendor_name: q.vendor_id ? vendorMap.get(q.vendor_id) ?? null : null,
+            vendor_name: q.vendor_id ? vendorMap.get(q.vendor_id as string) ?? null : null,
         }))
     }
 
