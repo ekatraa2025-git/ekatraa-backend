@@ -282,6 +282,26 @@ export async function POST() {
         if (svcErr) results.push(`Services error: ${svcErr.message}`)
         else results.push(`Services: ${ALL_OFFERABLE_SERVICES.length} upserted`)
 
+        // 5. Seed occasion_budget_allocations for Wedding (sample)
+        const WEDDING_ALLOCATIONS = [
+            { occasion_id: 'wedding', category_id: 'venue', percentage: 20, display_order: 1 },
+            { occasion_id: 'wedding', category_id: 'decor', percentage: 10, display_order: 2 },
+            { occasion_id: 'wedding', category_id: 'menu', percentage: 20, display_order: 3 },
+            { occasion_id: 'wedding', category_id: 'photo-video', percentage: 10, display_order: 4 },
+            { occasion_id: 'wedding', category_id: 'salon-mehndi', percentage: 5, display_order: 5 },
+            { occasion_id: 'wedding', category_id: 'dj-sound-band', percentage: 8, display_order: 6 },
+            { occasion_id: 'wedding', category_id: 'florist-flower-decor', percentage: 7, display_order: 7 },
+            { occasion_id: 'wedding', category_id: 'event-management', percentage: 10, display_order: 8 },
+            { occasion_id: 'wedding', category_id: 'priest-pandit', percentage: 3, display_order: 9 },
+            { occasion_id: 'wedding', category_id: 'cars', percentage: 4, display_order: 10 },
+            { occasion_id: 'wedding', category_id: 'fire-crackers', percentage: 3, display_order: 11 },
+        ]
+        const { error: allocErr } = await supabase
+            .from('occasion_budget_allocations')
+            .upsert(WEDDING_ALLOCATIONS, { onConflict: 'occasion_id,category_id' })
+        if (allocErr) results.push(`Budget allocations error: ${allocErr.message}`)
+        else results.push(`Budget allocations: ${WEDDING_ALLOCATIONS.length} upserted for Wedding`)
+
         return NextResponse.json({ success: true, results })
     } catch (e) {
         return NextResponse.json({ error: (e as Error).message, results }, { status: 500 })
