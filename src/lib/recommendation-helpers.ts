@@ -10,6 +10,17 @@ export const OFFERABLE_TIER_DEFS: { key: string; label: string }[] = [
     { key: 'price_imperial', label: 'Imperial' },
 ]
 
+/** Postgres DECIMAL often arrives as string in JSON; normalize for math and API output. */
+function coercePrice(raw: unknown): number | null {
+    if (raw == null) return null
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw
+    if (typeof raw === 'string' && raw.trim() !== '') {
+        const n = Number(raw)
+        return Number.isFinite(n) ? n : null
+    }
+    return null
+}
+
 export type OfferableServiceRow = {
     id: string
     category_id: string
@@ -29,14 +40,14 @@ export type OfferableServiceRow = {
 
 export function getMinTierPrice(s: OfferableServiceRow): number {
     const vals = [
-        s.price_min,
-        s.price_basic,
-        s.price_classic_value,
-        s.price_signature,
-        s.price_prestige,
-        s.price_royal,
-        s.price_imperial,
-    ].filter((v): v is number => v != null && typeof v === 'number')
+        coercePrice(s.price_min),
+        coercePrice(s.price_basic),
+        coercePrice(s.price_classic_value),
+        coercePrice(s.price_signature),
+        coercePrice(s.price_prestige),
+        coercePrice(s.price_royal),
+        coercePrice(s.price_imperial),
+    ].filter((v): v is number => v != null)
     return vals.length ? Math.min(...vals) : Infinity
 }
 
@@ -46,7 +57,7 @@ export function buildTiersForService(
 ): Array<{ key: string; label: string; price: number | null; fits_allocation: boolean }> {
     return OFFERABLE_TIER_DEFS.map((def) => {
         const raw = s[def.key as keyof OfferableServiceRow]
-        const price = typeof raw === 'number' ? raw : null
+        const price = coercePrice(raw)
         return {
             key: def.key,
             label: def.label,

@@ -12,15 +12,19 @@ export type GeminiNarrativeResult = {
     disclaimer: string
 }
 
-const SYSTEM_INSTRUCTION = `You are an event budgeting assistant for the Ekatraa app in India.
-You MUST respond with valid JSON only, matching this shape:
+const SYSTEM_INSTRUCTION = `You help families in India plan their event spend in very simple, friendly English.
+Reply with ONLY valid JSON in this exact shape (no markdown):
 {"intro":"string","tips":["string"],"planning_reminders":["string"],"disclaimer":"string"}
-Rules:
-- Use ONLY the facts given in the user message (occasion name, total budget INR, category names, percentages, allocated INR per category, optional guest band). Do not invent vendors, services, prices, discounts, or guarantees.
-- tips: 3 to 6 short bullet strings; practical and generic (buffers, priorities, tracking spend).
-- planning_reminders: 2 to 4 short strings (timeline, contingencies, reviewing allocations).
-- disclaimer must state that figures are illustrative and actual prices and availability are in the app.
-- Write in clear English; rupee amounts must match those provided in the input only.`
+
+How to write:
+- intro: 2 or 3 short sentences. Name the occasion. Say the total budget in plain words (use "rupees" or "lakhs" as people speak; use the same rupee amounts we give you). Mention 2–3 of the spending areas by name so it feels personal. No jargon: do not say INR, API, allocation, percentage, schema, or technical words.
+- tips: 4 to 6 very short lines (one idea each). Easy to skim. Examples of tone: keep a small cushion for surprises; decide what matters most first; check numbers with family. You may refer to the spending areas by name when it helps.
+- planning_reminders: 2 or 3 short lines about timing, confirming guest numbers, or revisiting the plan—spoken like a calm friend.
+- disclaimer: one short sentence that the real prices and options are the ones shown in the Ekatraa app.
+
+Hard rules:
+- Use only the occasion name, guest note, total budget, and the spending areas and rupee amounts we list. Do not invent vendors, packages, discounts, or new numbers.
+- Keep sentences short. No bullet points inside the intro string.`
 
 export async function generateBudgetNarrative(input: {
     occasion_name: string
@@ -40,20 +44,24 @@ export async function generateBudgetNarrative(input: {
     )
     const url = `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`
 
+    const rupee = (n: number) =>
+        `₹${Math.round(n).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+
     const allocText = input.allocation_lines
-        .map(
-            (l) =>
-                `- ${l.name} (id ${l.category_id}): ${l.percentage.toFixed(2)}% → ₹${Math.round(l.allocated_inr)} allocated`
-        )
+        .map((l) => {
+            const pct = Math.round(l.percentage * 10) / 10
+            return `- ${l.name}: about ${rupee(l.allocated_inr)} (${pct}% of the total plan below)`
+        })
         .join('\n')
 
     const userText = `Occasion: ${input.occasion_name}
-Total budget (INR): ${Math.round(input.budget_inr)}
-Guest context: ${input.guest_band ?? 'not specified'}
-Category allocations:
+Total plan budget: ${rupee(input.budget_inr)}
+Guests: ${input.guest_band ?? 'not mentioned'}
+
+How the budget is split (use these names and amounts only; do not change the numbers):
 ${allocText}
 
-Produce the JSON object as specified.`
+Write the JSON object now.`
 
     const started = Date.now()
     const res = await fetch(url, {
