@@ -2,6 +2,13 @@ import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { extractCityFromAddress } from '@/utils/addressParser'
 
+const UUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function isUuid(value: unknown): value is string {
+    return typeof value === 'string' && UUID_RE.test(value.trim())
+}
+
 export async function GET(
     req: Request,
     { params }: { params: Promise<{ id: string }> }
@@ -27,6 +34,12 @@ export async function PATCH(
     try {
         const { id } = await params
         const body = await req.json()
+
+        // Catalog categories use string slugs (e.g. "menu"); vendors.category_id is UUID (legacy FK)
+        if (body.category_id !== undefined && !isUuid(body.category_id)) {
+            delete body.category_id
+        }
+        delete body.id
 
         // Remove non-vendor fields that might be sent from the form
         delete body.service_subcategory

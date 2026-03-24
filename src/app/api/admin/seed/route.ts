@@ -282,7 +282,25 @@ export async function POST() {
         if (svcErr) results.push(`Services error: ${svcErr.message}`)
         else results.push(`Services: ${ALL_OFFERABLE_SERVICES.length} upserted`)
 
-        // 5. Seed occasion_budget_allocations for Wedding (sample)
+        // 5. Seed service_occasions (link services to occasions via category)
+        const serviceOccasionRows: { occasion_id: string; service_id: string }[] = []
+        for (const s of withMinMax) {
+            const serviceId = s.id as string
+            const categoryId = s.category_id as string
+            for (const [occasionId, categoryIds] of Object.entries(OCCASION_CATEGORY_MAP)) {
+                if (categoryIds.includes(categoryId)) {
+                    serviceOccasionRows.push({ occasion_id: occasionId, service_id: serviceId })
+                }
+            }
+        }
+        await supabase.from('service_occasions').delete().in('occasion_id', Object.keys(OCCASION_CATEGORY_MAP))
+        const { error: soErr } = await supabase
+            .from('service_occasions')
+            .insert(serviceOccasionRows)
+        if (soErr) results.push(`Service-occasion links error: ${soErr.message}`)
+        else results.push(`Service-occasion links: ${serviceOccasionRows.length} inserted`)
+
+        // 6. Seed occasion_budget_allocations for Wedding (sample)
         const WEDDING_ALLOCATIONS = [
             { occasion_id: 'wedding', category_id: 'venue', percentage: 20, display_order: 1 },
             { occasion_id: 'wedding', category_id: 'decor', percentage: 10, display_order: 2 },

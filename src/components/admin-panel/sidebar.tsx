@@ -16,6 +16,7 @@ import {
     ImageIcon,
     ListChecks,
     Gift,
+    Sparkles,
     ShoppingCart,
     Tags,
 } from 'lucide-react'
@@ -30,6 +31,7 @@ const MENU_ITEMS = [
     { name: 'Catalog Categories', icon: Tags, path: '/admin/catalog-categories' },
     { name: 'Services', icon: ListChecks, path: '/admin/offerable-services' },
     { name: 'Orders', icon: ShoppingCart, path: '/admin/orders' },
+    { name: 'Budget snapshots', icon: Sparkles, path: '/admin/budget-recommendation-snapshots' },
     { name: 'Order Allocation', icon: MapPin, path: '/admin/locations' },
     { name: 'Vendors', icon: Users, path: '/admin/vendors' },
     { name: 'Banners', icon: ImageIcon, path: '/admin/banners' },

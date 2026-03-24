@@ -24,12 +24,20 @@ export async function GET(req: Request) {
     const { data: catalogCategories } = await supabase.from('categories').select('id, name')
     const categoriesMap = new Map(catalogCategories?.map(c => [c.id, c.name]) || [])
 
-    const data = vendors.map(vendor => ({
-        ...vendor,
-        vendor_categories: {
-            name: vendor.category_id ? categoriesMap.get(vendor.category_id) : null
+    const data = vendors.map((vendor) => {
+        const fromCatalog =
+            vendor.category_id != null ? categoriesMap.get(vendor.category_id as string) : null
+        const displayCategory =
+            (fromCatalog && String(fromCatalog).trim()) ||
+            (vendor.category && String(vendor.category).trim()) ||
+            null
+        return {
+            ...vendor,
+            vendor_categories: {
+                name: displayCategory,
+            },
         }
-    }))
+    })
 
     return NextResponse.json(data)
 }

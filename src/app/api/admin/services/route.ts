@@ -47,6 +47,10 @@ export async function POST(req: Request) {
         if (body.price_amount === '' || body.price_amount === undefined || body.price_amount === null) {
             delete body.price_amount
         }
+
+        if (body.pricing_tier === '' || body.pricing_tier === undefined) {
+            delete body.pricing_tier
+        }
         
         const { data, error } = await supabase
             .from('services')

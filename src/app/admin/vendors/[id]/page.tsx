@@ -11,6 +11,21 @@ import { AdminImage } from '@/components/Common/AdminImage'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/Common/ConfirmDialog'
 
+const CATALOG_TIER_DEFS: { key: string; label: string }[] = [
+    { key: 'basic', label: 'Basic' },
+    { key: 'classic_value', label: 'Classic Value' },
+    { key: 'signature', label: 'Signature' },
+    { key: 'prestige', label: 'Prestige' },
+    { key: 'royal', label: 'Royal' },
+    { key: 'imperial', label: 'Imperial' },
+]
+
+function catalogTierLabel(tierKey: string): string {
+    if (!tierKey) return ''
+    const def = CATALOG_TIER_DEFS.find((t) => t.key === tierKey)
+    return def?.label ?? tierKey.replace(/_/g, ' ')
+}
+
 export default function EditVendorPage() {
     const [loading, setLoading] = useState(false)
     const [fetching, setFetching] = useState(true)
@@ -50,6 +65,8 @@ export default function EditVendorPage() {
     const [serviceImageForAdd, setServiceImageForAdd] = useState('')
     const [uploadingServiceForAdd, setUploadingServiceForAdd] = useState(false)
     const [addingServiceFromCatalog, setAddingServiceFromCatalog] = useState(false)
+    /** serviceId -> selected tier keys (multi-select per catalog row) */
+    const [bulkSelections, setBulkSelections] = useState<Record<string, string[]>>({})
     const [deleteServiceTarget, setDeleteServiceTarget] = useState<string | null>(null)
 
     useEffect(() => {
@@ -123,6 +140,7 @@ export default function EditVendorPage() {
         }
         setAddingServiceFromCatalog(true)
         try {
+            const tierKeySingle = serviceTierKey || formData.service_pricing_type
             const body: any = {
                 vendor_id: id,
                 name,
@@ -130,6 +148,7 @@ export default function EditVendorPage() {
                 price_unit: 'event',
                 category: formData.category || '',
             }
+            if (tierKeySingle) body.pricing_tier = catalogTierLabel(tierKeySingle)
             if (serviceImageForAdd) body.image_url = serviceImageForAdd
             const res = await fetch('/api/admin/services', {
                 method: 'POST',
@@ -153,6 +172,95 @@ export default function EditVendorPage() {
             await fetchVendorServices()
         } catch (err: any) {
             toast.error(err?.message || 'Failed to add service')
+        } finally {
+            setAddingServiceFromCatalog(false)
+        }
+    }
+
+    const toggleBulkService = (serviceId: string) => {
+        setBulkSelections((prev) => {
+            if (serviceId in prev) {
+                const { [serviceId]: _, ...rest } = prev
+                return rest
+            }
+            return { ...prev, [serviceId]: [] }
+        })
+    }
+
+    const toggleBulkTier = (serviceId: string, tierKey: string) => {
+        setBulkSelections((prev) => {
+            if (!(serviceId in prev)) return prev
+            const cur = prev[serviceId] || []
+            const next = cur.includes(tierKey) ? cur.filter((t) => t !== tierKey) : [...cur, tierKey]
+            return { ...prev, [serviceId]: next }
+        })
+    }
+
+    const handleAddSelectedServicesFromCatalog = async () => {
+        const entries = Object.entries(bulkSelections)
+        if (!entries.length) {
+            toast.error('Select one or more catalog services.')
+            return
+        }
+        const hasAnyTier = entries.some(([, tiers]) => tiers.length > 0)
+        if (!hasAnyTier) {
+            toast.error('Pick at least one pricing tier for each service you want to add (tiers under each selected row).')
+            return
+        }
+        setAddingServiceFromCatalog(true)
+        let added = 0
+        let skipped = 0
+        try {
+            for (const [sid, tierKeys] of entries) {
+                const svc = offerableServices.find((s: any) => s.id === sid)
+                if (!svc) {
+                    skipped++
+                    continue
+                }
+                for (const tier of tierKeys) {
+                    const price = getOfferableTierPrice(svc, tier)
+                    if (price == null) {
+                        skipped++
+                        continue
+                    }
+                    const body: any = {
+                        vendor_id: id,
+                        name: svc.name,
+                        price_amount: price,
+                        price_unit: 'event',
+                        category: formData.category || '',
+                        pricing_tier: catalogTierLabel(tier),
+                    }
+                    const res = await fetch('/api/admin/services', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                    })
+                    const result = await res.json()
+                    if (result.error) skipped++
+                    else added++
+                }
+            }
+            if (added > 0) {
+                toast.success(`Added ${added} line(s)${skipped ? ` (${skipped} skipped — no price or error)` : ''}`)
+                setBulkSelections({})
+                setSelectedOfferableService(null)
+                setSelectedStock(null)
+                setServiceTierKey('')
+                setServicePriceAmount('')
+                setFormData((prev: any) => ({
+                    ...prev,
+                    service_stock_id: '',
+                    service_stock_name: '',
+                    service_pricing_type: '',
+                    service_price_amount: '',
+                }))
+                await fetchVendorServices()
+            } else {
+                toast.error(skipped ? 'Nothing added — check tiers have prices for each service.' : 'Nothing to add.')
+            }
+        } catch (err: any) {
+            toast.error(err?.message || 'Bulk add failed')
         } finally {
             setAddingServiceFromCatalog(false)
         }
@@ -191,12 +299,30 @@ export default function EditVendorPage() {
         }
     }
 
+    const getOfferableTierPrice = (svc: any, tierKey: string): number | null => {
+        const fieldMap: Record<string, string> = {
+            basic: 'price_basic',
+            classic_value: 'price_classic_value',
+            signature: 'price_signature',
+            prestige: 'price_prestige',
+            royal: 'price_royal',
+            imperial: 'price_imperial',
+        }
+        const field = fieldMap[tierKey]
+        if (!field || !svc) return null
+        const v = svc[field]
+        if (v == null || v === '') return null
+        const n = Number(v)
+        return Number.isFinite(n) && n > 0 ? n : null
+    }
+
     const fetchOfferableServices = async (categoryId: string) => {
         setOfferableServices([])
         setSelectedOfferableService(null)
         setSelectedStock(null)
         setServiceTierKey('')
         setServicePriceAmount('')
+        setBulkSelections({})
         if (!categoryId) return
         const res = await fetch(`/api/admin/offerable-services?category_id=${categoryId}`)
         const data = await res.json()
@@ -354,6 +480,13 @@ export default function EditVendorPage() {
         delete submitData.vendor_categories
         delete submitData.create_auth
 
+        const uuidRe =
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+        if (submitData.category_id != null && typeof submitData.category_id === 'string' && !uuidRe.test(submitData.category_id.trim())) {
+            delete submitData.category_id
+        }
+        delete submitData.id
+
         const res = await fetch(`/api/admin/vendors/${id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -368,6 +501,11 @@ export default function EditVendorPage() {
             router.push('/admin/vendors')
         }
     }
+
+    const tierPreviewService = selectedOfferableService || selectedStock || null
+
+    const bulkSelectionCount = Object.keys(bulkSelections).length
+    const bulkReadyToAddCount = Object.values(bulkSelections).reduce((n, tiers) => n + tiers.length, 0)
 
     const inputClass = "w-full rounded-lg border border-stroke bg-white px-4 py-3 text-sm font-medium text-black shadow-sm transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-form-strokedark dark:bg-form-input dark:text-white"
     const selectClass = inputClass
@@ -494,57 +632,175 @@ export default function EditVendorPage() {
                                         </select>
                                     )}
                                 </div>
-                                <div>
-                                    <label className={labelClass}>Service (from catalog)</label>
+                                <div className="md:col-span-2">
+                                    <label className={labelClass}>Services (from catalog)</label>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                                        Tick services to show tier chips per row — you can select multiple tiers per service. Use &quot;Add all with tiers&quot; to save every combination at once. Use &quot;Use for single add&quot; for one service with optional image.
+                                    </p>
                                     {!formData.category_id ? (
                                         <p className="text-sm text-gray-400 dark:text-gray-500 italic py-3">Select category first</p>
                                     ) : offerableServices.length === 0 ? (
                                         <p className="text-sm text-gray-400 dark:text-gray-500 italic py-3">No services in this category</p>
                                     ) : (
-                                        <select
-                                            value={selectedOfferableService?.id || ''}
-                                            onChange={(e) => {
-                                                const svc = offerableServices.find((s: any) => s.id === e.target.value)
-                                                if (svc) handleOfferableServiceSelect(svc)
-                                            }}
-                                            className={selectClass}
-                                        >
-                                            <option value="">Select service</option>
-                                            {offerableServices.map((s: any) => (
-                                                <option key={s.id} value={s.id}>{s.name}</option>
-                                            ))}
-                                        </select>
+                                        <div className="rounded-lg border border-stroke dark:border-strokedark overflow-hidden">
+                                            <div className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-900 border-b border-stroke dark:border-strokedark">
+                                                <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+                                                    {bulkSelectionCount} selected · {bulkReadyToAddCount} tier line(s) to add
+                                                </span>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        className="text-xs font-medium text-primary hover:underline"
+                                                        onClick={() =>
+                                                            setBulkSelections(
+                                                                Object.fromEntries(
+                                                                    offerableServices.map((sv: any) => [
+                                                                        sv.id,
+                                                                        bulkSelections[sv.id] ?? [],
+                                                                    ])
+                                                                )
+                                                            )
+                                                        }
+                                                    >
+                                                        Select all
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="text-xs font-medium text-gray-500 hover:underline"
+                                                        onClick={() => setBulkSelections({})}
+                                                    >
+                                                        Clear
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="max-h-96 overflow-y-auto divide-y divide-stroke dark:divide-strokedark">
+                                                {offerableServices.map((s: any) => {
+                                                    const checked = s.id in bulkSelections
+                                                    const rowTiers = bulkSelections[s.id] ?? []
+                                                    return (
+                                                        <div
+                                                            key={s.id}
+                                                            className={`${selectedOfferableService?.id === s.id ? 'bg-primary/5' : ''}`}
+                                                        >
+                                                            <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/80">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={checked}
+                                                                    onChange={() => toggleBulkService(s.id)}
+                                                                    className="h-4 w-4 shrink-0 rounded border-stroke text-primary"
+                                                                />
+                                                                <span className="min-w-0 flex-1 text-sm text-black dark:text-white">{s.name}</span>
+                                                                <button
+                                                                    type="button"
+                                                                    className="text-xs text-primary font-medium shrink-0"
+                                                                    onClick={(e) => {
+                                                                        e.preventDefault()
+                                                                        e.stopPropagation()
+                                                                        handleOfferableServiceSelect(s)
+                                                                    }}
+                                                                >
+                                                                    Use for single add
+                                                                </button>
+                                                            </label>
+                                                            {checked && (
+                                                                <div className="px-3 pb-3 pl-10">
+                                                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1.5">
+                                                                        Tiers for this service (multi-select)
+                                                                    </p>
+                                                                    <div className="flex flex-wrap gap-1.5">
+                                                                        {CATALOG_TIER_DEFS.map((def) => {
+                                                                            const price = getOfferableTierPrice(s, def.key)
+                                                                            const active = rowTiers.includes(def.key)
+                                                                            const disabled = price == null
+                                                                            return (
+                                                                                <button
+                                                                                    key={def.key}
+                                                                                    type="button"
+                                                                                    disabled={disabled}
+                                                                                    onClick={() => toggleBulkTier(s.id, def.key)}
+                                                                                    className={`min-h-[3.25rem] min-w-[4.5rem] max-w-[7.5rem] rounded-md border px-1.5 py-1 text-left transition-all ${
+                                                                                        disabled
+                                                                                            ? 'cursor-not-allowed border-stroke/50 opacity-40 dark:border-strokedark/50'
+                                                                                            : active
+                                                                                              ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
+                                                                                              : 'border-stroke hover:border-gray-300 dark:border-strokedark dark:hover:border-gray-600'
+                                                                                    }`}
+                                                                                >
+                                                                                    <span
+                                                                                        className={`block text-[10px] font-semibold leading-tight break-words hyphens-auto ${
+                                                                                            active ? 'text-primary' : 'text-black dark:text-white'
+                                                                                        }`}
+                                                                                    >
+                                                                                        {def.label}
+                                                                                    </span>
+                                                                                    {price != null && (
+                                                                                        <span
+                                                                                            className={`mt-0.5 block text-[10px] font-bold leading-tight break-all ${
+                                                                                                active ? 'text-primary' : 'text-gray-600 dark:text-gray-300'
+                                                                                            }`}
+                                                                                        >
+                                                                                            ₹{Number(price).toLocaleString()}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </button>
+                                                                            )
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                            {bulkSelectionCount > 0 && (
+                                                <div className="flex flex-wrap items-center justify-end gap-2 border-t border-stroke dark:border-strokedark bg-gray-50/80 dark:bg-gray-900/80 px-3 py-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleAddSelectedServicesFromCatalog}
+                                                        disabled={addingServiceFromCatalog || bulkReadyToAddCount === 0}
+                                                        className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50"
+                                                    >
+                                                        {addingServiceFromCatalog
+                                                            ? 'Adding...'
+                                                            : `Add all with tiers (${bulkReadyToAddCount})`}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
 
-                                {/* Pricing tiers from selected offerable service */}
-                                {(selectedOfferableService || selectedStock) && (
+                                {/* Pricing tiers — single add only */}
+                                {tierPreviewService && (selectedOfferableService || selectedStock) && (
                                     <div className="md:col-span-2">
-                                        <label className={labelClass}>Pricing Tier</label>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                                            {[
-                                                { key: 'classic_value', label: 'Classic Value', price: selectedOfferableService?.price_classic_value ?? selectedStock?.price_classic_value ?? 0 },
-                                                { key: 'signature', label: 'Signature', price: selectedOfferableService?.price_signature ?? selectedStock?.price_signature ?? 0 },
-                                                { key: 'prestige', label: 'Prestige', price: selectedOfferableService?.price_prestige ?? selectedStock?.price_prestige ?? 0 },
-                                                { key: 'royal', label: 'Royal', price: selectedOfferableService?.price_royal ?? selectedStock?.price_royal ?? 0 },
-                                                { key: 'imperial', label: 'Imperial', price: selectedOfferableService?.price_imperial ?? selectedStock?.price_imperial ?? 0 },
-                                            ].map((tier) => (
-                                                <button
-                                                    key={tier.key}
-                                                    type="button"
-                                                    onClick={() => handlePricingTierSelect(tier.key, Number(tier.price) || 0)}
-                                                    className={`p-4 rounded-lg border-2 text-left transition-all ${serviceTierKey === tier.key || formData.service_pricing_type === tier.key
-                                                        ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-                                                        : 'border-stroke hover:border-gray-300 dark:border-strokedark dark:hover:border-gray-600'
-                                                        }`}
-                                                >
-                                                    <div className="flex justify-between items-center mb-1">
-                                                        <span className={`font-bold ${serviceTierKey === tier.key ? 'text-primary' : 'text-black dark:text-white'}`}>{tier.label}</span>
-                                                        <span className={`text-lg font-bold ${serviceTierKey === tier.key ? 'text-primary' : 'text-black dark:text-white'}`}>₹{Number(tier.price).toLocaleString()}</span>
-                                                    </div>
-                                                    {serviceTierKey === tier.key && <div className="mt-2 flex items-center text-primary text-xs font-semibold"><CheckCircle2 size={14} className="mr-1" /> Selected</div>}
-                                                </button>
-                                            ))}
+                                        <label className={labelClass}>Pricing Tier (single add)</label>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                                            {CATALOG_TIER_DEFS.map((def) => {
+                                                const p = getOfferableTierPrice(tierPreviewService, def.key) ?? 0
+                                                return (
+                                                    <button
+                                                        key={def.key}
+                                                        type="button"
+                                                        onClick={() => handlePricingTierSelect(def.key, p)}
+                                                        className={`min-h-[3.5rem] rounded-lg border-2 px-2 py-1.5 text-left transition-all ${serviceTierKey === def.key || formData.service_pricing_type === def.key
+                                                            ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+                                                            : 'border-stroke hover:border-gray-300 dark:border-strokedark dark:hover:border-gray-600'
+                                                            }`}
+                                                    >
+                                                        <span className={`block text-[10px] font-semibold leading-tight break-words ${serviceTierKey === def.key ? 'text-primary' : 'text-black dark:text-white'}`}>
+                                                            {def.label}
+                                                        </span>
+                                                        <span className={`mt-0.5 block text-[10px] font-bold leading-tight break-all ${serviceTierKey === def.key ? 'text-primary' : 'text-gray-600 dark:text-gray-300'}`}>
+                                                            ₹{p.toLocaleString()}
+                                                        </span>
+                                                        {serviceTierKey === def.key && (
+                                                            <div className="mt-1 flex items-center gap-0.5 text-primary text-[9px] font-semibold">
+                                                                <CheckCircle2 size={10} className="shrink-0" /> OK
+                                                            </div>
+                                                        )}
+                                                    </button>
+                                                )
+                                            })}
                                         </div>
                                     </div>
                                 )}
@@ -568,7 +824,7 @@ export default function EditVendorPage() {
                                             </div>
                                         </div>
                                         <button type="button" onClick={handleAddServiceFromCatalog} disabled={addingServiceFromCatalog} className="px-4 py-2 rounded-lg bg-primary text-white font-semibold text-sm hover:bg-primary/90 disabled:opacity-50">
-                                            {addingServiceFromCatalog ? 'Adding...' : 'Add this service'}
+                                            {addingServiceFromCatalog ? 'Adding...' : 'Add this service (single)'}
                                         </button>
                                     </div>
                                 )}
@@ -593,6 +849,7 @@ export default function EditVendorPage() {
                                                 <div className="flex-1 min-w-0">
                                                     <p className="font-semibold text-black dark:text-white truncate">{svc.name}</p>
                                                     <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                        {svc.pricing_tier ? <span className="font-medium text-gray-600 dark:text-gray-300">{svc.pricing_tier} · </span> : null}
                                                         {(svc.price_amount != null || svc.base_price != null) && `₹${Number(svc.price_amount ?? svc.base_price).toLocaleString()}`}
                                                         {svc.price_unit && ` / ${svc.price_unit}`}
                                                     </p>

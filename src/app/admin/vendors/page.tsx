@@ -47,7 +47,8 @@ export default function VendorsPage() {
             v.business_name?.toLowerCase().includes(val.toLowerCase()) ||
             v.owner_name?.toLowerCase().includes(val.toLowerCase()) ||
             v.email?.toLowerCase().includes(val.toLowerCase()) ||
-            v.vendor_categories?.name?.toLowerCase().includes(val.toLowerCase())
+            v.vendor_categories?.name?.toLowerCase().includes(val.toLowerCase()) ||
+            v.category?.toLowerCase().includes(val.toLowerCase())
         )
         setFilteredVendors(filtered)
     }

@@ -30,3 +30,25 @@ export function budgetToInr(budget: string | number): number {
     if (!Number.isNaN(num)) return num * 100_000
     return 0
 }
+
+/** Slider range: ₹1 lakh to ₹2 crore (INR). */
+export const MIN_BUDGET_INR = 100_000
+export const MAX_BUDGET_INR = 20_000_000
+
+export function clampBudgetInr(inr: number): number {
+    if (!Number.isFinite(inr) || inr <= 0) return 0
+    return Math.min(MAX_BUDGET_INR, Math.max(MIN_BUDGET_INR, Math.round(inr)))
+}
+
+/** Short display label for cart / UI (e.g. ₹15.5 Lakhs). */
+export function formatBudgetInrLabel(inr: number): string {
+    if (!Number.isFinite(inr) || inr <= 0) return ''
+    const lakhs = inr / 100_000
+    if (lakhs >= 100) {
+        const cr = lakhs / 100
+        const s = cr >= 10 ? cr.toFixed(1) : cr.toFixed(2)
+        return `₹${s.replace(/\.?0+$/, '')} Cr`
+    }
+    const s = lakhs >= 10 ? lakhs.toFixed(1) : lakhs.toFixed(2)
+    return `₹${s.replace(/\.?0+$/, '')} Lakhs`
+}
