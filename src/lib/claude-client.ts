@@ -125,11 +125,11 @@ export function anthropicErrorToHttp(e: unknown): {
         if (!message) {
             message = e.message.replace(/^\d{3}\s+/, '').trim() || e.message || 'Anthropic API error'
         }
-        message = redactAnthropicModelEcho(message)
+        // Do not redact API error text: messages often mention model ids / "Anthropic" (billing, access).
         return {
             status: e.status,
             body: {
-                error: message || 'Anthropic API error',
+                error: message,
                 request_id: e.requestID ?? undefined,
             },
         }
@@ -138,5 +138,5 @@ export function anthropicErrorToHttp(e: unknown): {
     if (msg.includes('CLAUDE_API_KEY') || msg.includes('ANTHROPIC_API_KEY')) {
         return { status: 503, body: { error: msg } }
     }
-    return { status: 500, body: { error: redactAnthropicModelEcho(msg) || msg } }
+    return { status: 500, body: { error: msg } }
 }
