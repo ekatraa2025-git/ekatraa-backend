@@ -21,9 +21,21 @@ export async function PATCH(
     try {
         const { id } = await params
         const body = await req.json()
+        const row = {
+            display_name: body.display_name,
+            testimonial_text: body.testimonial_text ?? null,
+            video_url: body.video_url ?? null,
+            voice_recording_url: body.voice_recording_url ?? null,
+            image_url: body.image_url ?? null,
+            display_order: body.display_order ?? 0,
+            is_active: body.is_active !== false,
+        }
+        if (!row.display_name || typeof row.display_name !== 'string') {
+            return NextResponse.json({ error: 'display_name is required' }, { status: 400 })
+        }
         const { data, error } = await supabase
             .from('testimonials')
-            .update(body)
+            .update(row)
             .eq('id', id)
             .select()
             .single()
