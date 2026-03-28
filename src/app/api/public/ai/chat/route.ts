@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages'
 import {
+    anthropicErrorToHttp,
     extractAnthropicText,
     getAnthropicClient,
     getClaudeModel,
@@ -36,7 +37,7 @@ function clampHistory(history: unknown, maxItems: number): HistoryItem[] {
 /**
  * POST /api/public/ai/chat
  * Body: { message: string, history?: { role: 'user' | 'assistant', text: string }[] }
- * Requires CLAUDE_API_KEY.
+ * Requires CLAUDE_API_KEY or ANTHROPIC_API_KEY.
  */
 export async function POST(req: Request) {
     try {
@@ -84,10 +85,7 @@ export async function POST(req: Request) {
             ai_meta: { model, source: 'claude' },
         })
     } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Unknown error'
-        if (msg.includes('CLAUDE_API_KEY')) {
-            return NextResponse.json({ error: msg }, { status: 503 })
-        }
-        return NextResponse.json({ error: msg }, { status: 500 })
+        const { status, body } = anthropicErrorToHttp(e)
+        return NextResponse.json(body, { status })
     }
 }
