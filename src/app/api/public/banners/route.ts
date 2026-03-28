@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase/server'
+import { resolveStorageImageUrl } from '@/lib/resolve-storage-image-url'
 import { NextResponse } from 'next/server'
 
 export async function GET() {
@@ -19,5 +20,12 @@ export async function GET() {
             (!b.end_date || b.end_date >= now)
     )
 
-    return NextResponse.json(filtered)
+    const withImages = await Promise.all(
+        filtered.map(async (b: { image_url?: string | null; [k: string]: unknown }) => {
+            const image_url = await resolveStorageImageUrl(supabase, b.image_url ?? null)
+            return { ...b, image_url }
+        })
+    )
+
+    return NextResponse.json(withImages)
 }
