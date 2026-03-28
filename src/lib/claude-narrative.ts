@@ -1,9 +1,4 @@
-import {
-    extractPuterChatText,
-    getPuterAiModel,
-    getPuterClient,
-    withTimeout,
-} from '@/lib/puter-client'
+import { extractAnthropicText, getAnthropicClient, getClaudeModel, withTimeout } from '@/lib/claude-client'
 
 export type NarrativeAllocationLine = {
     category_id: string
@@ -39,8 +34,8 @@ export async function generateBudgetNarrative(input: {
     guest_band: string | null
     allocation_lines: NarrativeAllocationLine[]
 }): Promise<{ parsed: BudgetNarrativeResult; model: string; duration_ms: number }> {
-    const puter = getPuterClient()
-    const model = getPuterAiModel()
+    const client = getAnthropicClient()
+    const model = getClaudeModel()
 
     const rupee = (n: number) =>
         `₹${Math.round(n).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
@@ -61,20 +56,21 @@ ${allocText}
 
 Write the JSON object now.`
 
-    const prompt = `${SYSTEM_INSTRUCTION}\n\n---\n\n${userText}`
-
     const started = Date.now()
-    const raw = await withTimeout(
-        puter.ai.chat(prompt, {
+    const msg = await withTimeout(
+        client.messages.create({
             model,
+            max_tokens: 2048,
             temperature: 0.3,
+            system: SYSTEM_INSTRUCTION,
+            messages: [{ role: 'user', content: userText }],
         }),
         25_000,
         'Budget narrative'
     )
     const duration_ms = Date.now() - started
 
-    const text = extractPuterChatText(raw).trim()
+    const text = extractAnthropicText(msg).trim()
     if (!text) {
         throw new Error('AI returned no text content')
     }

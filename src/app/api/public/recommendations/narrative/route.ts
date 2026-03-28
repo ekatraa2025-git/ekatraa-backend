@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { generateBudgetNarrative, type NarrativeAllocationLine } from '@/lib/puter-narrative'
+import { generateBudgetNarrative, type NarrativeAllocationLine } from '@/lib/claude-narrative'
 
 /**
  * POST /api/public/recommendations/narrative
  * Body: { occasion_name, budget_inr, guest_band?, allocation_lines: [{ category_id, name, percentage, allocated_inr }] }
- * Requires PUTER_AUTH_TOKEN (Puter.js / Claude). No substitute copy is returned on failure.
+ * Requires CLAUDE_API_KEY. No substitute copy is returned on failure.
  */
 export async function POST(req: Request) {
     try {
@@ -51,11 +51,11 @@ export async function POST(req: Request) {
 
         return NextResponse.json({
             narrative: parsed,
-            ai_meta: { model, duration_ms, source: 'puter' },
+            ai_meta: { model, duration_ms, source: 'claude' },
         })
     } catch (e) {
         const msg = e instanceof Error ? e.message : 'Unknown error'
-        if (msg.includes('PUTER_AUTH_TOKEN')) {
+        if (msg.includes('CLAUDE_API_KEY')) {
             return NextResponse.json({ error: msg }, { status: 503 })
         }
         return NextResponse.json({ error: msg }, { status: 500 })

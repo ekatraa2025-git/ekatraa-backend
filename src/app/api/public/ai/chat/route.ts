@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
+import type { MessageParam } from '@anthropic-ai/sdk/resources/messages'
 import {
-    extractPuterChatText,
-    getPuterAiModel,
-    getPuterClient,
+    extractAnthropicText,
+    getAnthropicClient,
+    getClaudeModel,
     withTimeout,
-} from '@/lib/puter-client'
+} from '@/lib/claude-client'
 
 const CHAT_SYSTEM = `You are Ekatraa AI, a friendly assistant for people in India using the Ekatraa app to plan weddings, birthdays, funerals, and other gatherings.
 
@@ -35,7 +36,7 @@ function clampHistory(history: unknown, maxItems: number): HistoryItem[] {
 /**
  * POST /api/public/ai/chat
  * Body: { message: string, history?: { role: 'user' | 'assistant', text: string }[] }
- * Requires PUTER_AUTH_TOKEN (see https://docs.puter.com/getting-started/ Node.js section).
+ * Requires CLAUDE_API_KEY.
  */
 export async function POST(req: Request) {
     try {
@@ -49,38 +50,42 @@ export async function POST(req: Request) {
         }
 
         const history = clampHistory(body.history, 24)
-        const puter = getPuterClient()
-        const model = getPuterAiModel()
+        const client = getAnthropicClient()
+        const model = getClaudeModel()
 
-        const apiMessages: Array<{ role: string; content: string }> = [
-            { role: 'system', content: CHAT_SYSTEM },
-        ]
+        const messages: MessageParam[] = []
         for (const h of history) {
-            apiMessages.push({ role: h.role, content: h.text })
+            messages.push({
+                role: h.role as 'user' | 'assistant',
+                content: h.text,
+            })
         }
-        apiMessages.push({ role: 'user', content: message })
+        messages.push({ role: 'user', content: message })
 
         const raw = await withTimeout(
-            puter.ai.chat(apiMessages, {
+            client.messages.create({
                 model,
+                max_tokens: 4096,
                 temperature: 0.6,
+                system: CHAT_SYSTEM,
+                messages,
             }),
             45_000,
             'Chat'
         )
 
-        const reply = extractPuterChatText(raw).trim()
+        const reply = extractAnthropicText(raw).trim()
         if (!reply) {
             return NextResponse.json({ error: 'AI returned an empty reply' }, { status: 502 })
         }
 
         return NextResponse.json({
             reply: reply.slice(0, 12_000),
-            ai_meta: { model, source: 'puter' },
+            ai_meta: { model, source: 'claude' },
         })
     } catch (e) {
         const msg = e instanceof Error ? e.message : 'Unknown error'
-        if (msg.includes('PUTER_AUTH_TOKEN')) {
+        if (msg.includes('CLAUDE_API_KEY')) {
             return NextResponse.json({ error: msg }, { status: 503 })
         }
         return NextResponse.json({ error: msg }, { status: 500 })
