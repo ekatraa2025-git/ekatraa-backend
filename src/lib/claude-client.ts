@@ -33,6 +33,31 @@ export function extractAnthropicText(message: Anthropic.Messages.Message): strin
         .join('')
 }
 
+/** Drop lines that only echo the model id (assistant sometimes prints `model: claude-...`). */
+export function stripModelEchoLines(s: string): string {
+    return s
+        .split('\n')
+        .filter((line) => {
+            const t = line.trim()
+            if (t === '') return true
+            if (/^model\s*:\s*claude/i.test(t)) return false
+            if (/^assistant\s*model\s*:/i.test(t)) return false
+            if (/^claude[-a-z0-9.]+$/i.test(t) && t.length < 90) return false
+            return true
+        })
+        .join('\n')
+        .trim()
+}
+
+/** Clean assistant reply before sending to clients. */
+export function sanitizeAssistantReplyText(s: string): string {
+    let out = stripModelEchoLines(s)
+    if (/^model\s*:\s*claude/i.test(out) && out.length < 120) {
+        out = ''
+    }
+    return out.trim()
+}
+
 export function withTimeout<T>(promise: Promise<T>, ms: number, label = 'Request'): Promise<T> {
     return new Promise((resolve, reject) => {
         const t = setTimeout(() => reject(new Error(`${label} timed out`)), ms)
@@ -65,6 +90,10 @@ export function anthropicErrorToHttp(e: unknown): {
                 if (inner && typeof inner.message === 'string') {
                     message = inner.message
                 }
+            }
+            if (!message && typeof (er as { model?: unknown }).model === 'string') {
+                message =
+                    'Anthropic API declined the request. Confirm billing, model access, and your API key in the Anthropic Console.'
             }
         }
         if (!message) {

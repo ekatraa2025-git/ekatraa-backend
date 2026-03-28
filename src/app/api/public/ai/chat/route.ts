@@ -5,6 +5,7 @@ import {
     extractAnthropicText,
     getAnthropicClient,
     getClaudeModel,
+    sanitizeAssistantReplyText,
     withTimeout,
 } from '@/lib/claude-client'
 
@@ -76,14 +77,14 @@ export async function POST(req: Request) {
             'Chat'
         )
 
-        const reply = extractAnthropicText(raw).trim()
+        const reply = sanitizeAssistantReplyText(extractAnthropicText(raw))
         if (!reply) {
             return NextResponse.json({ error: 'AI returned an empty reply' }, { status: 502 })
         }
 
         return NextResponse.json({
             reply: reply.slice(0, 12_000),
-            ai_meta: { model, source: 'claude' },
+            ai_meta: { source: 'claude' },
         })
     } catch (e) {
         const { status, body } = anthropicErrorToHttp(e)

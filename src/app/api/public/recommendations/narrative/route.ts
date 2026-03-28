@@ -52,7 +52,7 @@ export async function POST(req: Request) {
 
         return NextResponse.json({
             narrative: parsed,
-            ai_meta: { model, duration_ms, source: 'claude' },
+            ai_meta: { duration_ms, source: 'claude' },
         })
     } catch (e) {
         const { status, body } = anthropicErrorToHttp(e)

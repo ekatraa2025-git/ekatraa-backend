@@ -1,4 +1,10 @@
-import { extractAnthropicText, getAnthropicClient, getClaudeModel, withTimeout } from '@/lib/claude-client'
+import {
+    extractAnthropicText,
+    getAnthropicClient,
+    getClaudeModel,
+    stripModelEchoLines,
+    withTimeout,
+} from '@/lib/claude-client'
 
 export type NarrativeAllocationLine = {
     category_id: string
@@ -27,7 +33,8 @@ How to write:
 Hard rules:
 - Use only the occasion name, guest note, total budget, and the spending areas and rupee amounts we list. Do not invent vendors, packages, discounts, or new numbers.
 - Keep sentences short. No bullet points inside the intro string.
-- Do not mention AI models, "Claude", Anthropic, or your model name anywhere in the JSON strings.`
+- Do not mention AI models, "Claude", Anthropic, or your model name anywhere in the JSON strings.
+- Do not add any extra top-level JSON keys (only intro, tips, planning_reminders, disclaimer).`
 
 export async function generateBudgetNarrative(input: {
     occasion_name: string
@@ -71,7 +78,12 @@ Write the JSON object now.`
     )
     const duration_ms = Date.now() - started
 
-    const text = extractAnthropicText(msg).trim()
+    let text = stripModelEchoLines(extractAnthropicText(msg)).trim()
+    const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+    if (fence) text = fence[1].trim()
+    const brace = text.indexOf('{')
+    if (brace > 0) text = text.slice(brace)
+    text = text.trim()
     if (!text) {
         throw new Error('AI returned no text content')
     }
@@ -84,12 +96,24 @@ Write the JSON object now.`
     }
 
     const p = parsedRaw as Record<string, unknown>
-    const intro = typeof p.intro === 'string' ? p.intro : ''
-    const tips = Array.isArray(p.tips) ? p.tips.filter((x): x is string => typeof x === 'string') : []
-    const planning_reminders = Array.isArray(p.planning_reminders)
-        ? p.planning_reminders.filter((x): x is string => typeof x === 'string')
+    delete p.model
+    delete p.Model
+    delete p.anthropic_model
+    delete p['model_id']
+    const intro = typeof p.intro === 'string' ? stripModelEchoLines(p.intro).trim() : ''
+    const tips = Array.isArray(p.tips)
+        ? p.tips
+              .filter((x): x is string => typeof x === 'string')
+              .map((x) => stripModelEchoLines(x).trim())
+              .filter(Boolean)
         : []
-    const disclaimer = typeof p.disclaimer === 'string' ? p.disclaimer : ''
+    const planning_reminders = Array.isArray(p.planning_reminders)
+        ? p.planning_reminders
+              .filter((x): x is string => typeof x === 'string')
+              .map((x) => stripModelEchoLines(x).trim())
+              .filter(Boolean)
+        : []
+    const disclaimer = typeof p.disclaimer === 'string' ? stripModelEchoLines(p.disclaimer).trim() : ''
 
     if (!intro.trim() || tips.length === 0 || !disclaimer.trim()) {
         throw new Error('AI JSON missing required fields')
