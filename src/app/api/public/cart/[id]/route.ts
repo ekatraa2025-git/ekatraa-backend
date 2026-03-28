@@ -16,7 +16,12 @@ export async function GET(
 
     const [{ data: cart, error: cartError }, { data: items, error: itemsError }] = await Promise.all([
         supabase.from('carts').select('*').eq('id', id).single(),
-        supabase.from('cart_items').select('id, service_id, quantity, unit_price, options, created_at, offerable_services(id, name, image_url, price_min, price_max)').eq('cart_id', id),
+        supabase
+            .from('cart_items')
+            .select(
+                'id, service_id, quantity, unit_price, options, created_at, offerable_services(id, name, image_url, price_min, price_max, category_id, categories(id, name))'
+            )
+            .eq('cart_id', id),
     ])
 
     if (cartError || !cart) {
@@ -26,11 +31,24 @@ export async function GET(
         return NextResponse.json({ ...cart, items: [] })
     }
 
-    const itemsWithService = (items ?? []).map((item: { offerable_services: unknown }) => ({
-        ...item,
-        service: item.offerable_services,
-        offerable_services: undefined,
-    }))
+    const itemsWithService = (items ?? []).map((item: Record<string, unknown>) => {
+        const raw = item.offerable_services as Record<string, unknown> | null | undefined
+        const os = Array.isArray(raw) ? (raw[0] as Record<string, unknown> | undefined) : raw
+        let service: Record<string, unknown> | undefined
+        if (os && typeof os === 'object') {
+            const catRaw = os.categories as { id?: string; name?: string } | { id?: string; name?: string }[] | null | undefined
+            const cat = Array.isArray(catRaw) ? catRaw[0] : catRaw
+            const category =
+                cat && typeof cat === 'object' ? { id: cat.id, name: cat.name } : undefined
+            const { categories: _c, ...rest } = os
+            service = { ...rest, category }
+        }
+        return {
+            ...item,
+            service,
+            offerable_services: undefined,
+        }
+    })
 
     return NextResponse.json({ ...cart, items: itemsWithService })
 }

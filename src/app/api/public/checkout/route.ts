@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { fetchPlatformProtectionSettings, computeProtectionAmountInr } from '@/lib/booking-protection'
 
 /**
  * POST /api/public/checkout
@@ -9,7 +10,8 @@ import { NextResponse } from 'next/server'
 export async function POST(req: Request) {
     try {
         const body = await req.json()
-        const { cart_id, user_id } = body
+        const { cart_id, user_id, booking_protection } = body
+        const wantProtection = booking_protection === true
 
         if (!cart_id) {
             return NextResponse.json({ error: 'cart_id is required' }, { status: 400 })
@@ -51,6 +53,9 @@ export async function POST(req: Request) {
             0
         )
 
+        const settings = await fetchPlatformProtectionSettings()
+        const protectionAmount = computeProtectionAmountInr(totalAmount, settings, wantProtection)
+
         const { data: order, error: orderError } = await supabase
             .from('orders')
             .insert([
@@ -68,6 +73,8 @@ export async function POST(req: Request) {
                     contact_email: cart.contact_email,
                     total_amount: totalAmount,
                     advance_amount: 0,
+                    booking_protection: wantProtection,
+                    protection_amount: protectionAmount,
                     status: 'pending',
                 },
             ])

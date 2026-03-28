@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import BookingProtectionSettings from './BookingProtectionSettings'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import { User, Bell, Shield, Globe, Save, Lock } from 'lucide-react'
 import {
@@ -25,6 +26,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-8">
+                    <BookingProtectionSettings />
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">

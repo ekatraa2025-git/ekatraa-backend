@@ -1,6 +1,11 @@
 import crypto from 'crypto'
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import {
+    fetchPlatformProtectionSettings,
+    computeProtectionAmountInr,
+    computeAdvanceInrFromBase,
+} from '@/lib/booking-protection'
 
 const ADVANCE_PERCENT = 20
 
@@ -16,7 +21,8 @@ export async function POST(req: Request) {
         }
 
         const body = await req.json()
-        const { razorpay_payment_id, razorpay_order_id, razorpay_signature, cart_id, user_id } = body
+        const { razorpay_payment_id, razorpay_order_id, razorpay_signature, cart_id, user_id, booking_protection } = body
+        const wantProtection = booking_protection === true
 
         if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature || !cart_id) {
             return NextResponse.json({ error: 'Missing payment or cart details' }, { status: 400 })
@@ -61,7 +67,9 @@ export async function POST(req: Request) {
             0
         )
 
-        const advanceAmount = Math.round((totalAmount * ADVANCE_PERCENT) / 100)
+        const settings = await fetchPlatformProtectionSettings()
+        const protectionAmount = computeProtectionAmountInr(totalAmount, settings, wantProtection)
+        const advanceAmount = computeAdvanceInrFromBase(totalAmount, protectionAmount, ADVANCE_PERCENT)
 
         const { data: order, error: orderError } = await supabase
             .from('orders')
@@ -69,6 +77,7 @@ export async function POST(req: Request) {
                 {
                     user_id: orderUser,
                     event_name: cart.event_name,
+                    event_role: cart.event_role ?? null,
                     event_date: cart.event_date,
                     guest_count: cart.guest_count,
                     location_preference: cart.location_preference,
@@ -79,6 +88,8 @@ export async function POST(req: Request) {
                     contact_email: cart.contact_email,
                     total_amount: totalAmount,
                     advance_amount: advanceAmount,
+                    booking_protection: wantProtection,
+                    protection_amount: protectionAmount,
                     advance_paid_at: new Date().toISOString(),
                     razorpay_payment_id: razorpay_payment_id,
                     razorpay_order_id: razorpay_order_id,
