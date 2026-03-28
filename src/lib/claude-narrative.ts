@@ -1,3 +1,4 @@
+import { getAiAppCatalogContext } from '@/lib/ai-app-context'
 import {
     extractAnthropicText,
     getAnthropicClient,
@@ -41,9 +42,16 @@ export async function generateBudgetNarrative(input: {
     budget_inr: number
     guest_band: string | null
     allocation_lines: NarrativeAllocationLine[]
+    city?: string | null
+    occasion_id?: string | null
 }): Promise<{ parsed: BudgetNarrativeResult; model: string; duration_ms: number }> {
     const client = getAnthropicClient()
     const model = getClaudeModel()
+    const catalog = await getAiAppCatalogContext({
+        city: input.city ?? null,
+        occasion_id: input.occasion_id ?? null,
+    })
+    const systemInstruction = `${SYSTEM_INSTRUCTION}\n\n${catalog}\n\nYou may briefly mention browsing related services in the Ekatraa app when it fits the tone, using catalog names only.`
 
     const rupee = (n: number) =>
         `₹${Math.round(n).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
@@ -70,7 +78,7 @@ Write the JSON object now.`
             model,
             max_tokens: 2048,
             temperature: 0.3,
-            system: SYSTEM_INSTRUCTION,
+            system: systemInstruction,
             messages: [{ role: 'user', content: userText }],
         }),
         25_000,

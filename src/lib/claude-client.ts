@@ -27,13 +27,37 @@ export function getAnthropicClient(): Anthropic {
 }
 
 export function extractAnthropicText(message: Anthropic.Messages.Message): string {
-    // Join with newline: Anthropic often sends multiple text blocks (e.g. echo + answer) with no separator;
-    // joining with '' merges into one line and breaks line-based stripping.
-    return message.content
-        .filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
-        .map((b) => (typeof b.text === 'string' ? b.text : ''))
-        .filter(Boolean)
-        .join('\n')
+    const parts: string[] = []
+    for (const b of message.content) {
+        if (b.type === 'text') {
+            const tb = b as Anthropic.Messages.TextBlock
+            if (typeof tb.text === 'string' && tb.text) parts.push(tb.text)
+        }
+    }
+    // Join with newline: multiple text blocks stay readable and line-based echo stripping works.
+    return parts.join('\n')
+}
+
+function isAssistantModelEchoLine(line: string): boolean {
+    const x = line.trim()
+    if (!x) return true
+    if (/^model\s*[:：]\s*claude[-\w.]*/i.test(x)) return true
+    if (/^model\s*[:：]\s*$/i.test(x)) return true
+    if (/^claude[-a-z0-9.]+$/i.test(x) && x.length < 96) return true
+    if (/^assistant\s*model\s*[:：]\s*\S+$/i.test(x)) return true
+    return false
+}
+
+/** Remove only leading/trailing junk lines (model echo). Does not rewrite words inside real sentences. */
+export function stripLeadingTrailingModelEchoLines(s: string): string {
+    const lines = s.split('\n')
+    while (lines.length && isAssistantModelEchoLine(lines[0])) {
+        lines.shift()
+    }
+    while (lines.length && isAssistantModelEchoLine(lines[lines.length - 1])) {
+        lines.pop()
+    }
+    return lines.join('\n').trim()
 }
 
 /** Remove model-id echoes anywhere in the string (lines or inline / concatenated blocks). */
@@ -77,11 +101,15 @@ export function stripModelEchoLines(s: string): string {
     return redactAnthropicModelEcho(s)
 }
 
-/** Clean assistant reply before sending to clients. */
+/** Clean assistant reply before sending to clients (gentle: avoid stripping real content). */
 export function sanitizeAssistantReplyText(s: string): string {
-    const out = redactAnthropicModelEcho(s.trim())
-    if (!out || /^model\s*[:：]\s*$/i.test(out)) return ''
-    return out
+    const raw = typeof s === 'string' ? s.trim() : ''
+    if (!raw) return ''
+    const gentle = stripLeadingTrailingModelEchoLines(raw)
+    if (gentle.length > 0) return gentle
+    // Single-line glue like "model: claude-…Hello" without a newline
+    const deGlued = raw.replace(/^\s*model\s*[:：]\s*claude[-\w.]*/i, '').trim()
+    return deGlued || raw
 }
 
 export function withTimeout<T>(promise: Promise<T>, ms: number, label = 'Request'): Promise<T> {

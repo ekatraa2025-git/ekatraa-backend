@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages'
+import { getAiAppCatalogContext } from '@/lib/ai-app-context'
 import {
     anthropicErrorToHttp,
     extractAnthropicText,
@@ -9,13 +10,13 @@ import {
     withTimeout,
 } from '@/lib/claude-client'
 
-const CHAT_SYSTEM = `You are Ekatraa AI, a friendly assistant for people in India using the Ekatraa app to plan weddings, birthdays, funerals, and other gatherings.
+const CHAT_SYSTEM_BASE = `You are Ekatraa AI, a friendly assistant for people in India using the Ekatraa app to plan weddings, birthdays, funerals, and other gatherings.
 
 Guidelines:
 - Keep replies concise (a few short paragraphs at most unless the user asks for detail).
-- Be warm and practical. Mention that real vendors, prices, and availability are in the Ekatraa app.
-- Do not invent specific venue or vendor names, exact prices, or guarantees.
-- If the user needs bookings or listings, suggest they browse services in the app for their city.
+- Be warm and practical. Ground suggestions in the Ekatraa catalog we append below: mention real occasion types, category areas, and service areas that appear there when it helps the user.
+- Encourage browsing Services in the app for their city for live packages and prices. Do not invent specific venue or vendor brand names, exact prices, or guarantees.
+- When suggesting "what to look at next", name 2–4 concrete areas from the catalog (occasions, categories, or service types) instead of generic filler.
 - Answer directly about their event. Do not name your underlying model (e.g. "Claude Sonnet") or say you are an Anthropic product unless the user explicitly asks.
 
 You are not a lawyer or doctor; do not give legal or medical advice.`
@@ -38,7 +39,7 @@ function clampHistory(history: unknown, maxItems: number): HistoryItem[] {
 
 /**
  * POST /api/public/ai/chat
- * Body: { message: string, history?: { role: 'user' | 'assistant', text: string }[] }
+ * Body: { message: string, history?: { role: 'user' | 'assistant', text: string }[], city?: string, occasion_id?: string, occasion_name?: string, planned_budget_inr?: number }
  * Requires CLAUDE_API_KEY or ANTHROPIC_API_KEY.
  */
 export async function POST(req: Request) {
@@ -56,6 +57,22 @@ export async function POST(req: Request) {
         const client = getAnthropicClient()
         const model = getClaudeModel()
 
+        const city = typeof body.city === 'string' ? body.city.trim() : ''
+        const occasion_id = typeof body.occasion_id === 'string' ? body.occasion_id.trim() : ''
+        const occasion_name = typeof body.occasion_name === 'string' ? body.occasion_name.trim() : ''
+        const planned_budget_inr = Number(body.planned_budget_inr)
+        const budgetHint =
+            Number.isFinite(planned_budget_inr) && planned_budget_inr > 0
+                ? `\nUser context from the app: planned total budget about ₹${Math.round(planned_budget_inr).toLocaleString('en-IN')} (rough planning figure).`
+                : ''
+
+        const catalog = await getAiAppCatalogContext({ city: city || null, occasion_id: occasion_id || null })
+        const occasionHint =
+            occasion_name
+                ? `\nThey are currently focused on the "${occasion_name}" occasion in the app.`
+                : ''
+        const system = `${CHAT_SYSTEM_BASE}\n\n${catalog}${occasionHint}${budgetHint}`
+
         const messages: MessageParam[] = []
         for (const h of history) {
             messages.push({
@@ -70,7 +87,7 @@ export async function POST(req: Request) {
                 model,
                 max_tokens: 4096,
                 temperature: 0.6,
-                system: CHAT_SYSTEM,
+                system,
                 messages,
             }),
             45_000,

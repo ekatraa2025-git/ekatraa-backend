@@ -4,7 +4,7 @@ import { generateBudgetNarrative, type NarrativeAllocationLine } from '@/lib/cla
 
 /**
  * POST /api/public/recommendations/narrative
- * Body: { occasion_name, budget_inr, guest_band?, allocation_lines: [{ category_id, name, percentage, allocated_inr }] }
+ * Body: { occasion_name, budget_inr, guest_band?, city?, occasion_id?, allocation_lines: [{ category_id, name, percentage, allocated_inr }] }
  * Requires CLAUDE_API_KEY or ANTHROPIC_API_KEY. No substitute copy is returned on failure.
  */
 export async function POST(req: Request) {
@@ -14,6 +14,9 @@ export async function POST(req: Request) {
         const budget_inr = Number(body.budget_inr)
         const guest_band =
             typeof body.guest_band === 'string' && body.guest_band.trim() ? body.guest_band.trim() : null
+        const city = typeof body.city === 'string' && body.city.trim() ? body.city.trim() : null
+        const occasion_id =
+            typeof body.occasion_id === 'string' && body.occasion_id.trim() ? body.occasion_id.trim() : null
         const lines = body.allocation_lines
 
         if (!occasion_name) {
@@ -43,11 +46,13 @@ export async function POST(req: Request) {
             allocation_lines.push({ category_id, name, percentage, allocated_inr })
         }
 
-        const { parsed, model, duration_ms } = await generateBudgetNarrative({
+        const { parsed, duration_ms } = await generateBudgetNarrative({
             occasion_name,
             budget_inr,
             guest_band,
             allocation_lines,
+            city,
+            occasion_id,
         })
 
         return NextResponse.json({
