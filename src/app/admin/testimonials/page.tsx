@@ -73,12 +73,7 @@ export default function TestimonialsAdminPage() {
             key: 'image_url',
             render: (val: string) =>
                 val ? (
-                    <AdminImage
-                        url={val}
-                        alt=""
-                        className="h-10 w-10 rounded-full object-cover border border-border"
-                        placeholderClassName="h-10 w-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground text-xs"
-                    />
+                    <AdminImage url={val} alt="" className="h-10 w-10 rounded-full object-cover" />
                 ) : (
                     <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
                         <ImageIcon className="h-5 w-5 text-muted-foreground" />

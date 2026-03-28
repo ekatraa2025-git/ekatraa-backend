@@ -1,11 +1,11 @@
 import { supabase } from '@/lib/supabase/server'
-import { resolveStorageImageUrl } from '@/lib/resolve-storage-image-url'
+import { signedUrlForStorageRef } from '@/lib/storage-display-url'
 import { NextResponse } from 'next/server'
 
 /**
  * GET /api/public/testimonials
  * Active testimonials for the home screen (name, text, video, voice, image).
- * image_url is returned as a signed HTTP URL (DB stores bucket paths like testimonials/…).
+ * image_url is returned as a short-lived signed URL when stored as a bucket path.
  */
 export async function GET() {
     try {
@@ -22,14 +22,14 @@ export async function GET() {
         }
 
         const rows = data ?? []
-        const withImages = await Promise.all(
+        const enriched = await Promise.all(
             rows.map(async (row: { image_url?: string | null; [k: string]: unknown }) => {
-                const image_url = await resolveStorageImageUrl(supabase, row.image_url ?? null)
-                return { ...row, image_url }
+                const signed = await signedUrlForStorageRef(row.image_url ?? null)
+                return { ...row, image_url: signed ?? row.image_url ?? null }
             })
         )
 
-        return NextResponse.json(withImages)
+        return NextResponse.json(enriched)
     } catch (e) {
         return NextResponse.json({ error: (e as Error).message }, { status: 500 })
     }
