@@ -1,5 +1,30 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getEndUserIdFromRequest } from '@/lib/user-auth'
+
+/**
+ * GET /api/public/budget-recommendation-snapshots?limit=
+ * Lists snapshots saved for the signed-in user (summary fields; use /:id for full payload + AI).
+ */
+export async function GET(req: Request) {
+    const { userId, error: authErr } = await getEndUserIdFromRequest(req)
+    if (authErr) return authErr
+
+    const { searchParams } = new URL(req.url)
+    const limit = Math.min(50, Math.max(1, Number(searchParams.get('limit')) || 30))
+
+    const { data, error } = await supabase
+        .from('budget_recommendation_snapshots')
+        .select('id, created_at, occasion_id, budget_inr, contact_name, contact_mobile, form_snapshot')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(limit)
+
+    if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    return NextResponse.json(data ?? [])
+}
 
 /**
  * POST /api/public/budget-recommendation-snapshots

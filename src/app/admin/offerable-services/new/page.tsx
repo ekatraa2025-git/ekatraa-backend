@@ -26,6 +26,7 @@ type Category = { id: string; name: string }
 
 export default function NewOfferableServicePage() {
     const router = useRouter()
+    const [specialCatalog, setSpecialCatalog] = useState(false)
     const [loading, setLoading] = useState(false)
     const [occasions, setOccasions] = useState<Occasion[]>([])
     const [categories, setCategories] = useState<Category[]>([])
@@ -49,13 +50,23 @@ export default function NewOfferableServicePage() {
         qty_label_royal: '' as string,
         qty_label_imperial: '' as string,
         is_active: true,
+        is_special_catalog: false,
     })
 
     useEffect(() => {
+        const sp =
+            typeof window !== 'undefined' &&
+            new URLSearchParams(window.location.search).get('special_catalog') === '1'
+        setSpecialCatalog(!!sp)
         fetch('/api/admin/occasions')
             .then((r) => r.json())
             .then((data) => {
-                if (Array.isArray(data)) setOccasions(data)
+                if (Array.isArray(data)) {
+                    setOccasions(data)
+                    if (sp && data.length > 0) {
+                        setForm((p) => ({ ...p, occasion_id: data[0].id, is_special_catalog: true }))
+                    }
+                }
             })
             .catch(() => {})
     }, [])
@@ -69,12 +80,20 @@ export default function NewOfferableServicePage() {
         fetch(`/api/public/categories?occasion_id=${encodeURIComponent(form.occasion_id)}`)
             .then((r) => r.json())
             .then((data) => {
-                if (Array.isArray(data)) setCategories(data)
-                else setCategories([])
+                if (Array.isArray(data)) {
+                    setCategories(data)
+                    if (specialCatalog && data.some((c: { id: string }) => c.id === 'special-catalog')) {
+                        setForm((p) => ({
+                            ...p,
+                            category_id: 'special-catalog',
+                            is_special_catalog: true,
+                        }))
+                    }
+                } else setCategories([])
             })
             .catch(() => setCategories([]))
-        setForm((p) => ({ ...p, category_id: '' }))
-    }, [form.occasion_id])
+        if (!specialCatalog) setForm((p) => ({ ...p, category_id: '' }))
+    }, [form.occasion_id, specialCatalog])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -98,6 +117,7 @@ export default function NewOfferableServicePage() {
             display_order: form.display_order,
             image_url: form.image_url || null,
             is_active: form.is_active,
+            is_special_catalog: form.is_special_catalog === true,
             price_min,
             price_max,
             qty_label_basic: form.qty_label_basic || null,
@@ -116,14 +136,14 @@ export default function NewOfferableServicePage() {
         const data = await res.json()
         setLoading(false)
         if (data.error) toast.error(data.error)
-        else router.push('/admin/offerable-services')
+        else router.push(specialCatalog ? '/admin/special-services' : '/admin/offerable-services')
     }
 
     return (
         <DefaultLayout>
             <Card>
                 <CardHeader>
-                    <CardTitle>Add Service</CardTitle>
+                    <CardTitle>{specialCatalog ? 'Add special catalog service' : 'Add Service'}</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
@@ -268,6 +288,20 @@ export default function NewOfferableServicePage() {
                                     }))
                                 }
                             />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                id="is_special_catalog"
+                                checked={form.is_special_catalog}
+                                onChange={(e) =>
+                                    setForm((p) => ({
+                                        ...p,
+                                        is_special_catalog: e.target.checked,
+                                    }))
+                                }
+                            />
+                            <label htmlFor="is_special_catalog">Special catalog (all occasions)</label>
                         </div>
                         <div className="flex items-center gap-2">
                             <input

@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server'
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const categoryId = searchParams.get('category_id')
+    const specialCatalog = searchParams.get('special_catalog')
 
     let query = supabase
         .from('offerable_services')
@@ -14,6 +15,9 @@ export async function GET(req: Request) {
         .order('display_order', { ascending: true })
 
     if (categoryId) query = query.eq('category_id', categoryId)
+    if (specialCatalog === '1' || specialCatalog === 'true') {
+        query = query.eq('is_special_catalog', true)
+    }
 
     const { data, error } = await query
 

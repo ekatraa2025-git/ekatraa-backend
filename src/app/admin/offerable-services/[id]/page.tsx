@@ -53,6 +53,7 @@ export default function EditOfferableServicePage() {
         qty_label_royal: '' as string,
         qty_label_imperial: '' as string,
         is_active: true,
+        is_special_catalog: false,
     })
     const categories = form.occasion_id
         ? categoriesByOccasion[form.occasion_id] ?? []
@@ -111,6 +112,7 @@ export default function EditOfferableServicePage() {
                         qty_label_royal: (svc.qty_label_royal as string) ?? '',
                         qty_label_imperial: (svc.qty_label_imperial as string) ?? '',
                         is_active: svc.is_active !== false,
+                        is_special_catalog: svc.is_special_catalog === true,
                     })
                     return
                 }
@@ -149,6 +151,7 @@ export default function EditOfferableServicePage() {
                             qty_label_royal: (svc.qty_label_royal as string) ?? '',
                             qty_label_imperial: (svc.qty_label_imperial as string) ?? '',
                             is_active: svc.is_active !== false,
+                            is_special_catalog: svc.is_special_catalog === true,
                         })
                         if (occasionId) {
                             fetch(
@@ -194,6 +197,7 @@ export default function EditOfferableServicePage() {
             display_order: form.display_order,
             image_url: form.image_url || null,
             is_active: form.is_active,
+            is_special_catalog: form.is_special_catalog === true,
             price_min,
             price_max,
             qty_label_basic: form.qty_label_basic || null,
@@ -212,7 +216,7 @@ export default function EditOfferableServicePage() {
         const data = await res.json()
         setLoading(false)
         if (data.error) toast.error(data.error)
-        else router.push('/admin/offerable-services')
+        else router.push(form.is_special_catalog ? '/admin/special-services' : '/admin/offerable-services')
     }
 
     return (
@@ -378,6 +382,20 @@ export default function EditOfferableServicePage() {
                                     }))
                                 }
                             />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                id="is_special_catalog_edit"
+                                checked={form.is_special_catalog}
+                                onChange={(e) =>
+                                    setForm((p) => ({
+                                        ...p,
+                                        is_special_catalog: e.target.checked,
+                                    }))
+                                }
+                            />
+                            <label htmlFor="is_special_catalog_edit">Special catalog (all occasions)</label>
                         </div>
                         <div className="flex items-center gap-2">
                             <input
