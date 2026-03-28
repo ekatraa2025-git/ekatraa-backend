@@ -60,7 +60,7 @@ export default function BudgetRecommendationSnapshotsPage() {
             <div className="mx-auto max-w-7xl p-4 md:p-8">
                 <h1 className="text-2xl font-bold tracking-tight mb-2">Budget &amp; recommendation snapshots</h1>
                 <p className="text-muted-foreground text-sm mb-6">
-                    Customer-submitted event forms, budgets, recommendation results, and optional Gemini narrative.
+                    Customer-submitted event forms, budgets, recommendation results, and optional AI narrative.
                 </p>
 
                 <div className="flex flex-col sm:flex-row gap-3 mb-6">

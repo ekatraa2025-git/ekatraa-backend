@@ -1,3 +1,10 @@
+import {
+    extractPuterChatText,
+    getPuterAiModel,
+    getPuterClient,
+    withTimeout,
+} from '@/lib/puter-client'
+
 export type NarrativeAllocationLine = {
     category_id: string
     name: string
@@ -5,7 +12,7 @@ export type NarrativeAllocationLine = {
     allocated_inr: number
 }
 
-export type GeminiNarrativeResult = {
+export type BudgetNarrativeResult = {
     intro: string
     tips: string[]
     planning_reminders: string[]
@@ -31,18 +38,9 @@ export async function generateBudgetNarrative(input: {
     budget_inr: number
     guest_band: string | null
     allocation_lines: NarrativeAllocationLine[]
-}): Promise<{ parsed: GeminiNarrativeResult; model: string; duration_ms: number }> {
-    const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey || !apiKey.trim()) {
-        throw new Error('GEMINI_API_KEY is not configured')
-    }
-
-    const model = (process.env.GEMINI_MODEL || 'gemini-2.0-flash').trim()
-    const base = (process.env.GEMINI_API_BASE_URL || 'https://generativelanguage.googleapis.com').replace(
-        /\/$/,
-        ''
-    )
-    const url = `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`
+}): Promise<{ parsed: BudgetNarrativeResult; model: string; duration_ms: number }> {
+    const puter = getPuterClient()
+    const model = getPuterAiModel()
 
     const rupee = (n: number) =>
         `₹${Math.round(n).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
@@ -63,43 +61,29 @@ ${allocText}
 
 Write the JSON object now.`
 
-    const started = Date.now()
-    const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            systemInstruction: {
-                parts: [{ text: SYSTEM_INSTRUCTION }],
-            },
-            contents: [{ role: 'user', parts: [{ text: userText }] }],
-            generationConfig: {
-                temperature: 0.3,
-                responseMimeType: 'application/json',
-            },
-        }),
-        signal: AbortSignal.timeout(25_000),
-    })
+    const prompt = `${SYSTEM_INSTRUCTION}\n\n---\n\n${userText}`
 
+    const started = Date.now()
+    const raw = await withTimeout(
+        puter.ai.chat(prompt, {
+            model,
+            temperature: 0.3,
+        }),
+        25_000,
+        'Budget narrative'
+    )
     const duration_ms = Date.now() - started
 
-    if (!res.ok) {
-        const errText = await res.text().catch(() => res.statusText)
-        throw new Error(`Gemini API error ${res.status}: ${errText.slice(0, 500)}`)
-    }
-
-    const json = (await res.json()) as {
-        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
-    }
-    const text = json.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!text || typeof text !== 'string') {
-        throw new Error('Gemini returned no text content')
+    const text = extractPuterChatText(raw).trim()
+    if (!text) {
+        throw new Error('AI returned no text content')
     }
 
     let parsedRaw: unknown
     try {
         parsedRaw = JSON.parse(text) as unknown
     } catch {
-        throw new Error('Gemini returned non-JSON text')
+        throw new Error('AI returned non-JSON text')
     }
 
     const p = parsedRaw as Record<string, unknown>
@@ -111,7 +95,7 @@ Write the JSON object now.`
     const disclaimer = typeof p.disclaimer === 'string' ? p.disclaimer : ''
 
     if (!intro.trim() || tips.length === 0 || !disclaimer.trim()) {
-        throw new Error('Gemini JSON missing required fields')
+        throw new Error('AI JSON missing required fields')
     }
 
     return {

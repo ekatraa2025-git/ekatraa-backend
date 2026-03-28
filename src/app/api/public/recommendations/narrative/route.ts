@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { generateBudgetNarrative, type NarrativeAllocationLine } from '@/lib/gemini-narrative'
+import { generateBudgetNarrative, type NarrativeAllocationLine } from '@/lib/puter-narrative'
 
 /**
  * POST /api/public/recommendations/narrative
  * Body: { occasion_name, budget_inr, guest_band?, allocation_lines: [{ category_id, name, percentage, allocated_inr }] }
- * Requires GEMINI_API_KEY. No substitute copy is returned on failure.
+ * Requires PUTER_AUTH_TOKEN (Puter.js / Claude). No substitute copy is returned on failure.
  */
 export async function POST(req: Request) {
     try {
@@ -51,11 +51,11 @@ export async function POST(req: Request) {
 
         return NextResponse.json({
             narrative: parsed,
-            ai_meta: { model, duration_ms },
+            ai_meta: { model, duration_ms, source: 'puter' },
         })
     } catch (e) {
         const msg = e instanceof Error ? e.message : 'Unknown error'
-        if (msg.includes('GEMINI_API_KEY')) {
+        if (msg.includes('PUTER_AUTH_TOKEN')) {
             return NextResponse.json({ error: msg }, { status: 503 })
         }
         return NextResponse.json({ error: msg }, { status: 500 })
