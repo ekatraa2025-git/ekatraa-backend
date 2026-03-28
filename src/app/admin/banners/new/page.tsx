@@ -83,11 +83,6 @@ export default function NewBannerPage() {
                             {formData.image_url && (
                                 <AdminImage url={formData.image_url} alt="Preview" className="mt-2 h-24 w-40 rounded object-cover" placeholderClassName="h-24 w-40 rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs" />
                             )}
-                            <input type="hidden" value={formData.image_url} readOnly />
-                        </div>
-                        <div>
-                            <label className={labelClass}>Or image URL</label>
-                            <input type="url" value={formData.image_url} onChange={e => handleChange('image_url', e.target.value)} className={inputClass} placeholder="https://..." />
                         </div>
                         <div>
                             <label className={labelClass}>Banner type</label>

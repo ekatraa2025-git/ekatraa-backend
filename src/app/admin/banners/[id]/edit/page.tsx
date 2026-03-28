@@ -116,7 +116,6 @@ export default function EditBannerPage() {
                                 {uploading && <Loader2 className="h-5 w-5 animate-spin" />}
                             </div>
                             {formData.image_url && <AdminImage url={formData.image_url} alt="Preview" className="mt-2 h-24 w-40 rounded object-cover" placeholderClassName="h-24 w-40 rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs" />}
-                            <input type="url" value={formData.image_url} onChange={e => handleChange('image_url', e.target.value)} className={inputClass + ' mt-2'} placeholder="Or paste image URL" />
                         </div>
                         <div>
                             <label className={labelClass}>Banner type</label>
