@@ -13,7 +13,7 @@ export function getClaudeApiKey(): string {
 }
 
 export function getClaudeModel(): string {
-    return (process.env.CLAUDE_MODEL || 'claude-3-5-sonnet-20241022').trim()
+    return (process.env.CLAUDE_MODEL || 'claude-sonnet-4-6').trim()
 }
 
 export function getAnthropicClient(): Anthropic {
@@ -88,8 +88,10 @@ export function redactAnthropicModelEcho(s: string): string {
 
 function inlineRedactClaudeIds(t: string): string {
     return t
+        .replace(/\bclaude\s+(?:sonnet|opus|haiku)\b/gi, '')
         .replace(/\bclaude-(?:3|sonnet|opus|haiku)[-\d.a-z]*\b/gi, '')
         .replace(/\bclaude-\d[\w.-]*\b/gi, '')
+        .replace(/\bmodel\s*[:：]\s*claude[-\w.]*\b/gi, '')
         .replace(/\bmodel\s*[:：]\s*claude\b/gi, '')
         .replace(/[ \t]{2,}/g, ' ')
         .replace(/\n{3,}/g, '\n\n')
@@ -101,15 +103,17 @@ export function stripModelEchoLines(s: string): string {
     return redactAnthropicModelEcho(s)
 }
 
-/** Clean assistant reply before sending to clients (gentle: avoid stripping real content). */
+/** Clean assistant reply before sending to clients (strip edge echoes, then remove model-id text anywhere). */
 export function sanitizeAssistantReplyText(s: string): string {
     const raw = typeof s === 'string' ? s.trim() : ''
     if (!raw) return ''
-    const gentle = stripLeadingTrailingModelEchoLines(raw)
-    if (gentle.length > 0) return gentle
-    // Single-line glue like "model: claude-…Hello" without a newline
-    const deGlued = raw.replace(/^\s*model\s*[:：]\s*claude[-\w.]*/i, '').trim()
-    return deGlued || raw
+    const unwrapped = stripLeadingTrailingModelEchoLines(raw)
+    const pre =
+        unwrapped.length > 0
+            ? unwrapped
+            : raw.replace(/^\s*model\s*[:：]\s*claude[-\w.]*/i, '').trim()
+    if (!pre) return ''
+    return redactAnthropicModelEcho(pre)
 }
 
 export function withTimeout<T>(promise: Promise<T>, ms: number, label = 'Request'): Promise<T> {
