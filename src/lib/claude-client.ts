@@ -27,35 +27,61 @@ export function getAnthropicClient(): Anthropic {
 }
 
 export function extractAnthropicText(message: Anthropic.Messages.Message): string {
+    // Join with newline: Anthropic often sends multiple text blocks (e.g. echo + answer) with no separator;
+    // joining with '' merges into one line and breaks line-based stripping.
     return message.content
         .filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
-        .map((b) => b.text)
-        .join('')
+        .map((b) => (typeof b.text === 'string' ? b.text : ''))
+        .filter(Boolean)
+        .join('\n')
 }
 
-/** Drop lines that only echo the model id (assistant sometimes prints `model: claude-...`). */
-export function stripModelEchoLines(s: string): string {
-    return s
+/** Remove model-id echoes anywhere in the string (lines or inline / concatenated blocks). */
+export function redactAnthropicModelEcho(s: string): string {
+    let t = typeof s === 'string' ? s.trim() : ''
+    // Prefix like "model: claude-3-5-..." possibly glued to real text without newline
+    t = t.replace(/^\s*model\s*[:：]\s*claude[-\w.]*/i, '')
+    t = inlineRedactClaudeIds(t)
+    t = t
         .split('\n')
+        .map((line) =>
+            line
+                .replace(/\bmodel\s*[:：]\s*claude[-\w.]*\b/gi, '')
+                .replace(/\bassistant\s*model\s*[:：]\s*[^\s]+/gi, '')
+                .trimEnd()
+        )
         .filter((line) => {
-            const t = line.trim()
-            if (t === '') return true
-            if (/^model\s*:\s*claude/i.test(t)) return false
-            if (/^assistant\s*model\s*:/i.test(t)) return false
-            if (/^claude[-a-z0-9.]+$/i.test(t) && t.length < 90) return false
+            const x = line.trim()
+            if (!x) return false
+            if (/^claude[-a-z0-9.]+$/i.test(x) && x.length < 96) return false
+            if (/^model\s*[:：]\s*$/i.test(x)) return false
             return true
         })
         .join('\n')
         .trim()
+    return inlineRedactClaudeIds(t)
+}
+
+function inlineRedactClaudeIds(t: string): string {
+    return t
+        .replace(/\bclaude-(?:3|sonnet|opus|haiku)[-\d.a-z]*\b/gi, '')
+        .replace(/\bclaude-\d[\w.-]*\b/gi, '')
+        .replace(/\bmodel\s*[:：]\s*claude\b/gi, '')
+        .replace(/[ \t]{2,}/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+}
+
+/** Drop lines that only echo the model id (assistant sometimes prints `model: claude-...`). */
+export function stripModelEchoLines(s: string): string {
+    return redactAnthropicModelEcho(s)
 }
 
 /** Clean assistant reply before sending to clients. */
 export function sanitizeAssistantReplyText(s: string): string {
-    let out = stripModelEchoLines(s)
-    if (/^model\s*:\s*claude/i.test(out) && out.length < 120) {
-        out = ''
-    }
-    return out.trim()
+    const out = redactAnthropicModelEcho(s.trim())
+    if (!out || /^model\s*[:：]\s*$/i.test(out)) return ''
+    return out
 }
 
 export function withTimeout<T>(promise: Promise<T>, ms: number, label = 'Request'): Promise<T> {
@@ -99,10 +125,11 @@ export function anthropicErrorToHttp(e: unknown): {
         if (!message) {
             message = e.message.replace(/^\d{3}\s+/, '').trim() || e.message || 'Anthropic API error'
         }
+        message = redactAnthropicModelEcho(message)
         return {
             status: e.status,
             body: {
-                error: message,
+                error: message || 'Anthropic API error',
                 request_id: e.requestID ?? undefined,
             },
         }
@@ -111,5 +138,5 @@ export function anthropicErrorToHttp(e: unknown): {
     if (msg.includes('CLAUDE_API_KEY') || msg.includes('ANTHROPIC_API_KEY')) {
         return { status: 503, body: { error: msg } }
     }
-    return { status: 500, body: { error: msg } }
+    return { status: 500, body: { error: redactAnthropicModelEcho(msg) || msg } }
 }
