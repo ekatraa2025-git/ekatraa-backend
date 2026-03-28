@@ -26,7 +26,8 @@ How to write:
 
 Hard rules:
 - Use only the occasion name, guest note, total budget, and the spending areas and rupee amounts we list. Do not invent vendors, packages, discounts, or new numbers.
-- Keep sentences short. No bullet points inside the intro string.`
+- Keep sentences short. No bullet points inside the intro string.
+- Do not mention AI models, "Claude", Anthropic, or your model name anywhere in the JSON strings.`
 
 export async function generateBudgetNarrative(input: {
     occasion_name: string
