@@ -57,6 +57,7 @@ export async function POST(req: Request) {
                 {
                     user_id: orderUser,
                     event_name: cart.event_name,
+                    event_role: cart.event_role ?? null,
                     event_date: cart.event_date,
                     guest_count: cart.guest_count,
                     location_preference: cart.location_preference,

@@ -49,7 +49,7 @@ export async function PATCH(
     }
     const body = await req.json().catch(() => ({}))
     const allowed = [
-        'event_name', 'event_date', 'guest_count', 'location_preference',
+        'event_name', 'event_role', 'event_date', 'guest_count', 'location_preference',
         'venue_preference', 'planned_budget', 'planned_budget_inr', 'contact_name', 'contact_mobile', 'contact_email',
     ]
     const updates: Record<string, unknown> = {}
