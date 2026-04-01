@@ -13,9 +13,17 @@ export async function signedUrlForStorageRef(raw: string | null | undefined): Pr
     if (!s) return null
 
     if (s.startsWith('http://') || s.startsWith('https://')) {
-        const m = s.match(/\/storage\/v1\/object\/(?:public|sign)\/[^/]+\/(.+?)(?:\?|$)/)
+        if (s.includes('token=')) return s
+
+        const m = s.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/[^/]+\/(.+?)(?:\?|$)/i)
         if (m?.[1]) {
             const path = decodeURIComponent(m[1].replace(/\+/g, ' '))
+            const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, SIGNED_SEC)
+            if (!error && data?.signedUrl) return data.signedUrl
+        }
+        const m2 = s.match(/\/ekatraa2025\/(.+?)(?:\?|$)/i)
+        if (m2?.[1]) {
+            const path = decodeURIComponent(m2[1].replace(/\+/g, ' '))
             const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, SIGNED_SEC)
             if (!error && data?.signedUrl) return data.signedUrl
         }

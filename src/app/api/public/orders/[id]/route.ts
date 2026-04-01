@@ -1,11 +1,12 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { getEndUserIdFromRequest } from '@/lib/user-auth'
+import { signedUrlForStorageRef } from '@/lib/storage-display-url'
 
 /**
  * GET /api/public/orders/[id]
  * Order detail with items and status history.
- * Query: user_id (optional) - when provided and matches order owner, includes completion_otp for vendor OTP flow.
+ * When authenticated as order owner, includes completion_otp and start_otp for vendor OTP flows.
  */
 export async function GET(
     req: Request,
@@ -72,14 +73,8 @@ export async function GET(
                     if (Array.isArray(urls)) {
                         const resolved = await Promise.all(
                             (urls as string[]).map(async (url: string) => {
-                                if (url.startsWith('http') && url.includes('token=')) return url
-                                let fileName = url
-                                if (url.startsWith('http')) {
-                                    const m = url.match(/\/ekatraa2025\/([^/?]+)/)
-                                    fileName = m?.[1] || url.split('/').pop()?.split('?')[0] || url
-                                }
-                                const { data } = await supabase.storage.from('ekatraa2025').createSignedUrl(fileName, 86400)
-                                return data?.signedUrl || supabase.storage.from('ekatraa2025').getPublicUrl(fileName).data?.publicUrl || url
+                                const signed = await signedUrlForStorageRef(url)
+                                return signed ?? url
                             })
                         )
                         signed[category] = resolved
@@ -91,14 +86,23 @@ export async function GET(
     }
 
     let completionOtp: string | null = null
+    let startOtp: string | null = null
     if (userId) {
-        const { data: otpRow } = await supabase
+        const { data: completionRow } = await supabase
             .from('order_completion_otp')
             .select('otp, expires_at')
             .eq('order_id', id)
             .single()
-        if (otpRow && new Date(otpRow.expires_at) > new Date()) {
-            completionOtp = otpRow.otp
+        if (completionRow && new Date(completionRow.expires_at) > new Date()) {
+            completionOtp = completionRow.otp
+        }
+        const { data: startRow } = await supabase
+            .from('order_start_otp')
+            .select('otp, expires_at')
+            .eq('order_id', id)
+            .single()
+        if (startRow && new Date(startRow.expires_at) > new Date()) {
+            startOtp = startRow.otp
         }
     }
 
@@ -108,5 +112,6 @@ export async function GET(
         status_history: history ?? [],
         quotes,
         ...(completionOtp ? { completion_otp: completionOtp } : {}),
+        ...(startOtp ? { start_otp: startOtp } : {}),
     })
 }

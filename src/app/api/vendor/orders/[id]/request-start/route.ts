@@ -8,9 +8,8 @@ function generateOtp(): string {
 }
 
 /**
- * POST /api/vendor/orders/[id]/request-completion
- * Vendor requests to mark order complete. Generates 6-digit OTP, stores it, and returns.
- * Customer fetches OTP via order detail API. Vendor then calls confirm-completion with the OTP.
+ * POST /api/vendor/orders/[id]/request-start
+ * Vendor requests to start work. Generates OTP; customer reads it in the ekatraa app.
  */
 export async function POST(
     req: Request,
@@ -26,7 +25,7 @@ export async function POST(
 
     const { data: order, error: orderError } = await supabase
         .from('orders')
-        .select('id, vendor_id, status, user_id, contact_mobile')
+        .select('id, vendor_id, status, user_id')
         .eq('id', orderId)
         .single()
 
@@ -54,24 +53,27 @@ export async function POST(
     }
 
     const status = order.status as string
+    if (status === 'cancelled') {
+        return NextResponse.json({ error: 'Order is cancelled' }, { status: 400 })
+    }
     if (status === 'completed') {
         return NextResponse.json({ error: 'Order is already completed' }, { status: 400 })
     }
-    if (status !== 'in_progress') {
+    if (status === 'in_progress') {
+        return NextResponse.json({ error: 'Work has already started' }, { status: 400 })
+    }
+    if (status !== 'confirmed') {
         return NextResponse.json(
-            {
-                error:
-                    'Work must be in progress before completion. Ask the customer for a start OTP first, then mark work as started.',
-            },
+            { error: 'Order must be confirmed by the customer before work can start.' },
             { status: 400 }
         )
     }
 
     const otp = generateOtp()
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000) // 15 minutes
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000)
 
     const { error: upsertErr } = await supabase
-        .from('order_completion_otp')
+        .from('order_start_otp')
         .upsert(
             { order_id: orderId, otp, expires_at: expiresAt.toISOString() },
             { onConflict: 'order_id' }
@@ -83,6 +85,7 @@ export async function POST(
 
     return NextResponse.json({
         success: true,
-        message: 'OTP generated. Customer will receive it in the ekatraa app. Ask the customer for the OTP and enter it to confirm completion.',
+        message:
+            'OTP generated. The customer will see it in the ekatraa app. Ask for the OTP, then confirm to start work.',
     })
 }

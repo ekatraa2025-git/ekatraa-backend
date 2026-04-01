@@ -3,8 +3,8 @@ import { NextResponse } from 'next/server'
 import { getVendorFromRequest } from '@/lib/vendor-auth'
 
 /**
- * POST /api/vendor/orders/[id]/confirm-completion
- * Vendor submits OTP received from customer. If valid, order status is set to completed.
+ * POST /api/vendor/orders/[id]/confirm-start
+ * Vendor submits OTP from customer. If valid, order status becomes in_progress.
  * Body: { otp: string }
  */
 export async function POST(
@@ -56,29 +56,29 @@ export async function POST(
     }
 
     const status = order.status as string
-    if (status === 'completed') {
-        return NextResponse.json({ error: 'Order is already completed' }, { status: 400 })
+    if (status === 'cancelled' || status === 'completed') {
+        return NextResponse.json({ error: 'Cannot start work for this order' }, { status: 400 })
     }
-    if (status !== 'in_progress') {
-        return NextResponse.json(
-            { error: 'Order is not in progress. Complete the start-of-work OTP flow first.' },
-            { status: 400 }
-        )
+    if (status === 'in_progress') {
+        return NextResponse.json({ error: 'Work has already started' }, { status: 400 })
+    }
+    if (status !== 'confirmed') {
+        return NextResponse.json({ error: 'Order must be confirmed before starting work.' }, { status: 400 })
     }
 
     const { data: otpRow, error: otpErr } = await supabase
-        .from('order_completion_otp')
+        .from('order_start_otp')
         .select('otp, expires_at')
         .eq('order_id', orderId)
         .single()
 
     if (otpErr || !otpRow) {
-        return NextResponse.json({ error: 'No completion OTP found. Request completion first.' }, { status: 400 })
+        return NextResponse.json({ error: 'No start OTP found. Request a start OTP first.' }, { status: 400 })
     }
 
     if (new Date(otpRow.expires_at) < new Date()) {
-        await supabase.from('order_completion_otp').delete().eq('order_id', orderId)
-        return NextResponse.json({ error: 'OTP has expired. Request a new completion OTP.' }, { status: 400 })
+        await supabase.from('order_start_otp').delete().eq('order_id', orderId)
+        return NextResponse.json({ error: 'OTP has expired. Request a new start OTP.' }, { status: 400 })
     }
 
     if (otpRow.otp !== otp) {
@@ -87,26 +87,26 @@ export async function POST(
 
     const { error: updateErr } = await supabase
         .from('orders')
-        .update({ status: 'completed' })
+        .update({ status: 'in_progress' })
         .eq('id', orderId)
 
     if (updateErr) {
         return NextResponse.json({ error: updateErr.message }, { status: 500 })
     }
 
-    const { error: otpDeleteErr } = await supabase.from('order_completion_otp').delete().eq('order_id', orderId)
+    const { error: otpDeleteErr } = await supabase.from('order_start_otp').delete().eq('order_id', orderId)
     if (otpDeleteErr) {
-        console.error('Failed to delete completion OTP:', otpDeleteErr.message)
+        console.error('Failed to delete start OTP:', otpDeleteErr.message)
     }
 
     const { error: historyErr } = await supabase.from('order_status_history').insert({
         order_id: orderId,
-        status: 'completed',
-        note: 'Order completed. OTP verified by vendor.',
+        status: 'in_progress',
+        note: 'Work started. Start OTP verified by vendor.',
     })
     if (historyErr) {
         console.error('Failed to insert order status history:', historyErr.message)
     }
 
-    return NextResponse.json({ success: true, status: 'completed' })
+    return NextResponse.json({ success: true, status: 'in_progress' })
 }

@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { signedUrlForStorageRef } from '@/lib/storage-display-url'
 
 export async function GET(
     req: Request,
@@ -80,33 +81,8 @@ export async function GET(
             if (Array.isArray(urls)) {
                 const signedUrls = await Promise.all(
                     urls.map(async (url: string) => {
-                        // If already a full URL with token, return as-is
-                        if (url.startsWith('http') && url.includes('token=')) {
-                            return url
-                        }
-                        // Extract filename from URL or path
-                        let fileName = url
-                        if (url.startsWith('http')) {
-                            const urlMatch = url.match(/\/ekatraa2025\/([^/?]+)/)
-                            if (urlMatch && urlMatch[1]) {
-                                fileName = urlMatch[1]
-                            } else {
-                                fileName = url.split('/').pop()?.split('?')[0] || url
-                            }
-                        }
-                        // Generate signed URL
-                        const { data, error } = await supabase.storage
-                            .from('ekatraa2025')
-                            .createSignedUrl(fileName, 86400) // 24 hours
-                        if (error) {
-                            console.error('[SIGNED URL ERROR]', error, 'fileName:', fileName)
-                            // Fallback to public URL
-                            const { data: { publicUrl } } = supabase.storage
-                                .from('ekatraa2025')
-                                .getPublicUrl(fileName)
-                            return publicUrl
-                        }
-                        return data.signedUrl
+                        const signed = await signedUrlForStorageRef(url)
+                        return signed ?? url
                     })
                 )
                 attachmentsWithSignedUrls[category] = signedUrls
