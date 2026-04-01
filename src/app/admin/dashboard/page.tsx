@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import {
     Users,
@@ -22,6 +23,11 @@ import {
 import { Overview } from './components/overview'
 import { RecentOrders } from './components/recent-orders'
 import { format, eachDayOfInterval, subDays } from 'date-fns'
+
+const ActivityMapTracker = dynamic(
+    () => import('./components/activity-map-tracker').then((m) => m.ActivityMapTracker),
+    { ssr: false, loading: () => <div className="h-48 w-full animate-pulse rounded-lg bg-muted" /> }
+)
 
 export default function DashboardPage() {
     const [stats, setStats] = useState([
@@ -151,6 +157,18 @@ export default function DashboardPage() {
                         </CardContent>
                     </Card>
                 </div>
+
+                <Card className="border-primary/15 shadow-sm">
+                    <CardHeader>
+                        <CardTitle>Live operations map</CardTitle>
+                        <CardDescription>
+                            Vendor workload, customers, and allocation proximity (auto-refreshes).
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ActivityMapTracker />
+                    </CardContent>
+                </Card>
             </div>
         </DefaultLayout>
     )
