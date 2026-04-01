@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase/server'
 import { getSandboxAccessToken } from '@/lib/sandbox-auth'
+import { notifyVendorActivated } from '@/lib/notifications'
 
 const SANDBOX_HOST = process.env.SANDBOX_HOST || 'https://api.sandbox.co.in'
 
@@ -152,6 +153,9 @@ export async function POST(req: Request) {
       try {
         const updateData: any = {
           is_verified: true, // CRITICAL: Always set to true on successful verification - this column must exist
+          aadhaar_verified: true,
+          status: 'active',
+          is_active: true,
         }
 
         // Add Aadhaar number if provided (if this column exists)
@@ -181,7 +185,7 @@ export async function POST(req: Request) {
       
       const { data: existingVendor, error: checkError } = await supabase
         .from('vendors')
-        .select('id, is_verified')
+        .select('id, is_verified, status, business_name')
         .eq('id', vendor_id)
         .maybeSingle()
 
@@ -217,7 +221,10 @@ export async function POST(req: Request) {
         console.log('[OTP Verify] Vendor not found, attempting upsert with minimal fields...')
         const upsertData: any = {
           id: vendor_id,
-          is_verified: true, // CRITICAL: Primary verification flag
+          is_verified: true,
+          aadhaar_verified: true,
+          status: 'active',
+          is_active: true,
         }
         
         // Only add optional fields if they're provided
@@ -278,8 +285,8 @@ export async function POST(req: Request) {
         }
       }
 
-      if (updateError) {
-        console.error('[Vendor Update Error]:', {
+        if (updateError) {
+          console.error('[Vendor Update Error]:', {
           error: updateError,
           message: updateError.message,
           details: updateError.details,
@@ -367,6 +374,25 @@ export async function POST(req: Request) {
         is_verified: updatedVendor.is_verified,
         verification_complete: updatedVendor.is_verified === true
       })
+
+      try {
+        const { data: vrow } = await supabase
+          .from('vendors')
+          .select('status, business_name')
+          .eq('id', vendor_id)
+          .maybeSingle()
+        if (vrow?.status === 'active') {
+          const wasInactive = !existingVendor || existingVendor.status !== 'active'
+          if (wasInactive) {
+            notifyVendorActivated(
+              vendor_id,
+              String(vrow.business_name || existingVendor?.business_name || 'Vendor')
+            ).catch((e) => console.error('[notifyVendorActivated]', e))
+          }
+        }
+      } catch (e) {
+        console.warn('[OTP Verify] activation notify skipped', e)
+      }
 
         return NextResponse.json({
           success: true,

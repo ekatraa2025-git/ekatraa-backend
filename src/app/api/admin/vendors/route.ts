@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { extractCityFromAddress } from '@/utils/addressParser'
+import { pickVendorPayload } from '@/lib/vendor-fields'
 
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
@@ -44,11 +45,12 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
     try {
-        const body = await req.json()
+        const raw = await req.json()
+        const body = pickVendorPayload(raw) as Record<string, unknown>
         
         // Extract admin-only flags and non-vendor fields before inserting into vendors table
-        const createAuth = body.create_auth
-        delete body.create_auth
+        const createAuth = raw.create_auth
+        delete (raw as any).create_auth
         // Remove service catalog fields that are handled by the frontend separately
         delete body.service_subcategory
         delete body.service_stock_id
@@ -59,10 +61,16 @@ export async function POST(req: Request) {
         
         // Auto-extract city from address if city is not provided but address is
         if (body.address && !body.city) {
-            const extractedCity = extractCityFromAddress(body.address)
+            const extractedCity = extractCityFromAddress(String(body.address))
             if (extractedCity) {
                 body.city = extractedCity
             }
+        }
+
+        if (body.status !== undefined) {
+            body.is_active = body.status === 'active'
+        } else if (body.is_active !== undefined) {
+            body.status = body.is_active ? 'active' : 'pending'
         }
 
         // If create_auth is enabled and phone is provided, create a Supabase auth user
@@ -72,7 +80,7 @@ export async function POST(req: Request) {
 
         if (createAuth && body.phone) {
             // Normalize phone number to +91 format
-            let phoneNumber = body.phone.replace(/\s/g, '')
+            let phoneNumber = String(body.phone).replace(/\s/g, '')
             if (!phoneNumber.startsWith('+')) {
                 phoneNumber = `+91${phoneNumber}`
             }

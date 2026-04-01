@@ -1,6 +1,8 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { extractCityFromAddress } from '@/utils/addressParser'
+import { pickVendorPayload } from '@/lib/vendor-fields'
+import { notifyVendorActivated } from '@/lib/notifications'
 
 const UUID_RE =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -33,7 +35,8 @@ export async function PATCH(
 ) {
     try {
         const { id } = await params
-        const body = await req.json()
+        const raw = await req.json()
+        const body = pickVendorPayload(raw as Record<string, unknown>) as Record<string, unknown>
 
         // Catalog categories use string slugs (e.g. "menu"); vendors.category_id is UUID (legacy FK)
         if (body.category_id !== undefined && !isUuid(body.category_id)) {
@@ -54,7 +57,7 @@ export async function PATCH(
         if (body.address !== undefined) {
             // If address is being updated but city is not in the update, extract it
             if (!body.city) {
-                const extractedCity = extractCityFromAddress(body.address)
+                const extractedCity = extractCityFromAddress(String(body.address))
                 if (extractedCity) {
                     body.city = extractedCity
                 }
@@ -72,7 +75,15 @@ export async function PATCH(
         } else if (body.is_active !== undefined) {
             body.status = body.is_active ? 'active' : 'pending'
         }
-        
+
+        const { data: prev } = await supabase
+            .from('vendors')
+            .select('status, business_name')
+            .eq('id', id)
+            .maybeSingle()
+
+        const wasInactive = prev?.status !== 'active'
+
         const { data, error } = await supabase
             .from('vendors')
             .update(body)
@@ -82,6 +93,13 @@ export async function PATCH(
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 400 })
+        }
+
+        const nowActive = data?.status === 'active'
+        if (wasInactive && nowActive) {
+            notifyVendorActivated(id, String(data?.business_name || prev?.business_name || 'Vendor')).catch(
+                (e) => console.error('notifyVendorActivated:', e)
+            )
         }
 
         return NextResponse.json(data)
