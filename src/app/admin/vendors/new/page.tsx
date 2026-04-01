@@ -34,6 +34,7 @@ export default function NewVendorPage() {
         is_verified: false,
         status: false,
         create_auth: true,
+        gallery_urls: [] as string[],
     })
 
     const [aadhaarOtpSent, setAadhaarOtpSent] = useState(false)
@@ -46,6 +47,7 @@ export default function NewVendorPage() {
     const [uploadingFront, setUploadingFront] = useState(false)
     const [uploadingBack, setUploadingBack] = useState(false)
     const [uploadingLogo, setUploadingLogo] = useState(false)
+    const [uploadingGallery, setUploadingGallery] = useState(false)
 
     useEffect(() => {
         fetch('/api/admin/catalog-categories')
@@ -85,6 +87,37 @@ export default function NewVendorPage() {
         } finally {
             setUploading(false)
         }
+    }
+
+    const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        const current = Array.isArray(formData.gallery_urls) ? formData.gallery_urls : []
+        if (current.length >= 12) {
+            toast.error('Maximum 12 gallery images.')
+            e.target.value = ''
+            return
+        }
+        setUploadingGallery(true)
+        try {
+            const url = await uploadFile(file, 'vendors')
+            if (url) {
+                handleChange('gallery_urls', [...current, url])
+                toast.success('Image added to gallery')
+            }
+        } catch (error) {
+            console.error('Gallery upload error:', error)
+            toast.error('Failed to upload image')
+        } finally {
+            setUploadingGallery(false)
+            e.target.value = ''
+        }
+    }
+
+    const removeGalleryImage = (index: number) => {
+        const current = Array.isArray(formData.gallery_urls) ? [...formData.gallery_urls] : []
+        current.splice(index, 1)
+        handleChange('gallery_urls', current)
     }
 
     const handleGenerateAadhaarOTP = async () => {
@@ -196,8 +229,9 @@ export default function NewVendorPage() {
 
                 <form onSubmit={handleSubmit}>
                     <Tabs defaultValue="business" className="w-full">
-                        <TabsList className="grid w-full grid-cols-3 mb-6">
+                        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 mb-6 gap-1">
                             <TabsTrigger value="business">Business Info</TabsTrigger>
+                            <TabsTrigger value="gallery">Gallery</TabsTrigger>
                             <TabsTrigger value="kyc">KYC</TabsTrigger>
                             <TabsTrigger value="status">Status</TabsTrigger>
                         </TabsList>
@@ -269,6 +303,41 @@ export default function NewVendorPage() {
                                         <textarea value={formData.description} onChange={(e) => handleChange('description', e.target.value)} rows={3} className={inputClass + ' resize-none'} />
                                     </div>
                                 </div>
+                            </div>
+                        </TabsContent>
+
+                        <TabsContent value="gallery">
+                            <div className="rounded-lg border border-stroke bg-white shadow-lg dark:border-strokedark dark:bg-boxdark p-6">
+                                <h3 className="text-lg font-semibold text-black dark:text-white mb-2">Gallery</h3>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                                    Optional showcase images (max 12). Same as vendor app gallery.
+                                </p>
+                                <label className={labelClass}>Add image</label>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleGalleryUpload}
+                                    disabled={uploadingGallery || (Array.isArray(formData.gallery_urls) && formData.gallery_urls.length >= 12)}
+                                    className={inputClass + ' file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white'}
+                                />
+                                {uploadingGallery && <p className="mt-2 text-sm text-blue-600">Uploading...</p>}
+                                <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                    {(Array.isArray(formData.gallery_urls) ? formData.gallery_urls : []).map((url: string, idx: number) => (
+                                        <div key={`${url}-${idx}`} className="relative rounded-lg border border-stroke dark:border-strokedark overflow-hidden">
+                                            <AdminImage url={url} alt="" className="h-36 w-full object-cover" placeholderClassName="h-36 w-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs" />
+                                            <button
+                                                type="button"
+                                                onClick={() => removeGalleryImage(idx)}
+                                                className="absolute top-2 right-2 rounded bg-red-600 text-white text-xs px-2 py-1"
+                                            >
+                                                Remove
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                                {(!formData.gallery_urls || formData.gallery_urls.length === 0) && (
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">No gallery images yet.</p>
+                                )}
                             </div>
                         </TabsContent>
 

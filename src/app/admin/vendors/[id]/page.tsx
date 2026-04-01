@@ -55,6 +55,7 @@ export default function EditVendorPage() {
     const [uploadingFront, setUploadingFront] = useState(false)
     const [uploadingBack, setUploadingBack] = useState(false)
     const [uploadingLogo, setUploadingLogo] = useState(false)
+    const [uploadingGallery, setUploadingGallery] = useState(false)
 
     // Selected stock for pricing tiers (legacy name kept for add-service flow)
     const [selectedStock, setSelectedStock] = useState<any>(null)
@@ -98,6 +99,7 @@ export default function EditVendorPage() {
                 status: vendorData.status === 'active',
                 is_verified: vendorData.is_verified === true,
                 category: (catalogData && Array.isArray(catalogData) && catalogData.find((c: any) => c.id === vendorData.category_id)?.name) || vendorData.category || '',
+                gallery_urls: Array.isArray(vendorData.gallery_urls) ? vendorData.gallery_urls.filter(Boolean) : [],
             })
 
             if (vendorData.is_verified) {
@@ -385,6 +387,37 @@ export default function EditVendorPage() {
         }
     }
 
+    const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        const current = Array.isArray(formData.gallery_urls) ? formData.gallery_urls : []
+        if (current.length >= 12) {
+            toast.error('Maximum 12 gallery images.')
+            e.target.value = ''
+            return
+        }
+        setUploadingGallery(true)
+        try {
+            const url = await uploadFile(file, 'vendors')
+            if (url) {
+                handleChange('gallery_urls', [...current, url])
+                toast.success('Image added to gallery (save to persist)')
+            }
+        } catch (error) {
+            console.error('Gallery upload error:', error)
+            toast.error('Failed to upload image')
+        } finally {
+            setUploadingGallery(false)
+            e.target.value = ''
+        }
+    }
+
+    const removeGalleryImage = (index: number) => {
+        const current = Array.isArray(formData.gallery_urls) ? [...formData.gallery_urls] : []
+        current.splice(index, 1)
+        handleChange('gallery_urls', current)
+    }
+
     // Aadhaar OTP generation
     const handleGenerateAadhaarOTP = async () => {
         if (!formData.aadhaar_number || formData.aadhaar_number.length !== 12) {
@@ -530,9 +563,10 @@ export default function EditVendorPage() {
 
                 <form onSubmit={handleSubmit}>
                     <Tabs defaultValue="business" className="w-full">
-                        <TabsList className="grid w-full grid-cols-4 mb-6">
+                        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 mb-6 gap-1">
                             <TabsTrigger value="business">Business Info</TabsTrigger>
                             <TabsTrigger value="services">Categories & Services</TabsTrigger>
+                            <TabsTrigger value="gallery">Gallery</TabsTrigger>
                             <TabsTrigger value="kyc">KYC</TabsTrigger>
                             <TabsTrigger value="status">Status</TabsTrigger>
                         </TabsList>
@@ -860,6 +894,45 @@ export default function EditVendorPage() {
                                         ))}
                                     </ul>
                                 </div>
+                            )}
+                        </div>
+                    </div>
+                    </TabsContent>
+
+                    <TabsContent value="gallery">
+                    <div className="rounded-lg border border-stroke bg-white shadow-lg dark:border-strokedark dark:bg-boxdark mb-6">
+                        <div className="border-b border-stroke px-6 py-4 dark:border-strokedark bg-gradient-to-r from-amber-50 to-white dark:from-amber-950 dark:to-boxdark">
+                            <h3 className="text-lg font-semibold text-black dark:text-white">Gallery</h3>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                Images uploaded from the vendor app or here. Shown on the consumer app vendor profile. Max 12 images.
+                            </p>
+                        </div>
+                        <div className="p-6">
+                            <label className={labelClass}>Add image</label>
+                            <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleGalleryUpload}
+                                disabled={uploadingGallery || (Array.isArray(formData.gallery_urls) && formData.gallery_urls.length >= 12)}
+                                className={inputClass + ' file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white'}
+                            />
+                            {uploadingGallery && <p className="mt-2 text-sm text-blue-600">Uploading...</p>}
+                            <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                {(Array.isArray(formData.gallery_urls) ? formData.gallery_urls : []).map((url: string, idx: number) => (
+                                    <div key={`${url}-${idx}`} className="relative group rounded-lg border border-stroke dark:border-strokedark overflow-hidden">
+                                        <AdminImage url={url} alt="" className="h-36 w-full object-cover" placeholderClassName="h-36 w-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs" />
+                                        <button
+                                            type="button"
+                                            onClick={() => removeGalleryImage(idx)}
+                                            className="absolute top-2 right-2 rounded bg-red-600 text-white text-xs px-2 py-1 opacity-90 hover:opacity-100"
+                                        >
+                                            Remove
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                            {(!formData.gallery_urls || formData.gallery_urls.length === 0) && (
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">No gallery images yet.</p>
                             )}
                         </div>
                     </div>
