@@ -85,9 +85,10 @@ export async function POST(
         return NextResponse.json({ error: 'Invalid OTP' }, { status: 400 })
     }
 
+    const nowIso = new Date().toISOString()
     const { error: updateErr } = await supabase
         .from('orders')
-        .update({ status: 'completed' })
+        .update({ status: 'completed', work_completed_at: nowIso })
         .eq('id', orderId)
 
     if (updateErr) {
@@ -108,5 +109,5 @@ export async function POST(
         console.error('Failed to insert order status history:', historyErr.message)
     }
 
-    return NextResponse.json({ success: true, status: 'completed' })
+    return NextResponse.json({ success: true, status: 'completed', work_completed_at: nowIso })
 }
