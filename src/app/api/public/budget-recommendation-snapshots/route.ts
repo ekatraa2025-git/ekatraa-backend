@@ -32,6 +32,9 @@ export async function GET(req: Request) {
  */
 export async function POST(req: Request) {
     try {
+        // Use token user_id if authenticated; anonymous snapshots are allowed but cannot spoof another user's id
+        const { userId: tokenUserId } = await getEndUserIdFromRequest(req)
+
         const body = await req.json()
         const occasion_id = typeof body.occasion_id === 'string' ? body.occasion_id.trim() : ''
         const budget_inr = Number(body.budget_inr)
@@ -61,7 +64,7 @@ export async function POST(req: Request) {
 
         const row = {
             cart_id: body.cart_id ?? null,
-            user_id: body.user_id ?? null,
+            user_id: tokenUserId ?? null,
             occasion_id,
             contact_name: body.contact_name ?? null,
             contact_mobile: body.contact_mobile ?? null,

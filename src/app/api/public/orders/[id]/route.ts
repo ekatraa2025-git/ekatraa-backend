@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getEndUserIdFromRequest } from '@/lib/user-auth'
 
 /**
  * GET /api/public/orders/[id]
@@ -10,13 +11,13 @@ export async function GET(
     req: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const { userId, error: authError } = await getEndUserIdFromRequest(req)
+    if (authError) return authError
+
     const { id } = await params
     if (!id) {
         return NextResponse.json({ error: 'Order id required' }, { status: 400 })
     }
-
-    const { searchParams } = new URL(req.url)
-    const userId = searchParams.get('user_id')
 
     const { data: order, error: orderError } = await supabase
         .from('orders')
@@ -26,6 +27,10 @@ export async function GET(
 
     if (orderError || !order) {
         return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    }
+
+    if (order.user_id !== userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
     const { data: items } = await supabase
@@ -86,7 +91,7 @@ export async function GET(
     }
 
     let completionOtp: string | null = null
-    if (userId && order.user_id === userId) {
+    if (userId) {
         const { data: otpRow } = await supabase
             .from('order_completion_otp')
             .select('otp, expires_at')
@@ -102,7 +107,6 @@ export async function GET(
         items: items ?? [],
         status_history: history ?? [],
         quotes,
-        vendor_quotes: quotes,
         ...(completionOtp ? { completion_otp: completionOtp } : {}),
     })
 }

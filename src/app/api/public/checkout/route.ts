@@ -53,6 +53,10 @@ export async function POST(req: Request) {
             0
         )
 
+        if (totalAmount <= 0) {
+            return NextResponse.json({ error: 'Cart total must be greater than zero' }, { status: 400 })
+        }
+
         const settings = await fetchPlatformProtectionSettings()
         const protectionAmount = computeProtectionAmountInr(totalAmount, settings, wantProtection)
 
@@ -106,9 +110,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Failed to create order items' }, { status: 500 })
         }
 
-        await supabase.from('order_status_history').insert([
+        const { error: historyError } = await supabase.from('order_status_history').insert([
             { order_id: order.id, status: 'pending', note: 'Order created' },
         ])
+        if (historyError) {
+            console.error('Failed to insert order status history:', historyError.message)
+        }
 
         return NextResponse.json(order, { status: 201 })
     } catch (e) {

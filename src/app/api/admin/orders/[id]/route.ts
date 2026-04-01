@@ -117,9 +117,12 @@ export async function PATCH(
     }
 
     if (status != null) {
-        await supabase.from('order_status_history').insert([
+        const { error: historyError } = await supabase.from('order_status_history').insert([
             { order_id: id, status, note: note ?? `Status updated to ${status}` },
         ])
+        if (historyError) {
+            console.error('Failed to insert order status history:', historyError.message)
+        }
     }
 
     const contactName = currentOrder?.contact_name || 'customer'
@@ -133,23 +136,31 @@ export async function PATCH(
             in_progress: { title: 'Order In Progress', message: `Order for ${contactName} is now in progress.` },
         }
         const statusInfo = statusMessages[status] ?? { title: 'Order Updated', message: `Order for ${contactName} has been updated.` }
-        await sendNotificationToVendor({
-            vendor_id: currentOrder.vendor_id,
-            type: 'booking_update',
-            title: statusInfo.title,
-            message: statusInfo.message,
-            data: { order_id: id, status, previous_status: currentOrder.status },
-        })
+        try {
+            await sendNotificationToVendor({
+                vendor_id: currentOrder.vendor_id,
+                type: 'booking_update',
+                title: statusInfo.title,
+                message: statusInfo.message,
+                data: { order_id: id, status, previous_status: currentOrder.status },
+            })
+        } catch (notifErr) {
+            console.error('Failed to send vendor notification:', notifErr)
+        }
     }
 
     if (vendor_id && !currentOrder?.vendor_id) {
-        await sendNotificationToVendor({
-            vendor_id: vendor_id as string,
-            type: 'booking_update',
-            title: 'New Order Assigned',
-            message: `A new order has been assigned to you for ${contactName}.`,
-            data: { order_id: id, event_date: currentOrder?.event_date },
-        })
+        try {
+            await sendNotificationToVendor({
+                vendor_id: vendor_id as string,
+                type: 'booking_update',
+                title: 'New Order Assigned',
+                message: `A new order has been assigned to you for ${contactName}.`,
+                data: { order_id: id, event_date: currentOrder?.event_date },
+            })
+        } catch (notifErr) {
+            console.error('Failed to send assignment notification:', notifErr)
+        }
     }
 
     return NextResponse.json(order)
@@ -168,11 +179,23 @@ export async function DELETE(
     const { data: orderItems } = await supabase.from('order_items').select('id').eq('order_id', id)
     const itemIds = (orderItems ?? []).map((i: { id: string }) => i.id)
     if (itemIds.length > 0) {
-        await supabase.from('order_item_allocations').delete().in('order_item_id', itemIds)
+        const { error: allocErr } = await supabase.from('order_item_allocations').delete().in('order_item_id', itemIds)
+        if (allocErr) {
+            return NextResponse.json({ error: 'Failed to delete item allocations: ' + allocErr.message }, { status: 500 })
+        }
     }
-    await supabase.from('quotations').delete().eq('order_id', id)
-    await supabase.from('order_status_history').delete().eq('order_id', id)
-    await supabase.from('order_items').delete().eq('order_id', id)
+    const { error: quotErr } = await supabase.from('quotations').delete().eq('order_id', id)
+    if (quotErr) {
+        return NextResponse.json({ error: 'Failed to delete quotations: ' + quotErr.message }, { status: 500 })
+    }
+    const { error: histErr } = await supabase.from('order_status_history').delete().eq('order_id', id)
+    if (histErr) {
+        return NextResponse.json({ error: 'Failed to delete status history: ' + histErr.message }, { status: 500 })
+    }
+    const { error: oiErr } = await supabase.from('order_items').delete().eq('order_id', id)
+    if (oiErr) {
+        return NextResponse.json({ error: 'Failed to delete order items: ' + oiErr.message }, { status: 500 })
+    }
 
     const { error } = await supabase.from('orders').delete().eq('id', id)
     if (error) {

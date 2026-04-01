@@ -17,13 +17,18 @@ export async function POST(req: Request) {
             )
         }
 
+        const clampedQty = Math.min(100, Math.max(1, Math.floor(Number(quantity))))
+        if (Number.isNaN(clampedQty) || clampedQty < 1) {
+            return NextResponse.json({ error: 'quantity must be between 1 and 100' }, { status: 400 })
+        }
+
         const { data, error } = await supabase
             .from('cart_items')
             .upsert(
                 {
                     cart_id,
                     service_id,
-                    quantity: Math.max(1, Number(quantity)),
+                    quantity: clampedQty,
                     unit_price: unit_price ?? null,
                     options: options ?? null,
                 },

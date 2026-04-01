@@ -1,17 +1,14 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getEndUserIdFromRequest } from '@/lib/user-auth'
 
 /**
- * GET /api/public/guests?user_id=
- * List all guests for a user.
+ * GET /api/public/guests
+ * List all guests for the authenticated user.
  */
 export async function GET(req: Request) {
-    const { searchParams } = new URL(req.url)
-    const userId = searchParams.get('user_id')
-
-    if (!userId) {
-        return NextResponse.json({ error: 'user_id is required' }, { status: 400 })
-    }
+    const { userId, error: authError } = await getEndUserIdFromRequest(req)
+    if (authError) return authError
 
     const { data, error } = await supabase
         .from('guest_lists')
@@ -27,21 +24,24 @@ export async function GET(req: Request) {
 
 /**
  * POST /api/public/guests
- * Add a guest. Body: { user_id, name, phone?, relation?, group_name?, notes? }
+ * Add a guest for the authenticated user. Body: { name, phone?, relation?, group_name?, notes? }
  */
 export async function POST(req: Request) {
     try {
-        const body = await req.json()
-        const { user_id, name, phone, relation, group_name, notes, invited, rsvp } = body
+        const { userId, error: authError } = await getEndUserIdFromRequest(req)
+        if (authError) return authError
 
-        if (!user_id || !name?.trim()) {
-            return NextResponse.json({ error: 'user_id and name are required' }, { status: 400 })
+        const body = await req.json()
+        const { name, phone, relation, group_name, notes, invited, rsvp } = body
+
+        if (!name?.trim()) {
+            return NextResponse.json({ error: 'name is required' }, { status: 400 })
         }
 
         const { data, error } = await supabase
             .from('guest_lists')
             .insert([{
-                user_id,
+                user_id: userId,
                 name: name.trim(),
                 phone: phone || null,
                 relation: relation || null,

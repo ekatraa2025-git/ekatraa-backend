@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getEndUserIdFromRequest } from '@/lib/user-auth'
 
 /**
  * PATCH /api/public/guests/[id]
@@ -9,9 +10,26 @@ export async function PATCH(
     req: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const { userId, error: authError } = await getEndUserIdFromRequest(req)
+    if (authError) return authError
+
     const { id } = await params
     if (!id) {
         return NextResponse.json({ error: 'Guest id required' }, { status: 400 })
+    }
+
+    const { data: guest, error: fetchErr } = await supabase
+        .from('guest_lists')
+        .select('user_id')
+        .eq('id', id)
+        .single()
+
+    if (fetchErr || !guest) {
+        return NextResponse.json({ error: 'Guest not found' }, { status: 404 })
+    }
+
+    if (guest.user_id !== userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
     const body = await req.json().catch(() => ({}))
@@ -41,12 +59,29 @@ export async function PATCH(
  * DELETE /api/public/guests/[id]
  */
 export async function DELETE(
-    _req: Request,
+    req: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const { userId, error: authError } = await getEndUserIdFromRequest(req)
+    if (authError) return authError
+
     const { id } = await params
     if (!id) {
         return NextResponse.json({ error: 'Guest id required' }, { status: 400 })
+    }
+
+    const { data: guest, error: fetchErr } = await supabase
+        .from('guest_lists')
+        .select('user_id')
+        .eq('id', id)
+        .single()
+
+    if (fetchErr || !guest) {
+        return NextResponse.json({ error: 'Guest not found' }, { status: 404 })
+    }
+
+    if (guest.user_id !== userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
     const { error } = await supabase.from('guest_lists').delete().eq('id', id)

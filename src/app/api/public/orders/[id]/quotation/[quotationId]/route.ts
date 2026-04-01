@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getEndUserIdFromRequest } from '@/lib/user-auth'
 
 /**
  * PATCH /api/public/orders/[id]/quotation/[quotationId]
@@ -10,6 +11,9 @@ export async function PATCH(
     req: Request,
     { params }: { params: Promise<{ id: string; quotationId: string }> }
 ) {
+    const { userId, error: authError } = await getEndUserIdFromRequest(req)
+    if (authError) return authError
+
     const { id: orderId, quotationId } = await params
     if (!orderId || !quotationId) {
         return NextResponse.json({ error: 'Order id and quotation id required' }, { status: 400 })
@@ -35,6 +39,10 @@ export async function PATCH(
 
     if (orderErr || !order) {
         return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    }
+
+    if (order.user_id !== userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
     const { data: quotation, error: quoteErr } = await supabase

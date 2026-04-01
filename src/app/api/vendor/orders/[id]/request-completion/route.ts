@@ -1,9 +1,10 @@
+import crypto from 'crypto'
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { getVendorFromRequest } from '@/lib/vendor-auth'
 
 function generateOtp(): string {
-    return String(Math.floor(100000 + Math.random() * 900000))
+    return String(crypto.randomInt(100000, 1000000))
 }
 
 /**

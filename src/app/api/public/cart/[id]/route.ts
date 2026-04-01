@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getEndUserIdFromRequest } from '@/lib/user-auth'
 
 /**
  * GET /api/public/cart/[id]
@@ -65,6 +66,17 @@ export async function PATCH(
     if (!id) {
         return NextResponse.json({ error: 'Cart id required' }, { status: 400 })
     }
+
+    // If the cart has a user_id, verify the caller owns it
+    const { data: cartOwner } = await supabase.from('carts').select('user_id').eq('id', id).single()
+    if (cartOwner?.user_id) {
+        const { userId, error: authError } = await getEndUserIdFromRequest(req)
+        if (authError) return authError
+        if (cartOwner.user_id !== userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+        }
+    }
+
     const body = await req.json().catch(() => ({}))
     const allowed = [
         'event_name', 'event_role', 'event_date', 'guest_count', 'location_preference',

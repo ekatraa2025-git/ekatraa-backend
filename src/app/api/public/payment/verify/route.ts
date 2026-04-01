@@ -1,4 +1,5 @@
 import crypto from 'crypto'
+import Razorpay from 'razorpay'
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import {
@@ -15,8 +16,9 @@ const ADVANCE_PERCENT = 20
  */
 export async function POST(req: Request) {
     try {
+        const keyId = process.env.RAZORPAY_KEY_ID
         const keySecret = process.env.RAZORPAY_KEY_SECRET
-        if (!keySecret) {
+        if (!keyId || !keySecret) {
             return NextResponse.json({ error: 'Razorpay not configured' }, { status: 503 })
         }
 
@@ -28,6 +30,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Missing payment or cart details' }, { status: 400 })
         }
 
+        // 1. Verify Razorpay HMAC signature
         const expectedSignature = crypto
             .createHmac('sha256', keySecret)
             .update(`${razorpay_order_id}|${razorpay_payment_id}`)
@@ -35,6 +38,21 @@ export async function POST(req: Request) {
 
         if (expectedSignature !== razorpay_signature) {
             return NextResponse.json({ error: 'Payment verification failed' }, { status: 400 })
+        }
+
+        // 2. Fetch the Razorpay order to get the authoritative charged amount
+        //    and verify it was created for this specific cart_id
+        const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret })
+        let rzpOrder: { amount: number; notes?: Record<string, string> }
+        try {
+            rzpOrder = await razorpay.orders.fetch(razorpay_order_id) as typeof rzpOrder
+        } catch {
+            return NextResponse.json({ error: 'Could not fetch Razorpay order' }, { status: 400 })
+        }
+
+        // Verify the Razorpay order was created for this cart (prevents cart substitution)
+        if (rzpOrder.notes?.cart_id && rzpOrder.notes.cart_id !== String(cart_id)) {
+            return NextResponse.json({ error: 'Payment order does not match cart' }, { status: 400 })
         }
 
         const { data: cart, error: cartError } = await supabase
@@ -69,7 +87,19 @@ export async function POST(req: Request) {
 
         const settings = await fetchPlatformProtectionSettings()
         const protectionAmount = computeProtectionAmountInr(totalAmount, settings, wantProtection)
-        const advanceAmount = computeAdvanceInrFromBase(totalAmount, protectionAmount, ADVANCE_PERCENT)
+        const calculatedAdvancePaise = Math.max(
+            computeAdvanceInrFromBase(totalAmount, protectionAmount, ADVANCE_PERCENT) * 100,
+            100
+        )
+
+        // 3. Verify the amount Razorpay actually charged matches what we calculated
+        //    Reject if they differ by more than ₹1 (100 paise) to account for any rounding
+        if (Math.abs(rzpOrder.amount - calculatedAdvancePaise) > 100) {
+            return NextResponse.json({ error: 'Payment amount does not match order total' }, { status: 400 })
+        }
+
+        // Use the Razorpay-authoritative amount (in rupees) for the order record
+        const advanceAmount = rzpOrder.amount / 100
 
         const { data: order, error: orderError } = await supabase
             .from('orders')

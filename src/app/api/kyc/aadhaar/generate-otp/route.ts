@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     const body = await req.json()
     const { aadhaar_number, vendor_id, aadhaar_front_url, aadhaar_back_url } = body
 
-    if (!aadhaar_number || aadhaar_number.length !== 12) {
+    if (!aadhaar_number || !/^\d{12}$/.test(String(aadhaar_number))) {
       return NextResponse.json(
         { error: 'Valid 12-digit Aadhaar number is required' },
         { status: 400, headers: corsHeaders }
@@ -80,7 +80,7 @@ export async function POST(req: Request) {
       'x-api-version': '1.0.0',
     }
 
-    console.log('[OTP Generate] Calling Sandbox API with token:', accessToken.substring(0, 20) + '...')
+    console.log('[OTP Generate] Calling Sandbox API')
 
     const response = await fetch(`${SANDBOX_HOST}/kyc/aadhaar/okyc/otp`, {
       method: 'POST',
@@ -96,7 +96,6 @@ export async function POST(req: Request) {
     console.log('[OTP Generate] Sandbox API response status:', response.status)
 
     const data = await response.json()
-    console.log('[OTP Generate] Sandbox API response:', data)
 
     if (!response.ok) {
       console.error('[OTP Generate] Sandbox API error:', {

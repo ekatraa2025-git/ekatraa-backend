@@ -87,13 +87,19 @@ export async function POST(
         return NextResponse.json({ error: updateErr.message }, { status: 500 })
     }
 
-    await supabase.from('order_completion_otp').delete().eq('order_id', orderId)
+    const { error: otpDeleteErr } = await supabase.from('order_completion_otp').delete().eq('order_id', orderId)
+    if (otpDeleteErr) {
+        console.error('Failed to delete completion OTP:', otpDeleteErr.message)
+    }
 
-    await supabase.from('order_status_history').insert({
+    const { error: historyErr } = await supabase.from('order_status_history').insert({
         order_id: orderId,
         status: 'completed',
         note: 'Order completed. OTP verified by vendor.',
     })
+    if (historyErr) {
+        console.error('Failed to insert order status history:', historyErr.message)
+    }
 
     return NextResponse.json({ success: true, status: 'completed' })
 }

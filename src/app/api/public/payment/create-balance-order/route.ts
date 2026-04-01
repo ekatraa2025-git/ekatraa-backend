@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import Razorpay from 'razorpay'
+import { getEndUserIdFromRequest } from '@/lib/user-auth'
 
 /**
  * POST /api/public/payment/create-balance-order
@@ -15,11 +16,14 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Razorpay not configured' }, { status: 503 })
         }
 
-        const body = await req.json()
-        const { order_id, user_id, balance_amount } = body
+        const { userId, error: authError } = await getEndUserIdFromRequest(req)
+        if (authError) return authError
 
-        if (!order_id || !user_id) {
-            return NextResponse.json({ error: 'order_id and user_id required' }, { status: 400 })
+        const body = await req.json()
+        const { order_id, balance_amount } = body
+
+        if (!order_id) {
+            return NextResponse.json({ error: 'order_id required' }, { status: 400 })
         }
 
         const { data: order, error: orderErr } = await supabase
@@ -32,7 +36,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Order not found' }, { status: 404 })
         }
 
-        if (order.user_id !== user_id) {
+        if (order.user_id !== userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
         }
 
@@ -67,7 +71,7 @@ export async function POST(req: Request) {
             amount: amountInPaise,
             currency: 'INR',
             receipt: `bal_${String(order_id).slice(-8)}_${Date.now().toString(36)}`,
-            notes: { order_id: String(order_id), user_id: String(user_id), type: 'balance' },
+            notes: { order_id: String(order_id), user_id: String(userId), type: 'balance' },
         })
 
         return NextResponse.json({

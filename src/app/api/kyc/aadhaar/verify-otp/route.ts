@@ -46,6 +46,13 @@ export async function POST(req: Request) {
       )
     }
 
+    if (!/^\d{6}$/.test(otp.trim())) {
+      return NextResponse.json(
+        { error: 'OTP must be exactly 6 digits' },
+        { status: 400, headers: corsHeaders }
+      )
+    }
+
     if (!vendor_id) {
       return NextResponse.json(
         { error: 'vendor_id is required' },
@@ -73,7 +80,7 @@ export async function POST(req: Request) {
       'x-api-version': '1.0.0',
     }
 
-    console.log('[OTP Verify] Calling Sandbox API with token:', accessToken.substring(0, 20) + '...')
+    console.log('[OTP Verify] Calling Sandbox API')
 
     // Verify OTP with Sandbox API
     const requestPayload = {
@@ -100,7 +107,6 @@ export async function POST(req: Request) {
     let data
     try {
       const responseText = await response.text()
-      console.log('[OTP Verify] Sandbox API raw response:', responseText)
       data = responseText ? JSON.parse(responseText) : {}
     } catch (parseError: any) {
       console.error('[OTP Verify] Failed to parse Sandbox response:', parseError)
@@ -109,8 +115,6 @@ export async function POST(req: Request) {
         { status: 500, headers: corsHeaders }
       )
     }
-
-    console.log('[OTP Verify] Sandbox API parsed response:', JSON.stringify(data, null, 2))
 
     if (!response.ok) {
       console.error('[OTP Verify] Sandbox API error:', {

@@ -6,6 +6,7 @@ import {
     computeProtectionAmountInr,
     computeAdvanceInrFromBase,
 } from '@/lib/booking-protection'
+import { getEndUserIdFromRequest } from '@/lib/user-auth'
 
 const ADVANCE_PERCENT = 20
 
@@ -15,14 +16,14 @@ const ADVANCE_PERCENT = 20
 export async function GET() {
     const configured = !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET)
     return NextResponse.json(
-        { ok: true, razorpay_configured: configured, message: 'Use POST with { cart_id, user_id } to create order' },
+        { ok: true, razorpay_configured: configured, message: 'Use POST with { cart_id } to create order' },
         { status: 200 }
     )
 }
 
 /**
  * POST /api/public/payment/create-order
- * Creates Razorpay order for 20% advance payment. Body: { cart_id, user_id }
+ * Creates Razorpay order for 20% advance payment. Body: { cart_id }
  */
 export async function POST(req: Request) {
     try {
@@ -32,8 +33,11 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Razorpay not configured' }, { status: 503 })
         }
 
+        const { userId, error: authError } = await getEndUserIdFromRequest(req)
+        if (authError) return authError
+
         const body = await req.json()
-        const { cart_id, user_id, booking_protection } = body
+        const { cart_id, booking_protection } = body
         const wantProtection = booking_protection === true
 
         if (!cart_id) {
@@ -50,10 +54,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Cart not found' }, { status: 404 })
         }
 
-        const orderUser = user_id ?? cart.user_id
-        if (!orderUser) {
-            return NextResponse.json({ error: 'user_id is required' }, { status: 400 })
+        // Verify the cart belongs to the authenticated user
+        if (cart.user_id && cart.user_id !== userId) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
+
+        const orderUser = userId
 
         const { data: items, error: itemsError } = await supabase
             .from('cart_items')

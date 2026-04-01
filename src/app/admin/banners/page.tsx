@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@/components/Common/ConfirmDialog'
 import { toast } from 'sonner'
 import { DataTableView } from '@/components/admin-panel/data-table-view'
 import { Edit, Trash2, Loader2, MoreHorizontal, Image as ImageIcon } from 'lucide-react'
+import { AdminImage } from '@/components/Common/AdminImage'
 import Link from 'next/link'
 import {
     DropdownMenu,
@@ -73,7 +74,7 @@ export default function BannersPage() {
             header: 'Preview',
             key: 'image_url',
             render: (val: string) => val ? (
-                <img src={val} alt="" className="h-10 w-16 rounded object-cover" />
+                <AdminImage url={val} alt="" className="h-10 w-16 rounded object-cover" placeholderClassName="h-10 w-16 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground" />
             ) : (
                 <div className="h-10 w-16 rounded bg-muted flex items-center justify-center">
                     <ImageIcon className="h-5 w-5 text-muted-foreground" />

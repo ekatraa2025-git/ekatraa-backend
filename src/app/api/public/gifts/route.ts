@@ -1,17 +1,14 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getEndUserIdFromRequest } from '@/lib/user-auth'
 
 /**
- * GET /api/public/gifts?user_id=
- * List all gifts for a user, with guest name joined.
+ * GET /api/public/gifts
+ * List all gifts for the authenticated user.
  */
 export async function GET(req: Request) {
-    const { searchParams } = new URL(req.url)
-    const userId = searchParams.get('user_id')
-
-    if (!userId) {
-        return NextResponse.json({ error: 'user_id is required' }, { status: 400 })
-    }
+    const { userId, error: authError } = await getEndUserIdFromRequest(req)
+    if (authError) return authError
 
     const { data, error } = await supabase
         .from('guest_gifts')
@@ -34,21 +31,24 @@ export async function GET(req: Request) {
 
 /**
  * POST /api/public/gifts
- * Record a gift. Body: { user_id, guest_id, type?, amount?, description? }
+ * Record a gift. Body: { guest_id, type?, amount?, description? }
  */
 export async function POST(req: Request) {
     try {
-        const body = await req.json()
-        const { user_id, guest_id, type, amount, description } = body
+        const { userId, error: authError } = await getEndUserIdFromRequest(req)
+        if (authError) return authError
 
-        if (!user_id || !guest_id) {
-            return NextResponse.json({ error: 'user_id and guest_id are required' }, { status: 400 })
+        const body = await req.json()
+        const { guest_id, type, amount, description } = body
+
+        if (!guest_id) {
+            return NextResponse.json({ error: 'guest_id is required' }, { status: 400 })
         }
 
         const { data, error } = await supabase
             .from('guest_gifts')
             .insert([{
-                user_id,
+                user_id: userId,
                 guest_id,
                 type: type || 'cash',
                 amount: amount ? parseFloat(amount) : 0,

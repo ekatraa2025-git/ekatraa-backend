@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { signedUrlForStorageRef } from '@/lib/storage-display-url'
 
 export async function GET() {
     const { data, error } = await supabase
@@ -19,5 +20,12 @@ export async function GET() {
             (!b.end_date || b.end_date >= now)
     )
 
-    return NextResponse.json(filtered)
+    const resolved = await Promise.all(
+        filtered.map(async (b: { image_url?: string }) => {
+            const signedUrl = await signedUrlForStorageRef(b.image_url)
+            return { ...b, image_url: signedUrl ?? b.image_url }
+        })
+    )
+
+    return NextResponse.json(resolved)
 }

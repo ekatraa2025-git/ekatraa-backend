@@ -1,31 +1,39 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getEndUserIdFromRequest } from '@/lib/user-auth'
 
 /**
  * POST /api/public/guests/bulk
- * Bulk import guests. Body: { user_id, guests: [{ name, phone?, relation?, group_name? }] }
+ * Bulk import guests for the authenticated user. Body: { guests: [{ name, phone?, relation?, group_name? }] }
  */
 export async function POST(req: Request) {
     try {
-        const body = await req.json()
-        const { user_id, guests } = body
+        const { userId, error: authError } = await getEndUserIdFromRequest(req)
+        if (authError) return authError
 
-        if (!user_id || !Array.isArray(guests) || guests.length === 0) {
+        const body = await req.json()
+        const { guests } = body
+
+        if (!Array.isArray(guests) || guests.length === 0) {
             return NextResponse.json(
-                { error: 'user_id and non-empty guests array are required' },
+                { error: 'Non-empty guests array is required' },
                 { status: 400 }
             )
+        }
+
+        if (guests.length > 500) {
+            return NextResponse.json({ error: 'Cannot import more than 500 guests at once' }, { status: 400 })
         }
 
         const rows = guests
             .filter((g: { name?: string }) => g.name?.trim())
             .map((g: { name: string; phone?: string; relation?: string; group_name?: string; notes?: string }) => ({
-                user_id,
-                name: g.name.trim(),
-                phone: g.phone || null,
-                relation: g.relation || null,
-                group_name: g.group_name || null,
-                notes: g.notes || null,
+                user_id: userId,
+                name: g.name.trim().substring(0, 100),
+                phone: g.phone ? String(g.phone).substring(0, 20) : null,
+                relation: g.relation ? String(g.relation).substring(0, 50) : null,
+                group_name: g.group_name ? String(g.group_name).substring(0, 50) : null,
+                notes: g.notes ? String(g.notes).substring(0, 500) : null,
                 invited: false,
                 rsvp: 'pending',
             }))

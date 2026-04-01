@@ -56,15 +56,23 @@ export async function middleware(request: NextRequest) {
 
     const { data: { user } } = await supabase.auth.getUser()
 
-    // Protect /admin routes
-    if (request.nextUrl.pathname.startsWith('/admin')) {
+    const isAdminPage = request.nextUrl.pathname.startsWith('/admin')
+    const isAdminApi = request.nextUrl.pathname.startsWith('/api/admin')
+
+    // Protect /admin page routes and /api/admin/* API routes
+    if (isAdminPage || isAdminApi) {
         if (!user) {
+            if (isAdminApi) {
+                return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+            }
             return NextResponse.redirect(new URL('/login', request.url))
         }
 
         // Check if the user is the specific admin email
         if (user.email !== 'admin@ekatraa.com') {
-            // Sign out and redirect if not the authorized admin
+            if (isAdminApi) {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+            }
             await supabase.auth.signOut()
             return NextResponse.redirect(new URL('/login?error=Unauthorized', request.url))
         }
