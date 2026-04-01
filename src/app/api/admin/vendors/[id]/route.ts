@@ -65,6 +65,13 @@ export async function PATCH(
         if (body.is_verified !== undefined) {
             body.aadhaar_verified = body.is_verified
         }
+
+        // Keep is_active and status in sync
+        if (body.status !== undefined) {
+            body.is_active = body.status === 'active'
+        } else if (body.is_active !== undefined) {
+            body.status = body.is_active ? 'active' : 'pending'
+        }
         
         const { data, error } = await supabase
             .from('vendors')
