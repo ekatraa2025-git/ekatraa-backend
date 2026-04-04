@@ -20,7 +20,7 @@ export async function GET(
         supabase
             .from('cart_items')
             .select(
-                'id, service_id, quantity, unit_price, options, created_at, offerable_services(id, name, image_url, price_min, price_max, category_id, categories(id, name))'
+                'id, service_id, quantity, unit_price, options, created_at, offerable_services(id, name, image_url, price_min, price_max, category_id, qty_label_basic, qty_label_classic_value, qty_label_signature, qty_label_prestige, qty_label_royal, qty_label_imperial, sub_variety_basic, sub_variety_classic_value, sub_variety_signature, sub_variety_prestige, sub_variety_royal, sub_variety_imperial, categories(id, name))'
             )
             .eq('cart_id', id),
     ])

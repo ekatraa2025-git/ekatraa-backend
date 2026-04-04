@@ -14,9 +14,17 @@ type OrderItem = {
     name: string
     quantity: number
     unit_price: number
+    service_id?: string | null
     allocated_vendor_id?: string | null
     allocated_vendor_name?: string | null
     allocated_vendor_city?: string | null
+}
+
+type EligibleRow = {
+    id: string
+    business_name: string
+    city?: string | null
+    match: 'catalog_id' | 'name'
 }
 
 export default function OrderDetailPage() {
@@ -43,19 +51,37 @@ export default function OrderDetailPage() {
     const [saving, setSaving] = useState(false)
     const [newStatus, setNewStatus] = useState('')
     const [vendors, setVendors] = useState<{ id: string; business_name: string; city?: string }[]>([])
+    const [eligibleByItem, setEligibleByItem] = useState<Record<string, EligibleRow[]>>({})
+    const [overrideAllocate, setOverrideAllocate] = useState<Record<string, boolean>>({})
     const [allocatingItemId, setAllocatingItemId] = useState<string | null>(null)
     const [selectedVendorByItem, setSelectedVendorByItem] = useState<Record<string, string>>({})
 
     const loadOrder = () => {
         fetch(`/api/admin/orders/${id}`)
             .then((r) => r.json())
-            .then((data) => {
+            .then(async (data) => {
                 if (data?.error) {
                     toast.error(data.error)
                     router.push('/admin/orders')
                 } else {
                     setOrder(data)
                     setNewStatus(data?.status ?? '')
+                    const items = data?.items as OrderItem[] | undefined
+                    if (items?.length) {
+                        const elig: Record<string, EligibleRow[]> = {}
+                        await Promise.all(
+                            items.map(async (it) => {
+                                const r = await fetch(
+                                    `/api/admin/orders/${id}/eligible-vendors?order_item_id=${encodeURIComponent(it.id)}`
+                                )
+                                const j = await r.json()
+                                if (j.eligible && Array.isArray(j.eligible)) {
+                                    elig[it.id] = j.eligible as EligibleRow[]
+                                }
+                            })
+                        )
+                        setEligibleByItem(elig)
+                    }
                 }
                 setLoading(false)
             })
@@ -80,7 +106,11 @@ export default function OrderDetailPage() {
         const res = await fetch(`/api/admin/orders/${id}/allocate-item`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ order_item_id: orderItemId, vendor_id: vendorId }),
+            body: JSON.stringify({
+                order_item_id: orderItemId,
+                vendor_id: vendorId,
+                override: overrideAllocate[orderItemId] === true,
+            }),
         })
         const data = await res.json()
         setAllocatingItemId(null)
@@ -206,18 +236,43 @@ export default function OrderDetailPage() {
                                                     </Button>
                                                 </div>
                                             ) : (
-                                                <div className="flex items-center gap-2">
+                                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
+                                                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={overrideAllocate[item.id] === true}
+                                                            onChange={(e) =>
+                                                                setOverrideAllocate((p) => ({
+                                                                    ...p,
+                                                                    [item.id]: e.target.checked,
+                                                                }))
+                                                            }
+                                                        />
+                                                        Show all vendors (override)
+                                                    </label>
                                                     <select
-                                                        className="rounded-md border px-3 py-1.5 text-sm min-w-[180px]"
+                                                        className="rounded-md border px-3 py-1.5 text-sm min-w-[200px]"
                                                         value={selectedVendorByItem[item.id] ?? ''}
                                                         onChange={(e) => setSelectedVendorByItem((p) => ({ ...p, [item.id]: e.target.value }))}
                                                     >
-                                                        <option value="">Select vendor (location)</option>
-                                                        {vendors.map((v) => (
-                                                            <option key={v.id} value={v.id}>
-                                                                {v.business_name} {v.city ? `— ${v.city}` : ''}
-                                                            </option>
-                                                        ))}
+                                                        <option value="">
+                                                            {overrideAllocate[item.id]
+                                                                ? 'Select any vendor'
+                                                                : 'Select matching vendor'}
+                                                        </option>
+                                                        {!overrideAllocate[item.id] &&
+                                                            (eligibleByItem[item.id] ?? []).map((v) => (
+                                                                <option key={v.id} value={v.id}>
+                                                                    {v.business_name}
+                                                                    {v.city ? ` — ${v.city}` : ''} ({v.match})
+                                                                </option>
+                                                            ))}
+                                                        {overrideAllocate[item.id] &&
+                                                            vendors.map((v) => (
+                                                                <option key={v.id} value={v.id}>
+                                                                    {v.business_name} {v.city ? `— ${v.city}` : ''}
+                                                                </option>
+                                                            ))}
                                                     </select>
                                                     <Button
                                                         size="sm"

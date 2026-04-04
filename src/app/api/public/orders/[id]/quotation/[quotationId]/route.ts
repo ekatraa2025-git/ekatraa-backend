@@ -1,6 +1,12 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { getEndUserIdFromRequest } from '@/lib/user-auth'
+import { sendNotificationToVendor, sendNotificationToUser } from '@/lib/notifications'
+import {
+    fetchPlatformProtectionSettings,
+    computeProtectionAmountInr,
+    computeAdvanceInrFromBase,
+} from '@/lib/booking-protection'
 
 /**
  * PATCH /api/public/orders/[id]/quotation/[quotationId]
@@ -33,7 +39,9 @@ export async function PATCH(
 
     const { data: order, error: orderErr } = await supabase
         .from('orders')
-        .select('id, user_id, vendor_id, total_amount, advance_amount')
+        .select(
+            'id, user_id, vendor_id, total_amount, advance_amount, booking_protection, protection_amount, contact_name'
+        )
         .eq('id', orderId)
         .single()
 
@@ -75,11 +83,76 @@ export async function PATCH(
             .update({ vendor_id: quotation.vendor_id, status: 'confirmed' })
             .eq('id', orderId)
 
+        const balanceNote = `Quotation accepted. Vendor allocated. Balance payable: ₹${(Number(quotation.amount) - Number(order?.advance_amount || 0)).toLocaleString()}`
         await supabase.from('order_status_history').insert({
             order_id: orderId,
             status: 'confirmed',
-            note: `Quotation accepted. Vendor allocated. Balance payable: ₹${(Number(quotation.amount) - Number(order?.advance_amount || 0)).toLocaleString()}`,
+            note: balanceNote,
         })
+
+        const settings = await fetchPlatformProtectionSettings()
+        const totalAmt = Number(order.total_amount ?? 0)
+        const prot = computeProtectionAmountInr(
+            totalAmt,
+            settings,
+            order.booking_protection === true
+        )
+        const suggestedAdvance = computeAdvanceInrFromBase(totalAmt, prot, 20)
+        const advancePaid = Number(order.advance_amount || 0)
+        const needsAdvancePayment = advancePaid <= 0 && suggestedAdvance > 0
+
+        try {
+            await sendNotificationToVendor({
+                vendor_id: quotation.vendor_id,
+                type: 'quotation',
+                title: 'Quotation accepted',
+                message: `The customer accepted your quotation for order ${orderId.slice(0, 8)}…${needsAdvancePayment ? ' Awaiting customer advance payment.' : ''}`,
+                data: { order_id: orderId, quotation_id: quotationId, action: 'accepted' },
+            })
+        } catch {
+            /* non-fatal */
+        }
+        try {
+            await sendNotificationToUser({
+                user_id: userId,
+                type: 'quotation',
+                title: 'Quotation accepted',
+                message: needsAdvancePayment
+                    ? `Please complete your 20% advance (₹${Math.round(suggestedAdvance).toLocaleString('en-IN')}) to proceed.`
+                    : 'Your booking is confirmed with the vendor.',
+                data: {
+                    order_id: orderId,
+                    quotation_id: quotationId,
+                    requires_advance_payment: needsAdvancePayment,
+                    suggested_advance_inr: suggestedAdvance,
+                },
+            })
+        } catch {
+            /* non-fatal */
+        }
+
+        return NextResponse.json({
+            ...updated,
+            order: {
+                requires_advance_payment: needsAdvancePayment,
+                suggested_advance_inr: suggestedAdvance,
+                advance_paid_inr: advancePaid,
+            },
+        })
+    }
+
+    if (action === 'reject') {
+        try {
+            await sendNotificationToVendor({
+                vendor_id: quotation.vendor_id,
+                type: 'quotation',
+                title: 'Quotation declined',
+                message: `The customer declined your quotation for order ${orderId.slice(0, 8)}…`,
+                data: { order_id: orderId, quotation_id: quotationId, action: 'rejected' },
+            })
+        } catch {
+            /* non-fatal */
+        }
     }
 
     return NextResponse.json(updated)

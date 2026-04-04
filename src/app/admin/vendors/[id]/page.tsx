@@ -150,6 +150,7 @@ export default function EditVendorPage() {
                 price_unit: 'event',
                 category: formData.category || '',
             }
+            if (selectedOfferableService?.id) body.catalog_service_id = selectedOfferableService.id
             if (tierKeySingle) body.pricing_tier = catalogTierLabel(tierKeySingle)
             if (serviceImageForAdd) body.image_url = serviceImageForAdd
             const res = await fetch('/api/admin/services', {
@@ -232,6 +233,7 @@ export default function EditVendorPage() {
                         price_unit: 'event',
                         category: formData.category || '',
                         pricing_tier: catalogTierLabel(tier),
+                        catalog_service_id: svc.id,
                     }
                     const res = await fetch('/api/admin/services', {
                         method: 'POST',

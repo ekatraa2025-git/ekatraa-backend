@@ -90,6 +90,38 @@ export async function notifyVendorActivated(
  * Send a notification to a vendor
  * This function can be called from anywhere in the backend
  */
+/**
+ * In-app notification for end users (Supabase realtime).
+ */
+export async function sendNotificationToUser(params: {
+  user_id: string
+  type: string
+  title: string
+  message: string
+  data?: Record<string, unknown>
+}): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('user_notifications').insert([
+      {
+        user_id: params.user_id,
+        type: params.type,
+        title: params.title,
+        message: params.message,
+        data: params.data ?? {},
+        read: false,
+      },
+    ])
+    if (error) {
+      console.error('user_notifications insert:', error.message)
+      return false
+    }
+    return true
+  } catch (e) {
+    console.error('sendNotificationToUser:', e)
+    return false
+  }
+}
+
 export async function sendNotificationToVendor(payload: NotificationPayload): Promise<boolean> {
   try {
     const { error } = await supabase

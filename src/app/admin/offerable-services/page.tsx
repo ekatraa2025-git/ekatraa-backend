@@ -40,9 +40,24 @@ export default function OfferableServicesPage() {
     const [filtered, setFiltered] = useState<typeof items>([])
     const [loading, setLoading] = useState(true)
     const [deleteTarget, setDeleteTarget] = useState<{id: string; name: string} | null>(null)
+    const [occasions, setOccasions] = useState<{ id: string; name: string }[]>([])
+    const [occasionFilter, setOccasionFilter] = useState('')
 
     useEffect(() => {
-        fetch('/api/admin/offerable-services')
+        fetch('/api/admin/occasions')
+            .then((r) => r.json())
+            .then((data) => {
+                if (Array.isArray(data)) setOccasions(data)
+            })
+            .catch(() => {})
+    }, [])
+
+    useEffect(() => {
+        setLoading(true)
+        const q = occasionFilter
+            ? `?occasion_id=${encodeURIComponent(occasionFilter)}`
+            : ''
+        fetch(`/api/admin/offerable-services${q}`)
             .then((r) => r.json())
             .then((data) => {
                 if (!data.error) {
@@ -52,7 +67,7 @@ export default function OfferableServicesPage() {
                 }
                 setLoading(false)
             })
-    }, [])
+    }, [occasionFilter])
 
     const handleSearch = (val: string) => {
         const v = val.toLowerCase()
@@ -161,6 +176,23 @@ export default function OfferableServicesPage() {
 
     return (
         <DefaultLayout>
+            <div className="mb-4 flex flex-wrap items-end gap-3">
+                <div>
+                    <label className="text-sm font-medium">Filter by occasion</label>
+                    <select
+                        className="mt-1 block rounded-md border px-3 py-2 text-sm"
+                        value={occasionFilter}
+                        onChange={(e) => setOccasionFilter(e.target.value)}
+                    >
+                        <option value="">All occasions</option>
+                        {occasions.map((o) => (
+                            <option key={o.id} value={o.id}>
+                                {o.name}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            </div>
             <DataTableView
                 title="Services"
                 description="Offerable services in the new flow (category-based, no subcategory)."

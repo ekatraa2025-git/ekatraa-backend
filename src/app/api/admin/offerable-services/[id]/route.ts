@@ -24,6 +24,13 @@ export async function PATCH(
 ) {
     const { id } = await params
     const body = await req.json()
+    const occasionIds: string[] | undefined = Array.isArray(body.occasion_ids)
+        ? body.occasion_ids.filter((x: unknown) => typeof x === 'string')
+        : undefined
+    const replaceOccasions = body.replace_occasion_links === true
+    delete body.occasion_ids
+    delete body.replace_occasion_links
+
     const { data, error } = await supabase
         .from('offerable_services')
         .update(body)
@@ -34,6 +41,21 @@ export async function PATCH(
     if (error) {
         return NextResponse.json({ error: error.message }, { status: 400 })
     }
+
+    if (occasionIds && replaceOccasions) {
+        await supabase.from('service_occasions').delete().eq('service_id', id)
+        if (occasionIds.length > 0) {
+            const rows = occasionIds.map((occasion_id) => ({ occasion_id, service_id: id }))
+            const { error: soErr } = await supabase.from('service_occasions').insert(rows)
+            if (soErr) {
+                return NextResponse.json(
+                    { error: 'Updated service but occasion links failed: ' + soErr.message, ...data },
+                    { status: 500 }
+                )
+            }
+        }
+    }
+
     return NextResponse.json(data)
 }
 

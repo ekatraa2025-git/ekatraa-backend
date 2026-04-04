@@ -13,12 +13,12 @@ import { RichTextEditor } from '@/components/Common/RichTextEditor'
 import { toast } from 'sonner'
 
 const TIER_LABELS = [
-    { key: 'price_basic', label: 'Basic', qtyKey: 'qty_label_basic' },
-    { key: 'price_classic_value', label: 'Classic Value', qtyKey: 'qty_label_classic_value' },
-    { key: 'price_signature', label: 'Signature', qtyKey: 'qty_label_signature' },
-    { key: 'price_prestige', label: 'Prestige', qtyKey: 'qty_label_prestige' },
-    { key: 'price_royal', label: 'Royal', qtyKey: 'qty_label_royal' },
-    { key: 'price_imperial', label: 'Imperial', qtyKey: 'qty_label_imperial' },
+    { key: 'price_basic', label: 'Basic', qtyKey: 'qty_label_basic', subKey: 'sub_variety_basic' },
+    { key: 'price_classic_value', label: 'Classic Value', qtyKey: 'qty_label_classic_value', subKey: 'sub_variety_classic_value' },
+    { key: 'price_signature', label: 'Signature', qtyKey: 'qty_label_signature', subKey: 'sub_variety_signature' },
+    { key: 'price_prestige', label: 'Prestige', qtyKey: 'qty_label_prestige', subKey: 'sub_variety_prestige' },
+    { key: 'price_royal', label: 'Royal', qtyKey: 'qty_label_royal', subKey: 'sub_variety_royal' },
+    { key: 'price_imperial', label: 'Imperial', qtyKey: 'qty_label_imperial', subKey: 'sub_variety_imperial' },
 ] as const
 
 type Occasion = { id: string; name: string }
@@ -49,6 +49,12 @@ export default function NewOfferableServicePage() {
         qty_label_prestige: '' as string,
         qty_label_royal: '' as string,
         qty_label_imperial: '' as string,
+        sub_variety_basic: '' as string,
+        sub_variety_classic_value: '' as string,
+        sub_variety_signature: '' as string,
+        sub_variety_prestige: '' as string,
+        sub_variety_royal: '' as string,
+        sub_variety_imperial: '' as string,
         is_active: true,
         is_special_catalog: false,
     })
@@ -126,7 +132,14 @@ export default function NewOfferableServicePage() {
             qty_label_prestige: form.qty_label_prestige || null,
             qty_label_royal: form.qty_label_royal || null,
             qty_label_imperial: form.qty_label_imperial || null,
+            sub_variety_basic: form.sub_variety_basic || null,
+            sub_variety_classic_value: form.sub_variety_classic_value || null,
+            sub_variety_signature: form.sub_variety_signature || null,
+            sub_variety_prestige: form.sub_variety_prestige || null,
+            sub_variety_royal: form.sub_variety_royal || null,
+            sub_variety_imperial: form.sub_variety_imperial || null,
             ...tierValues,
+            occasion_ids: form.occasion_id ? [form.occasion_id] : [],
         }
         const res = await fetch('/api/admin/offerable-services', {
             method: 'POST',
@@ -236,15 +249,21 @@ export default function NewOfferableServicePage() {
                         </div>
                         <div>
                             <label className="text-sm font-medium mb-2 block">
-                                Pricing (tiers) — leave empty if not applicable. Qty label appears alongside the price (e.g. &quot;Upto 100&quot;, &quot;1 set&quot;).
+                                Pricing (tiers) — leave empty if not applicable. Unit label and sub variety appear alongside the price.
                             </label>
-                            <div className="space-y-2 rounded-md border p-3">
-                                {TIER_LABELS.map(({ key, label, qtyKey }) => (
+                            <div className="space-y-2 rounded-md border p-3 overflow-x-auto">
+                                <div className="flex min-w-[640px] items-center gap-2 pb-1 text-xs font-medium text-muted-foreground">
+                                    <span className="w-28 shrink-0">Tier</span>
+                                    <span className="w-28 shrink-0">Price ₹</span>
+                                    <span className="w-36 shrink-0">Unit / qty label</span>
+                                    <span className="min-w-[140px] flex-1">Sub variety</span>
+                                </div>
+                                {TIER_LABELS.map(({ key, label, qtyKey, subKey }) => (
                                     <div
                                         key={key}
-                                        className="flex items-center gap-3"
+                                        className="flex min-w-[640px] flex-wrap items-center gap-2 sm:flex-nowrap"
                                     >
-                                        <label className="w-32 text-sm">{label}</label>
+                                        <label className="w-28 shrink-0 text-sm">{label}</label>
                                         <Input
                                             type="number"
                                             min={0}
@@ -257,7 +276,7 @@ export default function NewOfferableServicePage() {
                                                     [key]: e.target.value,
                                                 }))
                                             }
-                                            className="max-w-40"
+                                            className="w-28 shrink-0"
                                         />
                                         <Input
                                             type="text"
@@ -269,7 +288,19 @@ export default function NewOfferableServicePage() {
                                                     [qtyKey]: e.target.value,
                                                 }))
                                             }
-                                            className="max-w-48"
+                                            className="w-36 shrink-0"
+                                        />
+                                        <Input
+                                            type="text"
+                                            placeholder="Sub variety"
+                                            value={form[subKey as keyof typeof form] as string}
+                                            onChange={(e) =>
+                                                setForm((p) => ({
+                                                    ...p,
+                                                    [subKey]: e.target.value,
+                                                }))
+                                            }
+                                            className="min-w-[120px] flex-1"
                                         />
                                     </div>
                                 ))}

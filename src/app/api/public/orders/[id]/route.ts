@@ -34,10 +34,33 @@ export async function GET(
         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
-    const { data: items } = await supabase
+    const { data: rawItems } = await supabase
         .from('order_items')
-        .select('id, service_id, name, quantity, unit_price, options')
+        .select(
+            `id, service_id, name, quantity, unit_price, options,
+            offerable_services (
+              id, name, category_id,
+              qty_label_basic, qty_label_classic_value, qty_label_signature, qty_label_prestige, qty_label_royal, qty_label_imperial,
+              sub_variety_basic, sub_variety_classic_value, sub_variety_signature, sub_variety_prestige, sub_variety_royal, sub_variety_imperial,
+              categories (id, name)
+            )`
+        )
         .eq('order_id', id)
+
+    const items = (rawItems ?? []).map((row: Record<string, unknown>) => {
+        const os = row.offerable_services as Record<string, unknown> | null | undefined
+        let service: Record<string, unknown> | undefined
+        if (os && typeof os === 'object') {
+            const catRaw = os.categories as { id?: string; name?: string } | { id?: string; name?: string }[] | null | undefined
+            const cat = Array.isArray(catRaw) ? catRaw[0] : catRaw
+            const category =
+                cat && typeof cat === 'object' ? { id: cat.id, name: cat.name } : undefined
+            const { categories: _c, ...rest } = os
+            service = { ...rest, category }
+        }
+        const { offerable_services: _o, ...rest } = row
+        return { ...rest, service }
+    })
 
     const { data: history } = await supabase
         .from('order_status_history')
