@@ -2,14 +2,19 @@ import crypto from 'crypto'
 import Razorpay from 'razorpay'
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getEndUserIdFromRequest } from '@/lib/user-auth'
 
 /**
  * POST /api/public/payment/verify-balance
  * Verifies Razorpay signature for balance payment and updates order.
- * Body: { razorpay_payment_id, razorpay_order_id, razorpay_signature, order_id, user_id }
+ * Requires Authorization: Bearer (same as create-balance-order).
+ * Body: { razorpay_payment_id, razorpay_order_id, razorpay_signature, order_id }
  */
 export async function POST(req: Request) {
     try {
+        const { userId, error: authError } = await getEndUserIdFromRequest(req)
+        if (authError) return authError
+
         const keyId = process.env.RAZORPAY_KEY_ID
         const keySecret = process.env.RAZORPAY_KEY_SECRET
         if (!keyId || !keySecret) {
@@ -17,7 +22,7 @@ export async function POST(req: Request) {
         }
 
         const body = await req.json()
-        const { razorpay_payment_id, razorpay_order_id, razorpay_signature, order_id, user_id } = body
+        const { razorpay_payment_id, razorpay_order_id, razorpay_signature, order_id } = body
 
         if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature || !order_id) {
             return NextResponse.json({ error: 'Missing payment or order details' }, { status: 400 })
@@ -58,7 +63,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Order not found' }, { status: 404 })
         }
 
-        if (user_id && order.user_id !== user_id) {
+        if (order.user_id !== userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
         }
 
