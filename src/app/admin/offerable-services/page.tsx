@@ -41,7 +41,9 @@ export default function OfferableServicesPage() {
     const [loading, setLoading] = useState(true)
     const [deleteTarget, setDeleteTarget] = useState<{id: string; name: string} | null>(null)
     const [occasions, setOccasions] = useState<{ id: string; name: string }[]>([])
-    const [occasionFilter, setOccasionFilter] = useState('')
+    const [vendors, setVendors] = useState<{ id: string; business_name: string }[]>([])
+    const [occasionFilterIds, setOccasionFilterIds] = useState<string[]>([])
+    const [vendorFilterIds, setVendorFilterIds] = useState<string[]>([])
 
     useEffect(() => {
         fetch('/api/admin/occasions')
@@ -50,13 +52,24 @@ export default function OfferableServicesPage() {
                 if (Array.isArray(data)) setOccasions(data)
             })
             .catch(() => {})
+        fetch('/api/admin/vendors?status=active')
+            .then((r) => r.json())
+            .then((data) => {
+                if (Array.isArray(data)) setVendors(data)
+            })
+            .catch(() => {})
     }, [])
 
     useEffect(() => {
         setLoading(true)
-        const q = occasionFilter
-            ? `?occasion_id=${encodeURIComponent(occasionFilter)}`
-            : ''
+        const params = new URLSearchParams()
+        if (occasionFilterIds.length > 0) {
+            params.set('occasion_ids', occasionFilterIds.join(','))
+        }
+        if (vendorFilterIds.length > 0) {
+            params.set('vendor_ids', vendorFilterIds.join(','))
+        }
+        const q = params.toString() ? `?${params.toString()}` : ''
         fetch(`/api/admin/offerable-services${q}`)
             .then((r) => r.json())
             .then((data) => {
@@ -67,7 +80,18 @@ export default function OfferableServicesPage() {
                 }
                 setLoading(false)
             })
-    }, [occasionFilter])
+    }, [occasionFilterIds, vendorFilterIds])
+
+    const toggleOccasionFilter = (id: string) => {
+        setOccasionFilterIds((prev) =>
+            prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+        )
+    }
+    const toggleVendorFilter = (id: string) => {
+        setVendorFilterIds((prev) =>
+            prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+        )
+    }
 
     const handleSearch = (val: string) => {
         const v = val.toLowerCase()
@@ -176,21 +200,40 @@ export default function OfferableServicesPage() {
 
     return (
         <DefaultLayout>
-            <div className="mb-4 flex flex-wrap items-end gap-3">
-                <div>
-                    <label className="text-sm font-medium">Filter by occasion</label>
-                    <select
-                        className="mt-1 block rounded-md border px-3 py-2 text-sm"
-                        value={occasionFilter}
-                        onChange={(e) => setOccasionFilter(e.target.value)}
-                    >
-                        <option value="">All occasions</option>
+            <div className="mb-4 flex flex-wrap gap-6">
+                <div className="min-w-[220px] max-w-md">
+                    <label className="text-sm font-medium">Occasions (multi)</label>
+                    <div className="mt-1 max-h-40 overflow-y-auto rounded-md border px-3 py-2 text-sm">
                         {occasions.map((o) => (
-                            <option key={o.id} value={o.id}>
-                                {o.name}
-                            </option>
+                            <label key={o.id} className="flex cursor-pointer items-center gap-2 py-1">
+                                <input
+                                    type="checkbox"
+                                    checked={occasionFilterIds.includes(o.id)}
+                                    onChange={() => toggleOccasionFilter(o.id)}
+                                />
+                                <span>{o.name}</span>
+                            </label>
                         ))}
-                    </select>
+                    </div>
+                    <p className="text-muted-foreground mt-1 text-xs">Leave empty for all. Services linked to any selected occasion.</p>
+                </div>
+                <div className="min-w-[220px] max-w-md">
+                    <label className="text-sm font-medium">Vendors (multi)</label>
+                    <div className="mt-1 max-h-40 overflow-y-auto rounded-md border px-3 py-2 text-sm">
+                        {vendors.map((v) => (
+                            <label key={v.id} className="flex cursor-pointer items-center gap-2 py-1">
+                                <input
+                                    type="checkbox"
+                                    checked={vendorFilterIds.includes(v.id)}
+                                    onChange={() => toggleVendorFilter(v.id)}
+                                />
+                                <span>{v.business_name || v.id}</span>
+                            </label>
+                        ))}
+                    </div>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                        Optional. Empty vendor rows in catalog = all vendors; otherwise match assigned vendors.
+                    </p>
                 </div>
             </div>
             <DataTableView

@@ -15,7 +15,17 @@ export async function GET(
     if (error || !data) {
         return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
-    return NextResponse.json(data)
+
+    const [{ data: occRows }, { data: venRows }] = await Promise.all([
+        supabase.from('service_occasions').select('occasion_id').eq('service_id', id),
+        supabase.from('offerable_service_vendors').select('vendor_id').eq('offerable_service_id', id),
+    ])
+
+    return NextResponse.json({
+        ...data,
+        occasion_ids: (occRows ?? []).map((r: { occasion_id: string }) => r.occasion_id),
+        vendor_ids: (venRows ?? []).map((r: { vendor_id: string }) => r.vendor_id),
+    })
 }
 
 export async function PATCH(
@@ -28,8 +38,14 @@ export async function PATCH(
         ? body.occasion_ids.filter((x: unknown) => typeof x === 'string')
         : undefined
     const replaceOccasions = body.replace_occasion_links === true
+    const vendorIds: string[] | undefined = Array.isArray(body.vendor_ids)
+        ? body.vendor_ids.filter((x: unknown) => typeof x === 'string')
+        : undefined
+    const replaceVendors = body.replace_vendor_links === true
     delete body.occasion_ids
     delete body.replace_occasion_links
+    delete body.vendor_ids
+    delete body.replace_vendor_links
 
     const { data, error } = await supabase
         .from('offerable_services')
@@ -50,6 +66,23 @@ export async function PATCH(
             if (soErr) {
                 return NextResponse.json(
                     { error: 'Updated service but occasion links failed: ' + soErr.message, ...data },
+                    { status: 500 }
+                )
+            }
+        }
+    }
+
+    if (vendorIds !== undefined && replaceVendors) {
+        await supabase.from('offerable_service_vendors').delete().eq('offerable_service_id', id)
+        if (vendorIds.length > 0) {
+            const rows = vendorIds.map((vendor_id) => ({
+                offerable_service_id: id,
+                vendor_id,
+            }))
+            const { error: vErr } = await supabase.from('offerable_service_vendors').insert(rows)
+            if (vErr) {
+                return NextResponse.json(
+                    { error: 'Updated service but vendor links failed: ' + vErr.message, ...data },
                     { status: 500 }
                 )
             }

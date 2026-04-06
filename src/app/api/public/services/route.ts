@@ -8,13 +8,23 @@ import { NextResponse } from 'next/server'
  */
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
-    const occasionId = searchParams.get('occasion_id')
+    const occasionIdSingle = searchParams.get('occasion_id')
+    const occasionIdsParam = searchParams.get('occasion_ids')
+    const occasionIdsList =
+        occasionIdsParam && occasionIdsParam.trim()
+            ? occasionIdsParam
+                  .split(',')
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+            : occasionIdSingle
+              ? [occasionIdSingle]
+              : []
     const categoryId = searchParams.get('category_id')
     const city = searchParams.get('city')
     const search = searchParams.get('search')
     const eventType = searchParams.get('eventType') || searchParams.get('event_type')
 
-    const useNewModel = occasionId ?? categoryId ?? city ?? search
+    const useNewModel = Boolean(occasionIdsList.length || categoryId || city || search)
 
     if (useNewModel) {
         let query = supabase
@@ -33,16 +43,20 @@ export async function GET(req: Request) {
             query = query.or(`name.ilike.%${search.trim()}%,description.ilike.%${search.trim()}%`)
         }
 
-        if (occasionId) {
+        if (occasionIdsList.length > 0) {
             const [{ data: links }, { data: services, error: svcError }] = await Promise.all([
-                supabase.from('service_occasions').select('service_id').eq('occasion_id', occasionId),
+                supabase
+                    .from('service_occasions')
+                    .select('service_id')
+                    .in('occasion_id', occasionIdsList),
                 query,
             ])
             if (svcError) return NextResponse.json({ error: svcError.message }, { status: 500 })
             const allowedIds = new Set((links ?? []).map((l: { service_id: string }) => l.service_id))
-            const list = allowedIds.size > 0
-                ? (services ?? []).filter((s: { id: string }) => allowedIds.has(s.id))
-                : (services ?? [])
+            const list =
+                allowedIds.size > 0
+                    ? (services ?? []).filter((s: { id: string }) => allowedIds.has(s.id))
+                    : (services ?? [])
             return NextResponse.json(list)
         }
 

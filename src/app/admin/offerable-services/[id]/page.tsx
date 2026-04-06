@@ -24,17 +24,21 @@ const TIER_LABELS = [
 type Occasion = { id: string; name: string }
 type Category = { id: string; name: string }
 
+function toggleId(list: string[], id: string): string[] {
+    return list.includes(id) ? list.filter((x) => x !== id) : [...list, id]
+}
+
 export default function EditOfferableServicePage() {
     const router = useRouter()
     const params = useParams()
     const id = params.id as string
     const [loading, setLoading] = useState(false)
     const [occasions, setOccasions] = useState<Occasion[]>([])
-    const [categoriesByOccasion, setCategoriesByOccasion] = useState<
-        Record<string, Category[]>
-    >({})
+    const [vendors, setVendors] = useState<{ id: string; business_name: string }[]>([])
+    const [categories, setCategories] = useState<Category[]>([])
     const [form, setForm] = useState({
-        occasion_id: '',
+        occasion_ids: [] as string[],
+        vendor_ids: [] as string[],
         category_id: '',
         name: '',
         description: '',
@@ -61,138 +65,107 @@ export default function EditOfferableServicePage() {
         is_active: true,
         is_special_catalog: false,
     })
-    const categories = form.occasion_id
-        ? categoriesByOccasion[form.occasion_id] ?? []
-        : []
 
     useEffect(() => {
-        fetch('/api/admin/occasions')
-            .then((r) => r.json())
-            .then((data) => {
-                if (Array.isArray(data)) setOccasions(data)
+        Promise.all([
+            fetch('/api/admin/occasions').then((r) => r.json()),
+            fetch('/api/admin/vendors?status=active').then((r) => r.json()),
+        ])
+            .then(([occData, venData]) => {
+                if (Array.isArray(occData)) setOccasions(occData)
+                if (Array.isArray(venData)) setVendors(venData)
             })
             .catch(() => {})
     }, [])
 
     useEffect(() => {
-        if (!form.occasion_id) return
-        fetch(
-            `/api/public/categories?occasion_id=${encodeURIComponent(form.occasion_id)}`,
-        )
-            .then((r) => r.json())
-            .then((data) => {
-                if (Array.isArray(data))
-                    setCategoriesByOccasion((prev) => ({
-                        ...prev,
-                        [form.occasion_id]: data,
-                    }))
-            })
-            .catch(() => {})
-    }, [form.occasion_id])
-
-    useEffect(() => {
         fetch(`/api/admin/offerable-services/${id}`)
             .then((r) => r.json())
-            .then((serviceData) => {
+            .then((serviceData: Record<string, unknown>) => {
                 if (serviceData?.error) return
                 const svc = serviceData as Record<string, unknown>
-                const categoryId = (svc.category_id as string) ?? ''
-                if (!categoryId) {
-                    setForm({
-                        occasion_id: '',
-                        category_id: '',
-                        name: (svc.name as string) ?? '',
-                        description: (svc.description as string) ?? '',
-                        display_order: Number(svc.display_order) ?? 0,
-                        image_url: (svc.image_url as string) ?? '',
-                        price_basic: svc.price_basic != null ? String(svc.price_basic) : '',
-                        price_classic_value: svc.price_classic_value != null ? String(svc.price_classic_value) : '',
-                        price_signature: svc.price_signature != null ? String(svc.price_signature) : '',
-                        price_prestige: svc.price_prestige != null ? String(svc.price_prestige) : '',
-                        price_royal: svc.price_royal != null ? String(svc.price_royal) : '',
-                        price_imperial: svc.price_imperial != null ? String(svc.price_imperial) : '',
-                        qty_label_basic: (svc.qty_label_basic as string) ?? '',
-                        qty_label_classic_value: (svc.qty_label_classic_value as string) ?? '',
-                        qty_label_signature: (svc.qty_label_signature as string) ?? '',
-                        qty_label_prestige: (svc.qty_label_prestige as string) ?? '',
-                        qty_label_royal: (svc.qty_label_royal as string) ?? '',
-                        qty_label_imperial: (svc.qty_label_imperial as string) ?? '',
-                        sub_variety_basic: (svc.sub_variety_basic as string) ?? '',
-                        sub_variety_classic_value: (svc.sub_variety_classic_value as string) ?? '',
-                        sub_variety_signature: (svc.sub_variety_signature as string) ?? '',
-                        sub_variety_prestige: (svc.sub_variety_prestige as string) ?? '',
-                        sub_variety_royal: (svc.sub_variety_royal as string) ?? '',
-                        sub_variety_imperial: (svc.sub_variety_imperial as string) ?? '',
-                        is_active: svc.is_active !== false,
-                        is_special_catalog: svc.is_special_catalog === true,
-                    })
-                    return
-                }
-                fetch(
-                    `/api/admin/occasion-categories?category_id=${encodeURIComponent(categoryId)}`,
-                )
-                    .then((r) => r.json())
-                    .then((mappingData) => {
-                        let occasionId = ''
-                        if (
-                            Array.isArray(mappingData) &&
-                            mappingData.length > 0
-                        ) {
-                            const first = mappingData[0] as {
-                                occasion_id?: string
-                            }
-                            occasionId = first.occasion_id ?? ''
-                        }
-                        setForm({
-                            occasion_id: occasionId,
-                            category_id: categoryId,
-                            name: (svc.name as string) ?? '',
-                            description: (svc.description as string) ?? '',
-                            display_order: Number(svc.display_order) ?? 0,
-                            image_url: (svc.image_url as string) ?? '',
-                            price_basic: svc.price_basic != null ? String(svc.price_basic) : '',
-                            price_classic_value: svc.price_classic_value != null ? String(svc.price_classic_value) : '',
-                            price_signature: svc.price_signature != null ? String(svc.price_signature) : '',
-                            price_prestige: svc.price_prestige != null ? String(svc.price_prestige) : '',
-                            price_royal: svc.price_royal != null ? String(svc.price_royal) : '',
-                            price_imperial: svc.price_imperial != null ? String(svc.price_imperial) : '',
-                            qty_label_basic: (svc.qty_label_basic as string) ?? '',
-                            qty_label_classic_value: (svc.qty_label_classic_value as string) ?? '',
-                            qty_label_signature: (svc.qty_label_signature as string) ?? '',
-                            qty_label_prestige: (svc.qty_label_prestige as string) ?? '',
-                            qty_label_royal: (svc.qty_label_royal as string) ?? '',
-                            qty_label_imperial: (svc.qty_label_imperial as string) ?? '',
-                            sub_variety_basic: (svc.sub_variety_basic as string) ?? '',
-                            sub_variety_classic_value: (svc.sub_variety_classic_value as string) ?? '',
-                            sub_variety_signature: (svc.sub_variety_signature as string) ?? '',
-                            sub_variety_prestige: (svc.sub_variety_prestige as string) ?? '',
-                            sub_variety_royal: (svc.sub_variety_royal as string) ?? '',
-                            sub_variety_imperial: (svc.sub_variety_imperial as string) ?? '',
-                            is_active: svc.is_active !== false,
-                            is_special_catalog: svc.is_special_catalog === true,
-                        })
-                        if (occasionId) {
-                            fetch(
-                                `/api/public/categories?occasion_id=${encodeURIComponent(occasionId)}`,
-                            )
-                                .then((r) => r.json())
-                                .then((data) => {
-                                    if (Array.isArray(data))
-                                        setCategoriesByOccasion((prev) => ({
-                                            ...prev,
-                                            [occasionId]: data,
-                                        }))
-                                })
-                                .catch(() => {})
-                        }
-                    })
+                const occasion_ids = Array.isArray(serviceData.occasion_ids)
+                    ? (serviceData.occasion_ids as string[])
+                    : []
+                const vendor_ids = Array.isArray(serviceData.vendor_ids)
+                    ? (serviceData.vendor_ids as string[])
+                    : []
+                setForm({
+                    occasion_ids,
+                    vendor_ids,
+                    category_id: (svc.category_id as string) ?? '',
+                    name: (svc.name as string) ?? '',
+                    description: (svc.description as string) ?? '',
+                    display_order: Number(svc.display_order) ?? 0,
+                    image_url: (svc.image_url as string) ?? '',
+                    price_basic: svc.price_basic != null ? String(svc.price_basic) : '',
+                    price_classic_value:
+                        svc.price_classic_value != null ? String(svc.price_classic_value) : '',
+                    price_signature: svc.price_signature != null ? String(svc.price_signature) : '',
+                    price_prestige: svc.price_prestige != null ? String(svc.price_prestige) : '',
+                    price_royal: svc.price_royal != null ? String(svc.price_royal) : '',
+                    price_imperial: svc.price_imperial != null ? String(svc.price_imperial) : '',
+                    qty_label_basic: (svc.qty_label_basic as string) ?? '',
+                    qty_label_classic_value: (svc.qty_label_classic_value as string) ?? '',
+                    qty_label_signature: (svc.qty_label_signature as string) ?? '',
+                    qty_label_prestige: (svc.qty_label_prestige as string) ?? '',
+                    qty_label_royal: (svc.qty_label_royal as string) ?? '',
+                    qty_label_imperial: (svc.qty_label_imperial as string) ?? '',
+                    sub_variety_basic: (svc.sub_variety_basic as string) ?? '',
+                    sub_variety_classic_value: (svc.sub_variety_classic_value as string) ?? '',
+                    sub_variety_signature: (svc.sub_variety_signature as string) ?? '',
+                    sub_variety_prestige: (svc.sub_variety_prestige as string) ?? '',
+                    sub_variety_royal: (svc.sub_variety_royal as string) ?? '',
+                    sub_variety_imperial: (svc.sub_variety_imperial as string) ?? '',
+                    is_active: svc.is_active !== false,
+                    is_special_catalog: svc.is_special_catalog === true,
+                })
             })
+            .catch(() => {})
     }, [id])
+
+    useEffect(() => {
+        if (form.is_special_catalog) {
+            if (!occasions.length) return
+            const oid = occasions[0].id
+            fetch(`/api/public/categories?occasion_id=${encodeURIComponent(oid)}`)
+                .then((r) => r.json())
+                .then((data) => {
+                    if (Array.isArray(data)) setCategories(data)
+                })
+                .catch(() => setCategories([]))
+            return
+        }
+        if (!form.occasion_ids.length) {
+            setCategories([])
+            return
+        }
+        Promise.all(
+            form.occasion_ids.map((oid) =>
+                fetch(`/api/public/categories?occasion_id=${encodeURIComponent(oid)}`).then((r) =>
+                    r.json()
+                )
+            )
+        )
+            .then((lists) => {
+                const map = new Map<string, Category>()
+                for (const arr of lists) {
+                    if (Array.isArray(arr))
+                        for (const c of arr) map.set(c.id, { id: c.id, name: c.name })
+                }
+                setCategories([...map.values()].sort((a, b) => a.name.localeCompare(b.name)))
+            })
+            .catch(() => setCategories([]))
+    }, [form.occasion_ids, form.is_special_catalog, occasions])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+        if (!form.is_special_catalog && form.occasion_ids.length === 0) {
+            toast.error('Select at least one occasion')
+            return
+        }
         if (!form.category_id) {
-            toast.error('Select an occasion then a category')
+            toast.error('Select a category')
             return
         }
         setLoading(true)
@@ -232,10 +205,15 @@ export default function EditOfferableServicePage() {
             sub_variety_imperial: form.sub_variety_imperial || null,
             ...tierValues,
         }
-        if (!form.is_special_catalog && form.occasion_id) {
+        if (!form.is_special_catalog) {
             body.replace_occasion_links = true
-            body.occasion_ids = [form.occasion_id]
+            body.occasion_ids = form.occasion_ids
+        } else {
+            body.replace_occasion_links = true
+            body.occasion_ids = []
         }
+        body.replace_vendor_links = true
+        body.vendor_ids = form.vendor_ids
         const res = await fetch(`/api/admin/offerable-services/${id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -255,27 +233,48 @@ export default function EditOfferableServicePage() {
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
+                        {!form.is_special_catalog && (
+                            <div>
+                                <label className="text-sm font-medium">Occasions</label>
+                                <div className="mt-1 max-h-36 overflow-y-auto rounded-md border px-3 py-2">
+                                    {occasions.map((o) => (
+                                        <label key={o.id} className="flex cursor-pointer items-center gap-2 py-1">
+                                            <input
+                                                type="checkbox"
+                                                checked={form.occasion_ids.includes(o.id)}
+                                                onChange={() =>
+                                                    setForm((p) => ({
+                                                        ...p,
+                                                        occasion_ids: toggleId(p.occasion_ids, o.id),
+                                                        category_id: '',
+                                                    }))
+                                                }
+                                            />
+                                            <span>{o.name}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                         <div>
-                            <label className="text-sm font-medium">Occasion</label>
-                            <select
-                                className="mt-1 w-full rounded-md border px-3 py-2"
-                                value={form.occasion_id}
-                                onChange={(e) =>
-                                    setForm((p) => ({
-                                        ...p,
-                                        occasion_id: e.target.value,
-                                        category_id: '',
-                                    }))
-                                }
-                                required
-                            >
-                                <option value="">Select occasion first</option>
-                                {occasions.map((o) => (
-                                    <option key={o.id} value={o.id}>
-                                        {o.name}
-                                    </option>
+                            <label className="text-sm font-medium">Vendors (optional)</label>
+                            <div className="mt-1 max-h-36 overflow-y-auto rounded-md border px-3 py-2">
+                                {vendors.map((v) => (
+                                    <label key={v.id} className="flex cursor-pointer items-center gap-2 py-1">
+                                        <input
+                                            type="checkbox"
+                                            checked={form.vendor_ids.includes(v.id)}
+                                            onChange={() =>
+                                                setForm((p) => ({
+                                                    ...p,
+                                                    vendor_ids: toggleId(p.vendor_ids, v.id),
+                                                }))
+                                            }
+                                        />
+                                        <span>{v.business_name || v.id}</span>
+                                    </label>
                                 ))}
-                            </select>
+                            </div>
                         </div>
                         <div>
                             <label className="text-sm font-medium">Category</label>
@@ -289,12 +288,12 @@ export default function EditOfferableServicePage() {
                                     }))
                                 }
                                 required
-                                disabled={!form.occasion_id}
+                                disabled={!form.is_special_catalog && !form.occasion_ids.length}
                             >
                                 <option value="">
-                                    {form.occasion_id
+                                    {form.is_special_catalog || form.occasion_ids.length
                                         ? 'Select category'
-                                        : 'Select occasion first'}
+                                        : 'Select occasion(s) first'}
                                 </option>
                                 {categories.map((c) => (
                                     <option key={c.id} value={c.id}>

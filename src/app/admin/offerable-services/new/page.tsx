@@ -24,14 +24,20 @@ const TIER_LABELS = [
 type Occasion = { id: string; name: string }
 type Category = { id: string; name: string }
 
+function toggleId(list: string[], id: string): string[] {
+    return list.includes(id) ? list.filter((x) => x !== id) : [...list, id]
+}
+
 export default function NewOfferableServicePage() {
     const router = useRouter()
     const [specialCatalog, setSpecialCatalog] = useState(false)
     const [loading, setLoading] = useState(false)
     const [occasions, setOccasions] = useState<Occasion[]>([])
+    const [vendors, setVendors] = useState<{ id: string; business_name: string }[]>([])
     const [categories, setCategories] = useState<Category[]>([])
     const [form, setForm] = useState({
-        occasion_id: '',
+        occasion_ids: [] as string[],
+        vendor_ids: [] as string[],
         category_id: '',
         name: '',
         description: '',
@@ -64,47 +70,77 @@ export default function NewOfferableServicePage() {
             typeof window !== 'undefined' &&
             new URLSearchParams(window.location.search).get('special_catalog') === '1'
         setSpecialCatalog(!!sp)
-        fetch('/api/admin/occasions')
-            .then((r) => r.json())
-            .then((data) => {
-                if (Array.isArray(data)) {
-                    setOccasions(data)
-                    if (sp && data.length > 0) {
-                        setForm((p) => ({ ...p, occasion_id: data[0].id, is_special_catalog: true }))
+        Promise.all([
+            fetch('/api/admin/occasions').then((r) => r.json()),
+            fetch('/api/admin/vendors?status=active').then((r) => r.json()),
+        ])
+            .then(([occData, venData]) => {
+                if (Array.isArray(occData)) {
+                    setOccasions(occData)
+                    if (sp && occData.length > 0) {
+                        setForm((p) => ({
+                            ...p,
+                            occasion_ids: [],
+                            is_special_catalog: true,
+                        }))
                     }
                 }
+                if (Array.isArray(venData)) setVendors(venData)
             })
             .catch(() => {})
     }, [])
 
     useEffect(() => {
-        if (!form.occasion_id) {
+        if (specialCatalog) {
+            fetch(`/api/public/categories?occasion_id=${encodeURIComponent(occasions[0]?.id || '')}`)
+                .then((r) => r.json())
+                .then((data) => {
+                    if (Array.isArray(data)) {
+                        setCategories(data)
+                        if (data.some((c: { id: string }) => c.id === 'special-catalog')) {
+                            setForm((p) => ({
+                                ...p,
+                                category_id: 'special-catalog',
+                                is_special_catalog: true,
+                            }))
+                        }
+                    } else setCategories([])
+                })
+                .catch(() => setCategories([]))
+            return
+        }
+        if (!form.occasion_ids.length) {
             setCategories([])
             setForm((p) => ({ ...p, category_id: '' }))
             return
         }
-        fetch(`/api/public/categories?occasion_id=${encodeURIComponent(form.occasion_id)}`)
-            .then((r) => r.json())
-            .then((data) => {
-                if (Array.isArray(data)) {
-                    setCategories(data)
-                    if (specialCatalog && data.some((c: { id: string }) => c.id === 'special-catalog')) {
-                        setForm((p) => ({
-                            ...p,
-                            category_id: 'special-catalog',
-                            is_special_catalog: true,
-                        }))
-                    }
-                } else setCategories([])
+        Promise.all(
+            form.occasion_ids.map((oid) =>
+                fetch(`/api/public/categories?occasion_id=${encodeURIComponent(oid)}`).then((r) =>
+                    r.json()
+                )
+            )
+        )
+            .then((lists) => {
+                const map = new Map<string, Category>()
+                for (const arr of lists) {
+                    if (Array.isArray(arr))
+                        for (const c of arr) map.set(c.id, { id: c.id, name: c.name })
+                }
+                setCategories([...map.values()].sort((a, b) => a.name.localeCompare(b.name)))
             })
             .catch(() => setCategories([]))
-        if (!specialCatalog) setForm((p) => ({ ...p, category_id: '' }))
-    }, [form.occasion_id, specialCatalog])
+        setForm((p) => ({ ...p, category_id: '' }))
+    }, [form.occasion_ids, specialCatalog, occasions])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+        if (!form.is_special_catalog && form.occasion_ids.length === 0) {
+            toast.error('Select at least one occasion')
+            return
+        }
         if (!form.category_id) {
-            toast.error('Select an occasion then a category')
+            toast.error('Select a category')
             return
         }
         setLoading(true)
@@ -139,7 +175,8 @@ export default function NewOfferableServicePage() {
             sub_variety_royal: form.sub_variety_royal || null,
             sub_variety_imperial: form.sub_variety_imperial || null,
             ...tierValues,
-            occasion_ids: form.occasion_id ? [form.occasion_id] : [],
+            occasion_ids: form.is_special_catalog ? [] : form.occasion_ids,
+            vendor_ids: form.vendor_ids,
         }
         const res = await fetch('/api/admin/offerable-services', {
             method: 'POST',
@@ -160,23 +197,50 @@ export default function NewOfferableServicePage() {
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
+                        {!form.is_special_catalog && (
+                            <div>
+                                <label className="text-sm font-medium">Occasions</label>
+                                <div className="mt-1 max-h-36 overflow-y-auto rounded-md border px-3 py-2">
+                                    {occasions.map((o) => (
+                                        <label key={o.id} className="flex cursor-pointer items-center gap-2 py-1">
+                                            <input
+                                                type="checkbox"
+                                                checked={form.occasion_ids.includes(o.id)}
+                                                onChange={() =>
+                                                    setForm((p) => ({
+                                                        ...p,
+                                                        occasion_ids: toggleId(p.occasion_ids, o.id),
+                                                    }))
+                                                }
+                                            />
+                                            <span>{o.name}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                         <div>
-                            <label className="text-sm font-medium">Occasion</label>
-                            <select
-                                className="mt-1 w-full rounded-md border px-3 py-2"
-                                value={form.occasion_id}
-                                onChange={(e) =>
-                                    setForm((p) => ({ ...p, occasion_id: e.target.value }))
-                                }
-                                required
-                            >
-                                <option value="">Select occasion first</option>
-                                {occasions.map((o) => (
-                                    <option key={o.id} value={o.id}>
-                                        {o.name}
-                                    </option>
+                            <label className="text-sm font-medium">Vendors (optional)</label>
+                            <div className="mt-1 max-h-36 overflow-y-auto rounded-md border px-3 py-2">
+                                {vendors.map((v) => (
+                                    <label key={v.id} className="flex cursor-pointer items-center gap-2 py-1">
+                                        <input
+                                            type="checkbox"
+                                            checked={form.vendor_ids.includes(v.id)}
+                                            onChange={() =>
+                                                setForm((p) => ({
+                                                    ...p,
+                                                    vendor_ids: toggleId(p.vendor_ids, v.id),
+                                                }))
+                                            }
+                                        />
+                                        <span>{v.business_name || v.id}</span>
+                                    </label>
                                 ))}
-                            </select>
+                            </div>
+                            <p className="text-muted-foreground mt-1 text-xs">
+                                If none selected, all vendors can add this catalog item. Otherwise only selected vendors.
+                            </p>
                         </div>
                         <div>
                             <label className="text-sm font-medium">Category</label>
@@ -187,12 +251,12 @@ export default function NewOfferableServicePage() {
                                     setForm((p) => ({ ...p, category_id: e.target.value }))
                                 }
                                 required
-                                disabled={!form.occasion_id}
+                                disabled={!specialCatalog && !form.occasion_ids.length}
                             >
                                 <option value="">
-                                    {form.occasion_id
+                                    {specialCatalog || form.occasion_ids.length
                                         ? 'Select category'
-                                        : 'Select occasion first'}
+                                        : 'Select occasion(s) first'}
                                 </option>
                                 {categories.map((c) => (
                                     <option key={c.id} value={c.id}>
