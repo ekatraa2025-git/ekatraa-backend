@@ -92,7 +92,8 @@ export default function NewOfferableServicePage() {
 
     useEffect(() => {
         if (specialCatalog) {
-            fetch(`/api/public/categories?occasion_id=${encodeURIComponent(occasions[0]?.id || '')}`)
+            if (!occasions.length) return
+            fetch(`/api/public/categories?occasion_id=${encodeURIComponent(occasions[0].id)}`)
                 .then((r) => r.json())
                 .then((data) => {
                     if (Array.isArray(data)) {
@@ -130,7 +131,6 @@ export default function NewOfferableServicePage() {
                 setCategories([...map.values()].sort((a, b) => a.name.localeCompare(b.name)))
             })
             .catch(() => setCategories([]))
-        setForm((p) => ({ ...p, category_id: '' }))
     }, [form.occasion_ids, specialCatalog, occasions])
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -210,6 +210,7 @@ export default function NewOfferableServicePage() {
                                                     setForm((p) => ({
                                                         ...p,
                                                         occasion_ids: toggleId(p.occasion_ids, o.id),
+                                                        category_id: '',
                                                     }))
                                                 }
                                             />
