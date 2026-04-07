@@ -117,7 +117,13 @@ export default function OrdersPage() {
     }
 
     const columns = [
-        { header: 'Order ID', key: 'id', render: (v: string) => <span className="font-mono text-xs">{v?.slice(0, 8)}…</span> },
+        {
+            header: 'Order ID',
+            key: 'id',
+            render: (v: string) => (
+                <span className="font-mono text-xs">{v ? `ORD-${v.slice(-8).toUpperCase()}` : '—'}</span>
+            ),
+        },
         { header: 'Contact', key: 'contact_name' },
         { header: 'Total', key: 'total_amount', render: (v: number) => (v != null ? `₹${Number(v).toLocaleString()}` : '—') },
         { header: 'Advance', key: 'advance_amount', render: (v: number) => (v != null && v > 0 ? `₹${Number(v).toLocaleString()}` : '—') },

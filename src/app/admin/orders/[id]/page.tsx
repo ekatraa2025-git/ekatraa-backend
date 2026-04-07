@@ -55,6 +55,7 @@ export default function OrderDetailPage() {
     const [overrideAllocate, setOverrideAllocate] = useState<Record<string, boolean>>({})
     const [allocatingItemId, setAllocatingItemId] = useState<string | null>(null)
     const [selectedVendorByItem, setSelectedVendorByItem] = useState<Record<string, string>>({})
+    const displayOrderId = id ? `ORD-${String(id).slice(-8).toUpperCase()}` : ''
 
     const loadOrder = () => {
         fetch(`/api/admin/orders/${id}`)
@@ -165,7 +166,7 @@ export default function OrderDetailPage() {
             <div className="space-y-6">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Order {order.id?.slice(0, 8)}…</CardTitle>
+                        <CardTitle>Order {displayOrderId}</CardTitle>
                         <Badge variant="outline" className="capitalize w-fit">
                             {order.status}
                         </Badge>
