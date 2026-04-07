@@ -1,11 +1,15 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { requireAdminSession } from '@/lib/require-admin-session'
 
 /**
  * Admin: list orders, filter by status and allocation. Joins vendors for vendor_name when allocated.
  * Includes allocation_count and allocation_vendors from order_item_allocations (multi-vendor support).
  */
 export async function GET(req: Request) {
+    const auth = await requireAdminSession()
+    if (!auth.ok) return auth.response
+
     const { searchParams } = new URL(req.url)
     const status = searchParams.get('status')
     const allocated = searchParams.get('allocated')

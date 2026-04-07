@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { ADMIN_EMAIL } from '@/lib/admin-config'
 
 export async function middleware(request: NextRequest) {
     let response = NextResponse.next({
@@ -68,8 +69,8 @@ export async function middleware(request: NextRequest) {
             return NextResponse.redirect(new URL('/login', request.url))
         }
 
-        // Check if the user is the specific admin email
-        if (user.email !== 'admin@ekatraa.com') {
+        // Check if the user is the allowlisted admin email
+        if (user.email !== ADMIN_EMAIL) {
             if (isAdminApi) {
                 return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
             }
@@ -79,7 +80,7 @@ export async function middleware(request: NextRequest) {
     }
 
     // Redirect to /admin if logged in and trying to access /login
-    if (request.nextUrl.pathname === '/login' && user && user.email === 'admin@ekatraa.com') {
+    if (request.nextUrl.pathname === '/login' && user && user.email === ADMIN_EMAIL) {
         return NextResponse.redirect(new URL('/admin', request.url))
     }
 
