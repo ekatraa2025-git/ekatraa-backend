@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { signedUrlForStorageRef } from '@/lib/storage-display-url'
+import { sendNotificationToVendor } from '@/lib/notifications'
 
 export async function GET(
     req: Request,
@@ -128,6 +129,18 @@ export async function PATCH(
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 400 })
+        }
+
+        if (body.status && body.status !== currentQuotation.status && currentQuotation.vendor_id) {
+            sendNotificationToVendor({
+                vendor_id: currentQuotation.vendor_id,
+                type: 'quotation',
+                title: `Quotation ${String(body.status)}`,
+                message: `Your quotation status changed from ${currentQuotation.status} to ${String(body.status)}.`,
+                data: { quotation_id: id, previous_status: currentQuotation.status, new_status: body.status },
+            }).catch(() => {
+                /* non-fatal */
+            })
         }
 
         // If status changed to 'accepted', update vendor revenue

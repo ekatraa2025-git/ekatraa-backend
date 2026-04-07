@@ -2,6 +2,7 @@ import crypto from 'crypto'
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { getVendorFromRequest } from '@/lib/vendor-auth'
+import { sendNotificationToVendor } from '@/lib/notifications'
 
 function generateOtp(): string {
     return String(crypto.randomInt(100000, 1000000))
@@ -79,6 +80,18 @@ export async function POST(
 
     if (upsertErr) {
         return NextResponse.json({ error: upsertErr.message }, { status: 500 })
+    }
+
+    if (auth.vendorId) {
+        sendNotificationToVendor({
+            vendor_id: auth.vendorId,
+            type: 'booking_update',
+            title: 'Completion OTP generated',
+            message: `Completion OTP generated for order ${orderId.slice(0, 8)}…`,
+            data: { order_id: orderId, step: 'request_completion_otp' },
+        }).catch(() => {
+            /* non-fatal */
+        })
     }
 
     return NextResponse.json({

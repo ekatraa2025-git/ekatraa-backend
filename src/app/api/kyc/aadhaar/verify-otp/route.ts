@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase/server'
 import { getSandboxAccessToken } from '@/lib/sandbox-auth'
 import { notifyVendorActivated } from '@/lib/notifications'
+import { sendNotificationToVendor } from '@/lib/notifications'
 
 const SANDBOX_HOST = process.env.SANDBOX_HOST || 'https://api.sandbox.co.in'
 
@@ -20,6 +21,7 @@ export async function POST(req: Request) {
   }
 
   try {
+    let vendorIdForNotify: string | null = null
     let body
     try {
       body = await req.json()
@@ -32,6 +34,7 @@ export async function POST(req: Request) {
     }
 
     const { reference_id, otp, vendor_id, aadhaar_number, aadhaar_front_url, aadhaar_back_url } = body
+    vendorIdForNotify = vendor_id ? String(vendor_id) : null
 
     console.log('[OTP Verify] Received request body:', {
       has_reference_id: !!reference_id,
@@ -123,6 +126,17 @@ export async function POST(req: Request) {
         statusText: response.statusText,
         data: data,
       })
+      if (vendorIdForNotify) {
+        sendNotificationToVendor({
+          vendor_id: vendorIdForNotify,
+          type: 'system_update',
+          title: 'Aadhaar OTP verification failed',
+          message: 'OTP verification failed. Please retry with the latest OTP.',
+          data: { step: 'aadhaar_verify_otp', status: 'failed', code: response.status },
+        }).catch(() => {
+          /* non-fatal */
+        })
+      }
       const errorMessage = data.message || data.error || data.data?.message || `OTP verification failed (${response.status})`
       return NextResponse.json(
         { error: errorMessage },
@@ -394,6 +408,18 @@ export async function POST(req: Request) {
         console.warn('[OTP Verify] activation notify skipped', e)
       }
 
+      if (vendorIdForNotify) {
+        sendNotificationToVendor({
+          vendor_id: vendorIdForNotify,
+          type: 'system_update',
+          title: 'Aadhaar verified successfully',
+          message: 'Your Aadhaar is verified and your vendor profile is active.',
+          data: { step: 'aadhaar_verify_otp', status: 'success' },
+        }).catch(() => {
+          /* non-fatal */
+        })
+      }
+
         return NextResponse.json({
           success: true,
           message: 'Aadhaar verified successfully',
@@ -421,6 +447,17 @@ export async function POST(req: Request) {
         message: errorMessage,
         fullResponse: data
       })
+      if (vendorIdForNotify) {
+        sendNotificationToVendor({
+          vendor_id: vendorIdForNotify,
+          type: 'system_update',
+          title: 'Aadhaar verification failed',
+          message: errorMessage,
+          data: { step: 'aadhaar_verify_otp', status: 'failed' },
+        }).catch(() => {
+          /* non-fatal */
+        })
+      }
       return NextResponse.json(
         { error: errorMessage },
         { status: 400, headers: corsHeaders }

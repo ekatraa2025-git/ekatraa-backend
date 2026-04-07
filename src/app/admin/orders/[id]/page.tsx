@@ -258,7 +258,7 @@ export default function OrderDetailPage() {
                                                         <option value="">
                                                             {overrideAllocate[item.id]
                                                                 ? 'Select any vendor'
-                                                                : 'Select matching vendor'}
+                                                                : 'Select matching vendor (category + portfolio)'}
                                                         </option>
                                                         {!overrideAllocate[item.id] &&
                                                             (eligibleByItem[item.id] ?? []).map((v) => (

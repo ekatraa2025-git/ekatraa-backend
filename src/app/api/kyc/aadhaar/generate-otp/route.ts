@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase/server'
 import { getSandboxAccessToken } from '@/lib/sandbox-auth'
+import { sendNotificationToVendor } from '@/lib/notifications'
 
 const SANDBOX_HOST = process.env.SANDBOX_HOST || 'https://api.sandbox.co.in'
 
@@ -103,11 +104,30 @@ export async function POST(req: Request) {
         statusText: response.statusText,
         data: data,
       })
+      sendNotificationToVendor({
+        vendor_id,
+        type: 'system_update',
+        title: 'Aadhaar OTP failed',
+        message: 'We could not generate your Aadhaar OTP. Please try again.',
+        data: { step: 'aadhaar_generate_otp', status: 'failed', code: response.status },
+      }).catch(() => {
+        /* non-fatal */
+      })
       return NextResponse.json(
         { error: data.message || data.error || 'Failed to generate OTP' },
         { status: response.status, headers: corsHeaders }
       )
     }
+
+    sendNotificationToVendor({
+      vendor_id,
+      type: 'system_update',
+      title: 'Aadhaar OTP sent',
+      message: 'Your Aadhaar OTP was generated. Enter the OTP to complete verification.',
+      data: { step: 'aadhaar_generate_otp', status: 'success', reference_id: data?.data?.reference_id ?? data?.reference_id ?? null },
+    }).catch(() => {
+      /* non-fatal */
+    })
 
     return NextResponse.json(data, { status: 200, headers: corsHeaders })
   } catch (error: any) {

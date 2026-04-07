@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { getVendorFromRequest } from '@/lib/vendor-auth'
+import { sendNotificationToVendor } from '@/lib/notifications'
 
 /**
  * POST /api/vendor/orders/[id]/confirm-start
@@ -107,6 +108,18 @@ export async function POST(
     })
     if (historyErr) {
         console.error('Failed to insert order status history:', historyErr.message)
+    }
+
+    if (auth.vendorId) {
+        sendNotificationToVendor({
+            vendor_id: auth.vendorId,
+            type: 'booking_update',
+            title: 'Work started',
+            message: `Start OTP verified. Order ${orderId.slice(0, 8)}… is now in progress.`,
+            data: { order_id: orderId, status: 'in_progress', step: 'confirm_start_otp' },
+        }).catch(() => {
+            /* non-fatal */
+        })
     }
 
     return NextResponse.json({ success: true, status: 'in_progress', work_started_at: nowIso })

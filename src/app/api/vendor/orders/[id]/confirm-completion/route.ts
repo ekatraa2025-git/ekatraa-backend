@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { getVendorFromRequest } from '@/lib/vendor-auth'
+import { sendNotificationToVendor } from '@/lib/notifications'
 
 /**
  * POST /api/vendor/orders/[id]/confirm-completion
@@ -107,6 +108,18 @@ export async function POST(
     })
     if (historyErr) {
         console.error('Failed to insert order status history:', historyErr.message)
+    }
+
+    if (auth.vendorId) {
+        sendNotificationToVendor({
+            vendor_id: auth.vendorId,
+            type: 'booking_update',
+            title: 'Order completed',
+            message: `Completion OTP verified. Order ${orderId.slice(0, 8)}… has been marked completed.`,
+            data: { order_id: orderId, status: 'completed', step: 'confirm_completion_otp' },
+        }).catch(() => {
+            /* non-fatal */
+        })
     }
 
     return NextResponse.json({ success: true, status: 'completed', work_completed_at: nowIso })

@@ -53,10 +53,12 @@ export async function GET(req: Request) {
             ])
             if (svcError) return NextResponse.json({ error: svcError.message }, { status: 500 })
             const allowedIds = new Set((links ?? []).map((l: { service_id: string }) => l.service_id))
+            // Must not fall back to category-only results when an occasion is requested: that would
+            // list every service in the category instead of only those linked to the occasion(s).
             const list =
                 allowedIds.size > 0
                     ? (services ?? []).filter((s: { id: string }) => allowedIds.has(s.id))
-                    : (services ?? [])
+                    : []
             return NextResponse.json(list)
         }
 
