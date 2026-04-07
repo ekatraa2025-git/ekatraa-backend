@@ -66,6 +66,13 @@ export async function GET(
         .eq('vendor_id', auth.vendorId!)
         .order('created_at', { ascending: false })
 
+    const { data: vendorInvoice } = await supabase
+        .from('order_vendor_invoices')
+        .select('*')
+        .eq('order_id', id)
+        .eq('vendor_id', auth.vendorId!)
+        .maybeSingle()
+
     const totalOrderPrice = (items ?? []).reduce(
         (sum: number, i: { quantity?: number | string; unit_price?: number | string }) =>
             sum + ((Number(i.quantity) || 0) * (Number(i.unit_price) || 0)),
@@ -79,6 +86,7 @@ export async function GET(
         status_history: history ?? [],
         quotations: quotations ?? [],
         quotation: (quotations ?? [])[0] ?? null,
+        vendor_invoice: vendorInvoice ?? null,
         total_order_price: totalOrderPrice,
         advance_paid: advancePaid,
         balance_due: totalOrderPrice - advancePaid,

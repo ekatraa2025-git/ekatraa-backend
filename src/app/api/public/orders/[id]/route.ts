@@ -68,6 +68,8 @@ export async function GET(
         .eq('order_id', id)
         .order('created_at', { ascending: true })
 
+    const { data: vendorInvoice } = await supabase.from('order_vendor_invoices').select('*').eq('order_id', id).maybeSingle()
+
     const { data: quotations } = await supabase
         .from('quotations')
         .select('*')
@@ -134,6 +136,7 @@ export async function GET(
         items: items ?? [],
         status_history: history ?? [],
         quotes,
+        vendor_invoice: vendorInvoice ?? null,
         ...(completionOtp ? { completion_otp: completionOtp } : {}),
         ...(startOtp ? { start_otp: startOtp } : {}),
     })

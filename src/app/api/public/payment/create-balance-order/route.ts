@@ -46,15 +46,25 @@ export async function POST(req: Request) {
 
         const advancePaid = Number(order.advance_amount || 0)
         let agreedTotal = Number(order.total_amount || 0)
-        const { data: acceptedQuote } = await supabase
-            .from('quotations')
-            .select('amount')
+        const { data: acceptedInvoice } = await supabase
+            .from('order_vendor_invoices')
+            .select('total_amount, status')
             .eq('order_id', order_id)
             .eq('status', 'accepted')
-            .limit(1)
             .maybeSingle()
-        if (acceptedQuote?.amount != null) {
-            agreedTotal = Number(acceptedQuote.amount)
+        if (acceptedInvoice?.total_amount != null) {
+            agreedTotal = Number(acceptedInvoice.total_amount)
+        } else {
+            const { data: acceptedQuote } = await supabase
+                .from('quotations')
+                .select('amount')
+                .eq('order_id', order_id)
+                .eq('status', 'accepted')
+                .limit(1)
+                .maybeSingle()
+            if (acceptedQuote?.amount != null) {
+                agreedTotal = Number(acceptedQuote.amount)
+            }
         }
         const balance = balance_amount != null
             ? Math.round(Number(balance_amount))
