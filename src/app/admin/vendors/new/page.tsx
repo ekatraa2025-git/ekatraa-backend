@@ -90,20 +90,26 @@ export default function NewVendorPage() {
     }
 
     const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
-        if (!file) return
+        const files = e.target.files ? Array.from(e.target.files) : []
+        if (!files.length) return
         const current = Array.isArray(formData.gallery_urls) ? formData.gallery_urls : []
-        if (current.length >= 12) {
+        const remaining = Math.max(0, 12 - current.length)
+        if (remaining <= 0) {
             toast.error('Maximum 12 gallery images.')
             e.target.value = ''
             return
         }
         setUploadingGallery(true)
         try {
-            const url = await uploadFile(file, 'vendors')
-            if (url) {
-                handleChange('gallery_urls', [...current, url])
-                toast.success('Image added to gallery')
+            const uploadTargets = files.slice(0, remaining)
+            const uploaded: string[] = []
+            for (const file of uploadTargets) {
+                const url = await uploadFile(file, 'vendors')
+                if (url) uploaded.push(url)
+            }
+            if (uploaded.length) {
+                handleChange('gallery_urls', [...current, ...uploaded].slice(0, 12))
+                toast.success(`${uploaded.length} image${uploaded.length === 1 ? '' : 's'} added to gallery`)
             }
         } catch (error) {
             console.error('Gallery upload error:', error)
@@ -316,6 +322,7 @@ export default function NewVendorPage() {
                                 <input
                                     type="file"
                                     accept="image/*"
+                                    multiple
                                     onChange={handleGalleryUpload}
                                     disabled={uploadingGallery || (Array.isArray(formData.gallery_urls) && formData.gallery_urls.length >= 12)}
                                     className={inputClass + ' file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white'}

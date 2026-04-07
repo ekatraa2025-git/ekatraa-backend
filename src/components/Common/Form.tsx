@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch'
 interface Field {
     name: string;
     label: string;
-    type: 'text' | 'email' | 'password' | 'select' | 'textarea' | 'number' | 'checkbox' | 'file' | 'switch' | 'richtext';
+    type: 'text' | 'email' | 'password' | 'select' | 'textarea' | 'number' | 'checkbox' | 'file' | 'files' | 'switch' | 'richtext';
     options?: { label: string; value: any }[];
     placeholder?: string;
     required?: boolean;
@@ -119,6 +119,46 @@ const Form = ({ fields, onSubmit, initialData = {}, title, loading }: FormProps)
         }
     }
 
+    const handleFilesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name } = e.target
+        const files = e.target.files ? Array.from(e.target.files) : []
+        if (!files.length) return
+
+        const field = fields.find(f => f.name === name)
+        if (!field || field.type !== 'files') return
+
+        const current = Array.isArray(formData[name]) ? formData[name] : []
+        const remaining = Math.max(0, 12 - current.length)
+        if (remaining <= 0) {
+            alert('Maximum 12 images allowed.')
+            e.target.value = ''
+            return
+        }
+
+        setUploading(prev => ({ ...prev, [name]: true }))
+        try {
+            const folder = field.uploadFolder || 'uploads'
+            const uploadTargets = files.slice(0, remaining)
+            const uploaded: string[] = []
+            for (const file of uploadTargets) {
+                const url = await uploadFile(file, folder)
+                if (url) uploaded.push(url)
+            }
+
+            if (uploaded.length) {
+                setFormData((prev: any) => ({ ...prev, [name]: [...current, ...uploaded].slice(0, 12) }))
+            } else {
+                alert(`Failed to upload ${field.label}. Please try again.`)
+            }
+        } catch (error) {
+            console.error('Files upload error:', error)
+            alert(`Failed to upload ${field.label}. Please try again.`)
+        } finally {
+            setUploading(prev => ({ ...prev, [name]: false }))
+            e.target.value = ''
+        }
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         await onSubmit(formData)
@@ -133,7 +173,7 @@ const Form = ({ fields, onSubmit, initialData = {}, title, loading }: FormProps)
                 <div className="p-6">
                     <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                         {fields.map((field) => (
-                            <div key={field.name} className={field.type === 'textarea' || field.type === 'checkbox' || field.type === 'switch' || field.type === 'richtext' ? 'md:col-span-2' : ''}>
+                            <div key={field.name} className={field.type === 'textarea' || field.type === 'checkbox' || field.type === 'switch' || field.type === 'richtext' || field.type === 'files' ? 'md:col-span-2' : ''}>
                                 <label className="mb-3 block text-sm font-medium text-black dark:text-white">
                                     {field.label} {field.required && <span className="text-red-500 ml-1">*</span>}
                                 </label>
@@ -221,6 +261,49 @@ const Form = ({ fields, onSubmit, initialData = {}, title, loading }: FormProps)
                                                     </div>
                                                 )}
                                             </>
+                                        )}
+                                    </div>
+                                ) : field.type === 'files' ? (
+                                    <div>
+                                        <input
+                                            type="file"
+                                            name={field.name}
+                                            multiple
+                                            onChange={handleFilesChange}
+                                            accept={field.accept}
+                                            required={field.required && (!Array.isArray(formData[field.name]) || formData[field.name].length === 0)}
+                                            disabled={uploading[field.name]}
+                                            className="w-full rounded-lg border border-stroke bg-white px-4 py-3 text-sm font-medium text-black shadow-sm transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90 dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                        />
+                                        {uploading[field.name] && (
+                                            <p className="mt-2 text-sm text-blue-600 dark:text-blue-400">Uploading...</p>
+                                        )}
+                                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">You can upload multiple images. Max 12 images.</p>
+                                        {Array.isArray(formData[field.name]) && formData[field.name].length > 0 && (
+                                            <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                                                {formData[field.name].map((url: string, idx: number) => (
+                                                    <div key={`${url}-${idx}`} className="relative">
+                                                        <AdminImage
+                                                            url={url}
+                                                            alt={field.label}
+                                                            className="h-20 w-full rounded-lg object-cover border border-stroke dark:border-strokedark"
+                                                            placeholderClassName="h-20 w-full rounded-lg bg-gray-200 dark:bg-gray-700"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                setFormData((prev: any) => ({
+                                                                    ...prev,
+                                                                    [field.name]: (Array.isArray(prev[field.name]) ? prev[field.name] : []).filter((_: string, i: number) => i !== idx),
+                                                                }))
+                                                            }
+                                                            className="absolute top-1 right-1 rounded bg-red-600 text-white text-[10px] px-1.5 py-0.5"
+                                                        >
+                                                            Remove
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         )}
                                     </div>
                                 ) : (

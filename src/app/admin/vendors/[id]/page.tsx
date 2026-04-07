@@ -62,8 +62,8 @@ export default function EditVendorPage() {
 
     // Vendor services (multiple service items with pricing and images)
     const [vendorServices, setVendorServices] = useState<any[]>([])
-    // Add-from-catalog: image for the service being added
-    const [serviceImageForAdd, setServiceImageForAdd] = useState('')
+    // Add-from-catalog: gallery images for the service being added
+    const [serviceImagesForAdd, setServiceImagesForAdd] = useState<string[]>([])
     const [uploadingServiceForAdd, setUploadingServiceForAdd] = useState(false)
     const [addingServiceFromCatalog, setAddingServiceFromCatalog] = useState(false)
     /** serviceId -> selected tier keys (multi-select per catalog row) */
@@ -152,7 +152,10 @@ export default function EditVendorPage() {
             }
             if (selectedOfferableService?.id) body.catalog_service_id = selectedOfferableService.id
             if (tierKeySingle) body.pricing_tier = catalogTierLabel(tierKeySingle)
-            if (serviceImageForAdd) body.image_url = serviceImageForAdd
+            if (serviceImagesForAdd.length) {
+                body.image_url = serviceImagesForAdd[0]
+                body.image_urls = serviceImagesForAdd
+            }
             const res = await fetch('/api/admin/services', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -160,7 +163,7 @@ export default function EditVendorPage() {
             })
             const result = await res.json()
             if (result.error) throw new Error(result.error)
-            setServiceImageForAdd('')
+            setServiceImagesForAdd([])
             setFormData((prev: any) => ({
                 ...prev,
                 service_stock_id: '',
@@ -271,16 +274,31 @@ export default function EditVendorPage() {
     }
 
     const handleServiceImageForAddUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
-        if (!file) return
+        const files = e.target.files ? Array.from(e.target.files) : []
+        if (!files.length) return
+        const remaining = Math.max(0, 12 - serviceImagesForAdd.length)
+        if (remaining <= 0) {
+            toast.error('Maximum 12 service images.')
+            e.target.value = ''
+            return
+        }
         setUploadingServiceForAdd(true)
         try {
-            const url = await uploadFile(file, 'services')
-            if (url) setServiceImageForAdd(url)
+            const uploadTargets = files.slice(0, remaining)
+            const uploaded: string[] = []
+            for (const file of uploadTargets) {
+                const url = await uploadFile(file, 'services')
+                if (url) uploaded.push(url)
+            }
+            if (uploaded.length) {
+                setServiceImagesForAdd((prev) => [...prev, ...uploaded].slice(0, 12))
+                toast.success(`${uploaded.length} service image${uploaded.length === 1 ? '' : 's'} uploaded`)
+            }
         } catch (err) {
             console.error(err)
         } finally {
             setUploadingServiceForAdd(false)
+            e.target.value = ''
         }
     }
 
@@ -390,20 +408,26 @@ export default function EditVendorPage() {
     }
 
     const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
-        if (!file) return
+        const files = e.target.files ? Array.from(e.target.files) : []
+        if (!files.length) return
         const current = Array.isArray(formData.gallery_urls) ? formData.gallery_urls : []
-        if (current.length >= 12) {
+        const remaining = Math.max(0, 12 - current.length)
+        if (remaining <= 0) {
             toast.error('Maximum 12 gallery images.')
             e.target.value = ''
             return
         }
         setUploadingGallery(true)
         try {
-            const url = await uploadFile(file, 'vendors')
-            if (url) {
-                handleChange('gallery_urls', [...current, url])
-                toast.success('Image added to gallery (save to persist)')
+            const uploadTargets = files.slice(0, remaining)
+            const uploaded: string[] = []
+            for (const file of uploadTargets) {
+                const url = await uploadFile(file, 'vendors')
+                if (url) uploaded.push(url)
+            }
+            if (uploaded.length) {
+                handleChange('gallery_urls', [...current, ...uploaded].slice(0, 12))
+                toast.success(`${uploaded.length} image${uploaded.length === 1 ? '' : 's'} added to gallery (save to persist)`)
             }
         } catch (error) {
             console.error('Gallery upload error:', error)
@@ -850,14 +874,30 @@ export default function EditVendorPage() {
                                             <p className="text-sm font-semibold text-gray-500">Tier: {(serviceTierKey || formData.service_pricing_type || '').replace(/_/g, ' ')}</p>
                                         </div>
                                         <div>
-                                            <label className={labelClass}>Service image (optional)</label>
+                                            <label className={labelClass}>Service gallery images (optional)</label>
                                             <div className="flex items-center gap-4 mt-2">
-                                                {serviceImageForAdd && <AdminImage url={serviceImageForAdd} alt="Service" className="h-16 w-16 rounded-lg object-cover border border-neutral-200 dark:border-neutral-700 flex-shrink-0" placeholderClassName="h-16 w-16 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs flex-shrink-0" />}
                                                 <div className="flex-1 min-w-0">
-                                                    <input type="file" accept="image/*" onChange={handleServiceImageForAddUpload} disabled={uploadingServiceForAdd} className={inputClass + ' file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white'} />
+                                                    <input type="file" accept="image/*" multiple onChange={handleServiceImageForAddUpload} disabled={uploadingServiceForAdd || serviceImagesForAdd.length >= 12} className={inputClass + ' file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white'} />
                                                     {uploadingServiceForAdd && <p className="mt-1 text-sm text-blue-600">Uploading...</p>}
+                                                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Max 12 images. First image becomes service cover.</p>
                                                 </div>
                                             </div>
+                                            {serviceImagesForAdd.length > 0 && (
+                                                <div className="mt-3 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                                                    {serviceImagesForAdd.map((url, idx) => (
+                                                        <div key={`${url}-${idx}`} className="relative">
+                                                            <AdminImage url={url} alt="" className="h-20 w-full rounded-lg object-cover border border-neutral-200 dark:border-neutral-700" placeholderClassName="h-20 w-full rounded-lg bg-gray-200 dark:bg-gray-700" />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setServiceImagesForAdd((prev) => prev.filter((_, i) => i !== idx))}
+                                                                className="absolute top-1 right-1 rounded bg-red-600 text-white text-[10px] px-1.5 py-0.5"
+                                                            >
+                                                                Remove
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                         <button type="button" onClick={handleAddServiceFromCatalog} disabled={addingServiceFromCatalog} className="px-4 py-2 rounded-lg bg-primary text-white font-semibold text-sm hover:bg-primary/90 disabled:opacity-50">
                                             {addingServiceFromCatalog ? 'Adding...' : 'Add this service (single)'}
@@ -914,6 +954,7 @@ export default function EditVendorPage() {
                             <input
                                 type="file"
                                 accept="image/*"
+                                multiple
                                 onChange={handleGalleryUpload}
                                 disabled={uploadingGallery || (Array.isArray(formData.gallery_urls) && formData.gallery_urls.length >= 12)}
                                 className={inputClass + ' file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white'}

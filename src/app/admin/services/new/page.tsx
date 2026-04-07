@@ -29,15 +29,22 @@ export default function NewServicePage() {
         { name: 'base_price', label: 'Starting Price', type: 'number', required: true, placeholder: '0.00' },
         { name: 'description', label: 'Description', type: 'richtext', placeholder: 'Tell us about this service...' },
         { name: 'image_url', label: 'Service Image', type: 'file', uploadFolder: 'services', accept: 'image/*' },
+        { name: 'image_urls', label: 'Service Gallery Images', type: 'files', uploadFolder: 'services', accept: 'image/*' },
         { name: 'is_active', label: 'Is Active?', type: 'checkbox', initialValue: true },
     ]
 
     const handleSubmit = async (data: any) => {
+        const payload = { ...data }
+        if (Array.isArray(payload.image_urls) && payload.image_urls.length > 0) {
+            payload.image_url = payload.image_url || payload.image_urls[0]
+        } else if (payload.image_url) {
+            payload.image_urls = [payload.image_url]
+        }
         setLoading(true)
         const res = await fetch('/api/admin/services', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+            body: JSON.stringify(payload)
         })
         const result = await res.json()
         setLoading(false)
