@@ -96,6 +96,18 @@ export async function GET(req: Request) {
         }
     }
 
+    const { data: vendorInvoices } = await supabase
+        .from('order_vendor_invoices')
+        .select('order_id, status, total_amount, submitted_at, accepted_at')
+        .eq('vendor_id', auth.vendorId!)
+        .in('order_id', orderIds)
+
+    const vendorInvoiceByOrderId = new Map<string, Record<string, unknown>>()
+    for (const row of vendorInvoices ?? []) {
+        const oid = (row as { order_id: string }).order_id
+        if (oid) vendorInvoiceByOrderId.set(oid, row as Record<string, unknown>)
+    }
+
     return NextResponse.json(list.map((o: { id: string; [k: string]: unknown }) => ({
         ...o,
         total_order_price: (itemsByOrderId.get(o.id) ?? []).reduce(
@@ -114,5 +126,6 @@ export async function GET(req: Request) {
         items: itemsByOrderId.get(o.id) ?? [],
         quotation_submitted: orderIdsWithQuotation.has(o.id),
         quotation: quotationByOrderId.get(o.id) ?? null,
+        vendor_invoice: vendorInvoiceByOrderId.get(o.id) ?? null,
     })))
 }
