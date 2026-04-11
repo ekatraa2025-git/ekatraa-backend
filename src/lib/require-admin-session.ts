@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
-import { ADMIN_EMAIL } from '@/lib/admin-config'
+import { isAllowlistedAdminEmail } from '@/lib/admin-config'
 
 /**
  * Defense in depth for /api/admin handlers that use the service-role Supabase client.
@@ -23,7 +23,7 @@ export async function requireAdminSession(): Promise<
         }
     }
 
-    if (user.email !== ADMIN_EMAIL) {
+    if (!isAllowlistedAdminEmail(user.email)) {
         return {
             ok: false,
             response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
