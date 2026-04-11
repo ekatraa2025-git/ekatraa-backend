@@ -435,7 +435,7 @@ export async function sendNotificationToVendors(
   type: NotificationPayload['type'],
   title: string,
   message: string,
-  data?: any
+  data?: Record<string, unknown>
 ): Promise<number> {
   if (!vendorIds || vendorIds.length === 0) return 0
 
@@ -449,7 +449,7 @@ export async function sendNotificationToVendors(
   }))
 
   try {
-    const { data, error } = await supabase
+    const { data: insertedRows, error } = await supabase
       .from('vendor_notifications')
       .insert(notifications)
       .select()
@@ -465,7 +465,7 @@ export async function sendNotificationToVendors(
       data: data || {},
     })
 
-    return data?.length || 0
+    return insertedRows?.length || 0
   } catch (error) {
     console.error('Error sending notifications:', error)
     return 0
