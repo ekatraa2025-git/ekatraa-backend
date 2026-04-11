@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { getVendorFromRequest } from '@/lib/vendor-auth'
-import { sendNotificationToVendor } from '@/lib/notifications'
+import { sendNotificationToUser, sendNotificationToVendor } from '@/lib/notifications'
 
 /**
  * POST /api/vendor/orders/[id]/confirm-start
@@ -29,7 +29,7 @@ export async function POST(
 
     const { data: order, error: orderError } = await supabase
         .from('orders')
-        .select('id, vendor_id, status')
+        .select('id, user_id, vendor_id, status')
         .eq('id', orderId)
         .single()
 
@@ -116,6 +116,18 @@ export async function POST(
             type: 'booking_update',
             title: 'Work started',
             message: `Start OTP verified. Order ${orderId.slice(0, 8)}… is now in progress.`,
+            data: { order_id: orderId, status: 'in_progress', step: 'confirm_start_otp' },
+        }).catch(() => {
+            /* non-fatal */
+        })
+    }
+    const userId = order.user_id as string | undefined
+    if (userId) {
+        sendNotificationToUser({
+            user_id: userId,
+            type: 'order_status',
+            title: 'Order in progress',
+            message: `Your order ${orderId.slice(0, 8)}… is now in progress.`,
             data: { order_id: orderId, status: 'in_progress', step: 'confirm_start_otp' },
         }).catch(() => {
             /* non-fatal */

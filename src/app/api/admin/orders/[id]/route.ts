@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { sendNotificationToVendor } from '@/lib/notifications'
+import { sendNotificationToUser, sendNotificationToVendor } from '@/lib/notifications'
 
 /**
  * Admin: order detail + status transition (PATCH to update status and/or vendor_id for allocation).
@@ -101,7 +101,7 @@ export async function PATCH(
 
     const { data: currentOrder } = await supabase
         .from('orders')
-        .select('vendor_id, status, contact_name, event_date')
+        .select('user_id, vendor_id, status, contact_name, event_date')
         .eq('id', id)
         .single()
 
@@ -146,6 +146,46 @@ export async function PATCH(
             })
         } catch (notifErr) {
             console.error('Failed to send vendor notification:', notifErr)
+        }
+    }
+
+    if (status != null && currentOrder?.user_id && status !== currentOrder.status) {
+        const userStatusMessages: Record<string, { title: string; message: string }> = {
+            confirmed: {
+                title: 'Order confirmed',
+                message: `Great news! Your order is now confirmed.`,
+            },
+            cancelled: {
+                title: 'Order cancelled',
+                message: `Your order has been cancelled. Reach support if this looks incorrect.`,
+            },
+            completed: {
+                title: 'Order completed',
+                message: `Your order has been marked completed.`,
+            },
+            pending: {
+                title: 'Order pending',
+                message: `Your order is currently pending.`,
+            },
+            in_progress: {
+                title: 'Order in progress',
+                message: `Work on your order is now in progress.`,
+            },
+        }
+        const statusInfo = userStatusMessages[status] ?? {
+            title: 'Order updated',
+            message: `Your order status changed to ${status}.`,
+        }
+        try {
+            await sendNotificationToUser({
+                user_id: currentOrder.user_id,
+                type: 'order_status',
+                title: statusInfo.title,
+                message: statusInfo.message,
+                data: { order_id: id, status, previous_status: currentOrder.status },
+            })
+        } catch (notifErr) {
+            console.error('Failed to send user notification:', notifErr)
         }
     }
 

@@ -3,6 +3,7 @@ import Razorpay from 'razorpay'
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { getEndUserIdFromRequest } from '@/lib/user-auth'
+import { sendNotificationToUser } from '@/lib/notifications'
 
 /**
  * POST /api/public/payment/verify-balance
@@ -125,6 +126,14 @@ export async function POST(req: Request) {
             order_id: order_id,
             status: 'confirmed',
             note: `Balance payment completed via Razorpay. Full amount paid.`,
+        })
+
+        await sendNotificationToUser({
+            user_id: userId,
+            type: 'order_status',
+            title: 'Payment confirmed',
+            message: `Balance payment received for order ${String(order_id).slice(0, 8)}…. Your order is confirmed.`,
+            data: { order_id, status: 'confirmed', payment: 'balance' },
         })
 
         return NextResponse.json(updated, { status: 200 })
