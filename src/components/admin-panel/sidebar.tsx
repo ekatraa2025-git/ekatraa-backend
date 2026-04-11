@@ -21,6 +21,7 @@ import {
     Tags,
     MessageCircleHeart,
     PackagePlus,
+    LibraryBig,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -33,6 +34,7 @@ const MENU_ITEMS = [
     { name: 'Catalog Categories', icon: Tags, path: '/admin/catalog-categories' },
     { name: 'Services', icon: ListChecks, path: '/admin/offerable-services' },
     { name: 'Special catalog', icon: PackagePlus, path: '/admin/special-services' },
+    { name: 'E-Invites', icon: LibraryBig, path: '/admin/e-invites' },
     { name: 'Testimonials', icon: MessageCircleHeart, path: '/admin/testimonials' },
     { name: 'Orders', icon: ShoppingCart, path: '/admin/orders' },
     { name: 'Budget snapshots', icon: Sparkles, path: '/admin/budget-recommendation-snapshots' },
