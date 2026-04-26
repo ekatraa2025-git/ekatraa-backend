@@ -38,4 +38,7 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# Mastra local libsql file (when MASTRA_LIBSQL_URL uses file:)
+.mastra/
 next-env.d.ts
