@@ -19,6 +19,10 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AdminImage } from '@/components/Common/AdminImage'
 
+function hasAllSelected(selectedIds: string[], allIds: string[]): boolean {
+    return allIds.length > 0 && allIds.every((id) => selectedIds.includes(id))
+}
+
 export default function OfferableServicesPage() {
     const [items, setItems] = useState<
         {
@@ -202,7 +206,27 @@ export default function OfferableServicesPage() {
         <DefaultLayout>
             <div className="mb-4 flex flex-wrap gap-6">
                 <div className="min-w-[220px] max-w-md">
-                    <label className="text-sm font-medium">Occasions (multi)</label>
+                    <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium">Occasions (multi)</label>
+                        <div className="flex items-center gap-3 text-xs">
+                            <label className="flex cursor-pointer items-center gap-1">
+                                <input
+                                    type="checkbox"
+                                    checked={hasAllSelected(occasionFilterIds, occasions.map((o) => o.id))}
+                                    onChange={(e) => setOccasionFilterIds(e.target.checked ? occasions.map((o) => o.id) : [])}
+                                    disabled={occasions.length === 0}
+                                />
+                                <span>Select all</span>
+                            </label>
+                            <button
+                                type="button"
+                                className="text-primary underline"
+                                onClick={() => setOccasionFilterIds([])}
+                            >
+                                Clear all
+                            </button>
+                        </div>
+                    </div>
                     <div className="mt-1 max-h-40 overflow-y-auto rounded-md border px-3 py-2 text-sm">
                         {occasions.map((o) => (
                             <label key={o.id} className="flex cursor-pointer items-center gap-2 py-1">
@@ -218,7 +242,27 @@ export default function OfferableServicesPage() {
                     <p className="text-muted-foreground mt-1 text-xs">Leave empty for all. Services linked to any selected occasion.</p>
                 </div>
                 <div className="min-w-[220px] max-w-md">
-                    <label className="text-sm font-medium">Vendors (multi)</label>
+                    <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium">Vendors (multi)</label>
+                        <div className="flex items-center gap-3 text-xs">
+                            <label className="flex cursor-pointer items-center gap-1">
+                                <input
+                                    type="checkbox"
+                                    checked={hasAllSelected(vendorFilterIds, vendors.map((v) => v.id))}
+                                    onChange={(e) => setVendorFilterIds(e.target.checked ? vendors.map((v) => v.id) : [])}
+                                    disabled={vendors.length === 0}
+                                />
+                                <span>Select all</span>
+                            </label>
+                            <button
+                                type="button"
+                                className="text-primary underline"
+                                onClick={() => setVendorFilterIds([])}
+                            >
+                                Clear all
+                            </button>
+                        </div>
+                    </div>
                     <div className="mt-1 max-h-40 overflow-y-auto rounded-md border px-3 py-2 text-sm">
                         {vendors.map((v) => (
                             <label key={v.id} className="flex cursor-pointer items-center gap-2 py-1">

@@ -28,6 +28,10 @@ function toggleId(list: string[], id: string): string[] {
     return list.includes(id) ? list.filter((x) => x !== id) : [...list, id]
 }
 
+function hasAllSelected(selectedIds: string[], allIds: string[]): boolean {
+    return allIds.length > 0 && allIds.every((id) => selectedIds.includes(id))
+}
+
 export default function EditOfferableServicePage() {
     const router = useRouter()
     const params = useParams()
@@ -233,31 +237,89 @@ export default function EditOfferableServicePage() {
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        {!form.is_special_catalog && (
-                            <div>
+                        <div>
+                            <div className="flex items-center justify-between">
                                 <label className="text-sm font-medium">Occasions</label>
-                                <div className="mt-1 max-h-36 overflow-y-auto rounded-md border px-3 py-2">
-                                    {occasions.map((o) => (
-                                        <label key={o.id} className="flex cursor-pointer items-center gap-2 py-1">
-                                            <input
-                                                type="checkbox"
-                                                checked={form.occasion_ids.includes(o.id)}
-                                                onChange={() =>
-                                                    setForm((p) => ({
-                                                        ...p,
-                                                        occasion_ids: toggleId(p.occasion_ids, o.id),
-                                                        category_id: '',
-                                                    }))
-                                                }
-                                            />
-                                            <span>{o.name}</span>
-                                        </label>
-                                    ))}
+                                <div className="flex items-center gap-3 text-xs">
+                                    <label className="flex cursor-pointer items-center gap-1">
+                                        <input
+                                            type="checkbox"
+                                            checked={form.is_special_catalog || hasAllSelected(form.occasion_ids, occasions.map((o) => o.id))}
+                                            onChange={(e) => {
+                                                if (form.is_special_catalog) return
+                                                setForm((p) => ({
+                                                    ...p,
+                                                    occasion_ids: e.target.checked ? occasions.map((o) => o.id) : [],
+                                                    category_id: '',
+                                                }))
+                                            }}
+                                            disabled={form.is_special_catalog || occasions.length === 0}
+                                        />
+                                        <span>Select all</span>
+                                    </label>
+                                    {!form.is_special_catalog && (
+                                        <button
+                                            type="button"
+                                            className="text-primary underline"
+                                            onClick={() => setForm((p) => ({ ...p, occasion_ids: [], category_id: '' }))}
+                                        >
+                                            Clear all
+                                        </button>
+                                    )}
                                 </div>
                             </div>
-                        )}
+                            <div className="mt-1 max-h-36 overflow-y-auto rounded-md border px-3 py-2">
+                                {occasions.map((o) => (
+                                    <label key={o.id} className="flex cursor-pointer items-center gap-2 py-1">
+                                        <input
+                                            type="checkbox"
+                                            checked={form.is_special_catalog || form.occasion_ids.includes(o.id)}
+                                            onChange={() =>
+                                                setForm((p) => ({
+                                                    ...p,
+                                                    occasion_ids: toggleId(p.occasion_ids, o.id),
+                                                    category_id: '',
+                                                }))
+                                            }
+                                            disabled={form.is_special_catalog}
+                                        />
+                                        <span>{o.name}</span>
+                                    </label>
+                                ))}
+                            </div>
+                            {form.is_special_catalog && (
+                                <p className="text-muted-foreground mt-1 text-xs">
+                                    Special catalog applies to all occasions.
+                                </p>
+                            )}
+                        </div>
                         <div>
-                            <label className="text-sm font-medium">Vendors (optional)</label>
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium">Vendors (optional)</label>
+                                <div className="flex items-center gap-3 text-xs">
+                                    <label className="flex cursor-pointer items-center gap-1">
+                                        <input
+                                            type="checkbox"
+                                            checked={hasAllSelected(form.vendor_ids, vendors.map((v) => v.id))}
+                                            onChange={(e) =>
+                                                setForm((p) => ({
+                                                    ...p,
+                                                    vendor_ids: e.target.checked ? vendors.map((v) => v.id) : [],
+                                                }))
+                                            }
+                                            disabled={vendors.length === 0}
+                                        />
+                                        <span>Select all</span>
+                                    </label>
+                                    <button
+                                        type="button"
+                                        className="text-primary underline"
+                                        onClick={() => setForm((p) => ({ ...p, vendor_ids: [] }))}
+                                    >
+                                        Clear all
+                                    </button>
+                                </div>
+                            </div>
                             <div className="mt-1 max-h-36 overflow-y-auto rounded-md border px-3 py-2">
                                 {vendors.map((v) => (
                                     <label key={v.id} className="flex cursor-pointer items-center gap-2 py-1">
