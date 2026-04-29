@@ -8,7 +8,7 @@ import { NextResponse } from 'next/server'
 export async function GET() {
     const { data, error } = await supabase
         .from('occasions')
-        .select('id, name, icon, icon_url, display_order')
+        .select('id, name, image_url, icon_url, icon, display_order')
         .eq('is_active', true)
         .order('display_order', { ascending: true })
 
