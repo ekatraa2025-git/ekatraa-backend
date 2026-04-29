@@ -17,9 +17,10 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { AdminImage } from '@/components/Common/AdminImage'
 
 export default function OccasionsPage() {
-    const [items, setItems] = useState<{ id: string; name: string; icon?: string; display_order?: number; is_active?: boolean }[]>([])
+    const [items, setItems] = useState<{ id: string; name: string; image_url?: string; display_order?: number; is_active?: boolean }[]>([])
     const [filtered, setFiltered] = useState<typeof items>([])
     const [loading, setLoading] = useState(true)
     const [deleteTarget, setDeleteTarget] = useState<{id: string; name: string} | null>(null)
@@ -73,9 +74,19 @@ export default function OccasionsPage() {
         { header: 'ID', key: 'id' },
         { header: 'Name', key: 'name' },
         {
-            header: 'Icon',
-            key: 'icon',
-            render: (v: string, row: { icon?: string }) => (row.icon ? <span className="text-2xl">{row.icon}</span> : '—'),
+            header: 'Image',
+            key: 'image_url',
+            render: (v: string) =>
+                v ? (
+                    <AdminImage
+                        url={v}
+                        alt="Occasion"
+                        className="h-10 w-14 rounded object-cover"
+                        placeholderClassName="h-10 w-14 rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-[10px] text-gray-500"
+                    />
+                ) : (
+                    '—'
+                ),
         },
         { header: 'Order', key: 'display_order' },
         {

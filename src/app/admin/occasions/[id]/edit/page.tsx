@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { uploadFile } from '@/utils/storage'
+import { AdminImage } from '@/components/Common/AdminImage'
 
 type BudgetAllocationRow = { category_id: string; percentage: number; display_order: number }
 
@@ -16,7 +18,8 @@ export default function EditOccasionPage() {
     const params = useParams()
     const id = params.id as string
     const [loading, setLoading] = useState(false)
-    const [form, setForm] = useState({ name: '', icon: '', display_order: 0, is_active: true })
+    const [uploading, setUploading] = useState(false)
+    const [form, setForm] = useState({ name: '', image_url: '', display_order: 0, is_active: true })
 
     const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([])
     const [allocations, setAllocations] = useState<BudgetAllocationRow[]>([])
@@ -29,12 +32,21 @@ export default function EditOccasionPage() {
             .then((data) => {
                 if (data && !data.error) setForm({
                     name: data.name ?? '',
-                    icon: data.icon ?? '',
+                    image_url: data.image_url ?? '',
                     display_order: data.display_order ?? 0,
                     is_active: data.is_active !== false,
                 })
             })
     }, [id])
+
+    const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        setUploading(true)
+        const url = await uploadFile(file, 'occasions')
+        setUploading(false)
+        if (url) setForm((p) => ({ ...p, image_url: url }))
+    }
 
     useEffect(() => {
         setAllocLoading(true)
@@ -136,10 +148,24 @@ export default function EditOccasionPage() {
                             />
                         </div>
                         <div>
-                            <label className="text-sm font-medium">Icon</label>
+                            <label className="text-sm font-medium">Occasion image</label>
+                            <div className="flex items-center gap-3">
+                                <input type="file" accept="image/*" onChange={handleImageChange} className="text-sm" />
+                                {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
+                            </div>
+                            {form.image_url ? (
+                                <AdminImage
+                                    url={form.image_url}
+                                    alt="Occasion preview"
+                                    className="mt-2 h-20 w-28 rounded-md object-cover"
+                                    placeholderClassName="mt-2 h-20 w-28 rounded-md bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs"
+                                />
+                            ) : null}
                             <Input
-                                value={form.icon}
-                                onChange={(e) => setForm((p) => ({ ...p, icon: e.target.value }))}
+                                className="mt-2"
+                                value={form.image_url}
+                                onChange={(e) => setForm((p) => ({ ...p, image_url: e.target.value }))}
+                                placeholder="Or paste image URL"
                             />
                         </div>
                         <div>

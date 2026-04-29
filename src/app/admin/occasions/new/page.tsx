@@ -8,11 +8,23 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { uploadFile } from '@/utils/storage'
+import { AdminImage } from '@/components/Common/AdminImage'
 
 export default function NewOccasionPage() {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
-    const [form, setForm] = useState({ id: '', name: '', icon: '', display_order: 0 })
+    const [uploading, setUploading] = useState(false)
+    const [form, setForm] = useState({ id: '', name: '', image_url: '', display_order: 0 })
+
+    const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        setUploading(true)
+        const url = await uploadFile(file, 'occasions')
+        setUploading(false)
+        if (url) setForm((p) => ({ ...p, image_url: url }))
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -55,11 +67,24 @@ export default function NewOccasionPage() {
                             />
                         </div>
                         <div>
-                            <label className="text-sm font-medium">Icon (emoji)</label>
+                            <label className="text-sm font-medium">Occasion image</label>
+                            <div className="flex items-center gap-3">
+                                <input type="file" accept="image/*" onChange={handleImageChange} className="text-sm" />
+                                {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
+                            </div>
+                            {form.image_url ? (
+                                <AdminImage
+                                    url={form.image_url}
+                                    alt="Occasion preview"
+                                    className="mt-2 h-20 w-28 rounded-md object-cover"
+                                    placeholderClassName="mt-2 h-20 w-28 rounded-md bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs"
+                                />
+                            ) : null}
                             <Input
-                                value={form.icon}
-                                onChange={(e) => setForm((p) => ({ ...p, icon: e.target.value }))}
-                                placeholder="💒"
+                                className="mt-2"
+                                value={form.image_url}
+                                onChange={(e) => setForm((p) => ({ ...p, image_url: e.target.value }))}
+                                placeholder="Or paste image URL"
                             />
                         </div>
                         <div>
