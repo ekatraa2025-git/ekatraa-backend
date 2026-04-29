@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { LogIn, Mail, Lock, AlertCircle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { encryptAdminLoginPayload } from '@/lib/admin-login-crypto-client'
 
 export default function LoginPage() {
     const [email, setEmail] = useState('')
@@ -15,28 +16,37 @@ export default function LoginPage() {
     const [error, setError] = useState<string | null>(null)
     const router = useRouter()
 
-    const handleLogin = async (e: React.FormEvent) => {
+    const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault()
         setLoading(true)
         setError(null)
 
         try {
+            const keyRes = await fetch('/api/auth/login-key', { cache: 'no-store' })
+            let body: object = { email, password }
+            if (keyRes.status !== 204) {
+                const keyJson = (await keyRes.json()) as { publicKey?: string }
+                if (keyJson.publicKey && typeof keyJson.publicKey === 'string') {
+                    body = await encryptAdminLoginPayload(keyJson.publicKey, email, password)
+                }
+            }
+
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password })
+                body: JSON.stringify(body),
             })
             const data = await res.json()
 
             if (data.error) {
                 setError(data.error)
-                setLoading(false)
             } else {
                 router.push('/admin')
                 router.refresh()
             }
-        } catch (error: any) {
+        } catch {
             setError('An unexpected error occurred. Please try again.')
+        } finally {
             setLoading(false)
         }
     }

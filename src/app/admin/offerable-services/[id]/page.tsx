@@ -128,39 +128,25 @@ export default function EditOfferableServicePage() {
             .catch(() => {})
     }, [id])
 
+    /** Full active category list (same source as special catalog) so saved category_id always appears. */
     useEffect(() => {
-        if (form.is_special_catalog) {
-            if (!occasions.length) return
-            const oid = occasions[0].id
-            fetch(`/api/public/categories?occasion_id=${encodeURIComponent(oid)}`)
-                .then((r) => r.json())
-                .then((data) => {
-                    if (Array.isArray(data)) setCategories(data)
-                })
-                .catch(() => setCategories([]))
+        if (!form.is_special_catalog && !form.occasion_ids.length) {
+            Promise.resolve().then(() => setCategories([]))
             return
         }
-        if (!form.occasion_ids.length) {
-            setCategories([])
-            return
-        }
-        Promise.all(
-            form.occasion_ids.map((oid) =>
-                fetch(`/api/public/categories?occasion_id=${encodeURIComponent(oid)}`).then((r) =>
-                    r.json()
-                )
-            )
-        )
-            .then((lists) => {
-                const map = new Map<string, Category>()
-                for (const arr of lists) {
-                    if (Array.isArray(arr))
-                        for (const c of arr) map.set(c.id, { id: c.id, name: c.name })
-                }
-                setCategories([...map.values()].sort((a, b) => a.name.localeCompare(b.name)))
+        fetch('/api/public/categories')
+            .then((r) => r.json())
+            .then((data) => {
+                if (Array.isArray(data)) {
+                    setCategories(
+                        [...data].sort((a: Category, b: Category) =>
+                            a.name.localeCompare(b.name)
+                        )
+                    )
+                } else setCategories([])
             })
             .catch(() => setCategories([]))
-    }, [form.occasion_ids, form.is_special_catalog, occasions])
+    }, [form.occasion_ids, form.is_special_catalog])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
