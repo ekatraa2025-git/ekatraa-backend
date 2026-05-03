@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getEndUserIdFromRequest } from '@/lib/user-auth'
 import { supabase } from '@/lib/supabase/server'
 import { signedUrlForStorageRef } from '@/lib/storage-display-url'
+const MAX_EINVITE_ITERATIONS = 10
 
 export async function GET(req: Request) {
     try {
@@ -17,6 +18,11 @@ export async function GET(req: Request) {
             .eq('user_id', userId)
             .order('created_at', { ascending: false })
             .limit(limit)
+        const { data: counterRow } = await supabase
+            .from('user_e_invite_generation_counters')
+            .select('total_generations')
+            .eq('user_id', userId)
+            .maybeSingle()
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 })
@@ -36,7 +42,15 @@ export async function GET(req: Request) {
             }))
         )
 
-        return NextResponse.json({ invites })
+        return NextResponse.json({
+            invites,
+            max_iterations: MAX_EINVITE_ITERATIONS,
+            used_iterations: Number(counterRow?.total_generations || rows.length),
+            remaining_iterations: Math.max(
+                0,
+                MAX_EINVITE_ITERATIONS - Number(counterRow?.total_generations || rows.length)
+            ),
+        })
     } catch (e) {
         return NextResponse.json({ error: (e as Error).message }, { status: 500 })
     }

@@ -52,22 +52,31 @@ export default function EInvitesAdminPage() {
     const [editRow, setEditRow] = useState<UserEInvite | null>(null)
     const [editNote, setEditNote] = useState('')
     const [savingNote, setSavingNote] = useState(false)
+    const [deleteInviteTarget, setDeleteInviteTarget] = useState<{ id: string; label: string } | null>(null)
+    const [pricing, setPricing] = useState({ static_inr: 300, animated_inr: 500 })
+    const [savingPricing, setSavingPricing] = useState(false)
 
     const fetchAll = async () => {
         setLoading(true)
         try {
-            const [invRes, faqRes] = await Promise.all([
+            const [invRes, faqRes, settingsRes] = await Promise.all([
                 fetch('/api/admin/user-e-invites?limit=120'),
                 fetch('/api/admin/e-invites/faqs'),
+                fetch('/api/admin/platform-settings'),
             ])
             const invJson = await invRes.json()
             const faqJson = await faqRes.json()
+            const settingsJson = await settingsRes.json()
             const invList = Array.isArray(invJson?.invites) ? invJson.invites : []
             const faqList = Array.isArray(faqJson) ? faqJson : []
             setInvites(invList)
             setFilteredInvites(invList)
             setFaqs(faqList)
             setFilteredFaqs(faqList)
+            setPricing({
+                static_inr: Number(settingsJson?.e_invite_static_inr || 300),
+                animated_inr: Number(settingsJson?.e_invite_animated_inr || 500),
+            })
         } catch {
             toast.error('Could not load e-invites')
         } finally {
@@ -193,6 +202,58 @@ export default function EInvitesAdminPage() {
         setDeleteFaqTarget(null)
     }
 
+    const deleteInvite = async () => {
+        if (!deleteInviteTarget) return
+        const res = await fetch(`/api/admin/user-e-invites/${deleteInviteTarget.id}`, {
+            method: 'DELETE',
+        })
+        const data = await res.json().catch(() => ({}))
+        if (data?.error) toast.error(data.error)
+        else {
+            toast.success('Invite deleted')
+            fetchAll()
+        }
+        setDeleteInviteTarget(null)
+    }
+
+    const bulkDeleteInvites = async (ids: string[]) => {
+        if (!ids.length) return
+        const res = await fetch('/api/admin/user-e-invites', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (data?.error) {
+            toast.error(data.error)
+            return
+        }
+        toast.success(`Deleted ${ids.length} invite${ids.length === 1 ? '' : 's'}`)
+        await fetchAll()
+    }
+
+    const savePricing = async () => {
+        setSavingPricing(true)
+        try {
+            const res = await fetch('/api/admin/platform-settings', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    e_invite_static_inr: Math.max(1, Math.round(Number(pricing.static_inr))),
+                    e_invite_animated_inr: Math.max(1, Math.round(Number(pricing.animated_inr))),
+                }),
+            })
+            const json = await res.json().catch(() => ({}))
+            if (!res.ok || json?.error) {
+                toast.error(json?.error || 'Could not save pricing')
+                return
+            }
+            toast.success('E-invite pricing updated')
+        } finally {
+            setSavingPricing(false)
+        }
+    }
+
     const saveAdminNote = async () => {
         if (!editRow) return
         setSavingNote(true)
@@ -230,9 +291,37 @@ export default function EInvitesAdminPage() {
                 <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
                     <p className="font-medium text-foreground">AI e-invites (user-generated)</p>
                     <p className="mt-1">
-                        Fixed pricing: <strong>₹300</strong> static image, <strong>₹500</strong> animated GIF. Users pay in-app after
-                        generation; downloads unlock after Razorpay confirmation.
+                        Fixed pricing: <strong>₹300</strong> static image, <strong>₹500</strong> animated (MP4 when ffmpeg is available, else GIF). Users pay
+                        in-app after generation; downloads unlock after Razorpay confirmation.
                     </p>
+                    <div className="mt-4 grid max-w-md grid-cols-1 gap-3 md:grid-cols-2">
+                        <div>
+                            <p className="mb-1 text-xs font-medium text-foreground">Static (INR)</p>
+                            <Input
+                                type="number"
+                                min={1}
+                                value={pricing.static_inr}
+                                onChange={(e) =>
+                                    setPricing((p) => ({ ...p, static_inr: Number(e.target.value) || 1 }))
+                                }
+                            />
+                        </div>
+                        <div>
+                            <p className="mb-1 text-xs font-medium text-foreground">Animated (INR)</p>
+                            <Input
+                                type="number"
+                                min={1}
+                                value={pricing.animated_inr}
+                                onChange={(e) =>
+                                    setPricing((p) => ({ ...p, animated_inr: Number(e.target.value) || 1 }))
+                                }
+                            />
+                        </div>
+                    </div>
+                    <Button className="mt-3" onClick={() => void savePricing()} disabled={savingPricing}>
+                        {savingPricing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Save pricing
+                    </Button>
                 </div>
 
                 <DataTableView
@@ -241,6 +330,8 @@ export default function EInvitesAdminPage() {
                     columns={inviteColumns}
                     data={filteredInvites}
                     onSearch={onInviteSearch}
+                    selectable
+                    onBulkDelete={bulkDeleteInvites}
                     actions={(item: UserEInvite) => (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -269,6 +360,19 @@ export default function EInvitesAdminPage() {
                                         Open preview
                                     </DropdownMenuItem>
                                 ) : null}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                    className="text-destructive focus:bg-destructive/10"
+                                    onClick={() =>
+                                        setDeleteInviteTarget({
+                                            id: item.id,
+                                            label: String(item.form_payload?.event_name || item.id),
+                                        })
+                                    }
+                                >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete invite
+                                </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     )}
@@ -355,6 +459,13 @@ export default function EInvitesAdminPage() {
                 title="Delete FAQ"
                 description={`Remove "${deleteFaqTarget?.question}"?`}
                 onConfirm={deleteFaq}
+            />
+            <ConfirmDialog
+                open={!!deleteInviteTarget}
+                onOpenChange={(open) => !open && setDeleteInviteTarget(null)}
+                title="Delete e-invite"
+                description={`Delete "${deleteInviteTarget?.label}" and its stored media file?`}
+                onConfirm={deleteInvite}
             />
         </DefaultLayout>
     )

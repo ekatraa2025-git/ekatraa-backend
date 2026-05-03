@@ -115,57 +115,112 @@ export async function chatWithOpenRouter(input: {
     const sessionId = String(input.sessionId || '').trim()
     const isNvidiaModel = /nvidia|nemotron/i.test(model)
     const debugLogs = isOpenRouterDebugLogsEnabled()
-    const started = Date.now()
 
-    if (debugLogs && isNvidiaModel) {
-        console.info('[OpenRouter][NVIDIA] request.start', {
-            model,
-            session_id: sessionId || null,
-            message_count: messages.length,
-            has_system: !!input.system?.trim(),
-        })
-    }
+    const baseMax = typeof input.maxTokens === 'number' ? input.maxTokens : 2048
+    const attempts: { maxTokens: number; useSessionId: boolean }[] = [
+        { maxTokens: baseMax, useSessionId: !!sessionId },
+        { maxTokens: Math.min(16384, Math.max(4096, baseMax * 2)), useSessionId: false },
+    ]
 
-    const res = await openRouterFetch('/chat/completions', {
-        method: 'POST',
-        body: JSON.stringify({
-            model,
-            messages,
-            temperature: typeof input.temperature === 'number' ? input.temperature : 0.6,
-            max_tokens: typeof input.maxTokens === 'number' ? input.maxTokens : 2048,
-            ...(sessionId ? { session_id: sessionId } : {}),
-        }),
-    })
-    const json = await res.json().catch(() => null)
-    const elapsedMs = Date.now() - started
-    if (!res.ok) {
-        const msg = String(
-            json?.error?.message || json?.message || res.statusText || 'OpenRouter request failed'
-        )
+    let lastErr = 'OpenRouter request failed'
+
+    for (let attempt = 0; attempt < attempts.length; attempt++) {
+        const { maxTokens, useSessionId } = attempts[attempt]
+        const started = Date.now()
+
         if (debugLogs && isNvidiaModel) {
-            console.error('[OpenRouter][NVIDIA] request.error', {
+            console.info('[OpenRouter][NVIDIA] request.start', {
                 model,
-                session_id: sessionId || null,
-                status: res.status,
-                elapsed_ms: elapsedMs,
-                error: msg,
+                attempt,
+                session_id: useSessionId && sessionId ? sessionId : null,
+                message_count: messages.length,
+                max_tokens: maxTokens,
             })
         }
-        throw new Error(msg)
-    }
-    const text = String(json?.choices?.[0]?.message?.content || '').trim()
-    if (!text) throw new Error('OpenRouter returned empty reply')
-    if (debugLogs && isNvidiaModel) {
-        console.info('[OpenRouter][NVIDIA] request.success', {
-            model,
-            session_id: sessionId || null,
-            request_id: String(json?.id || ''),
-            provider: String(json?.provider || ''),
-            usage: json?.usage || null,
-            elapsed_ms: elapsedMs,
+
+        const res = await openRouterFetch('/chat/completions', {
+            method: 'POST',
+            body: JSON.stringify({
+                model,
+                messages,
+                temperature: typeof input.temperature === 'number' ? input.temperature : 0.6,
+                max_tokens: maxTokens,
+                ...(useSessionId && sessionId ? { session_id: sessionId } : {}),
+            }),
         })
+        const json = (await res.json().catch(() => null)) as Record<string, unknown> | null
+        const elapsedMs = Date.now() - started
+
+        if (!res.ok) {
+            lastErr = String(
+                json?.error && typeof json.error === 'object' && 'message' in json.error
+                    ? (json.error as { message?: string }).message
+                    : json?.message || res.statusText || 'OpenRouter request failed'
+            )
+            const retriable =
+                /request\s+not\s+complete|incomplete|truncat|length|timeout|429|503/i.test(lastErr) ||
+                res.status === 429 ||
+                res.status >= 500
+            if (debugLogs && isNvidiaModel) {
+                console.error('[OpenRouter][NVIDIA] request.error', {
+                    model,
+                    attempt,
+                    status: res.status,
+                    elapsed_ms: elapsedMs,
+                    error: lastErr,
+                })
+            }
+            if (retriable && attempt < attempts.length - 1) continue
+            throw new Error(lastErr)
+        }
+
+        const choices = json?.choices
+        const choice0 =
+            Array.isArray(choices) && choices[0] && typeof choices[0] === 'object'
+                ? (choices[0] as Record<string, unknown>)
+                : null
+        const finishReason = String(choice0?.finish_reason || '')
+        const msg = choice0?.message
+        let text = ''
+        if (msg && typeof msg === 'object') {
+            text = String((msg as Record<string, unknown>).content ?? '').trim()
+        }
+
+        if (!text) {
+            lastErr = 'OpenRouter returned empty reply'
+            if (debugLogs && isNvidiaModel) {
+                console.error('[OpenRouter][NVIDIA] empty content', {
+                    model,
+                    attempt,
+                    finish_reason: finishReason,
+                    elapsed_ms: elapsedMs,
+                })
+            }
+            if (attempt < attempts.length - 1) continue
+            throw new Error(lastErr)
+        }
+
+        if (finishReason === 'length' && attempt < attempts.length - 1) {
+            lastErr = 'OpenRouter reply may be truncated (finish_reason=length)'
+            if (debugLogs && isNvidiaModel) {
+                console.warn('[OpenRouter][NVIDIA] retrying for length truncation', { attempt })
+            }
+            continue
+        }
+
+        if (debugLogs && isNvidiaModel) {
+            console.info('[OpenRouter][NVIDIA] request.success', {
+                model,
+                attempt,
+                finish_reason: finishReason,
+                request_id: String(json?.id || ''),
+                elapsed_ms: elapsedMs,
+            })
+        }
+        return { text, model }
     }
-    return { text, model }
+
+    throw new Error(lastErr)
 }
 
 /** Image generations can exceed 4k “tokens”; capping at 2048 truncates the response and drops the image payload. */

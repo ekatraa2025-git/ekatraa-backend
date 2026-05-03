@@ -1,9 +1,19 @@
 import { NextResponse } from 'next/server'
-import { E_INVITE_ANIMATED_INR, E_INVITE_STATIC_INR } from '@/lib/e-invite-pricing'
+import { getEInvitePricingConfig, E_INVITE_CATALOG_SERVICE_ID } from '@/lib/e-invite-pricing'
 
+/**
+ * GET /api/public/e-invites/pricing
+ * Public e-invite list prices + catalog service id for cart lines.
+ */
 export async function GET() {
-    return NextResponse.json({
-        static_inr: E_INVITE_STATIC_INR,
-        animated_inr: E_INVITE_ANIMATED_INR,
-    })
+    try {
+        const { static_inr, animated_inr } = await getEInvitePricingConfig()
+        return NextResponse.json({
+            static_inr,
+            animated_inr,
+            catalog_service_id: E_INVITE_CATALOG_SERVICE_ID,
+        })
+    } catch (e) {
+        return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    }
 }

@@ -8,8 +8,11 @@ import { priceInrForMediaKind, type EInviteMediaKind } from '@/lib/e-invite-pric
 import { buildEInviteImagePrompt } from '@/lib/e-invite-prompt'
 import { signedUrlForStorageRef } from '@/lib/storage-display-url'
 import { buildGifFromPngBuffers } from '@/lib/e-invite-gif'
+import { buildMp4FromPngBuffers } from '@/lib/e-invite-video'
+import { mastra } from '@/mastra'
 
 const BUCKET = 'ekatraa2025'
+const MAX_EINVITE_ITERATIONS = 10
 
 async function imageRefToBuffer(ref: string): Promise<Buffer> {
     const r = String(ref || '').trim()
@@ -29,6 +32,67 @@ type DesignBody = {
     variation?: string
     font_style?: string
     sticker_pack?: string
+}
+
+type PromptChatMessage = { sender?: string; text?: string; role?: string; content?: string }
+
+function compactChatHistory(input: unknown): string {
+    if (!Array.isArray(input)) return ''
+    const lines = (input as PromptChatMessage[])
+        .slice(-8)
+        .map((m) => {
+            const role = String(m.sender || m.role || 'user').toLowerCase() === 'bot' ? 'assistant' : 'user'
+            const text = String(m.text || m.content || '').trim()
+            if (!text) return ''
+            return `${role}: ${text}`
+        })
+        .filter(Boolean)
+    return lines.join('\n')
+}
+
+async function enhancePromptWithMastra(args: {
+    occasion: string
+    userPrompt: string
+    eventName: string
+    hostNames: string
+    eventDate: string
+    eventTime: string
+    venue: string
+    chatHistory: string
+    sessionId: string
+}): Promise<string> {
+    const prompt = `You are an image-prompt optimizer for high-quality Indian event invitation artwork.
+Return ONLY one improved prompt (plain text). No markdown, no bullets.
+Guardrails:
+- Keep content family-friendly and culturally respectful.
+- Focus on invitation design visuals only.
+- Include key event details exactly when provided.
+- Preserve user intent while improving clarity, composition, color harmony, typography cues, and print-ready aesthetics.
+
+Event details:
+- Occasion: ${args.occasion}
+- Event name: ${args.eventName}
+- Hosts: ${args.hostNames || 'N/A'}
+- Date: ${args.eventDate || 'N/A'}
+- Time: ${args.eventTime || 'N/A'}
+- Venue: ${args.venue || 'N/A'}
+
+User prompt:
+${args.userPrompt}
+
+Recent chat context:
+${args.chatHistory || 'N/A'}`
+    try {
+        const agent = mastra.getAgentById('event-planning-agent')
+        const out = await agent.generate(
+            [{ role: 'user', content: prompt }],
+            { memory: { thread: `e-invite-${args.sessionId}`, resource: 'ekatraa-einvite' } }
+        )
+        const text = String(out?.text || '').trim()
+        return text || args.userPrompt
+    } catch {
+        return args.userPrompt
+    }
 }
 
 export async function POST(req: Request) {
@@ -56,16 +120,55 @@ export async function POST(req: Request) {
 
         const design: DesignBody =
             body.design && typeof body.design === 'object' ? (body.design as DesignBody) : {}
+        const invitationTexts =
+            body.invitation_texts && typeof body.invitation_texts === 'object'
+                ? (body.invitation_texts as Record<string, unknown>)
+                : null
+        const preferredLanguage = String(body.preferred_language || 'en').trim().toLowerCase()
+        const chatHistory = compactChatHistory(body.chat_history)
+
+        const { data: counterRow } = await supabase
+            .from('user_e_invite_generation_counters')
+            .select('total_generations')
+            .eq('user_id', userId)
+            .maybeSingle()
+        const { count: existingCount } = await supabase
+            .from('user_e_invites')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', userId)
+        const usedIterations = Number(counterRow?.total_generations ?? existingCount ?? 0)
+        if (usedIterations >= MAX_EINVITE_ITERATIONS) {
+            return NextResponse.json(
+                {
+                    error: `Generation limit reached. Max ${MAX_EINVITE_ITERATIONS} invites are allowed.`,
+                    code: 'ITERATION_LIMIT_REACHED',
+                    max_iterations: MAX_EINVITE_ITERATIONS,
+                    used_iterations: usedIterations,
+                    remaining_iterations: 0,
+                },
+                { status: 429 }
+            )
+        }
 
         const settings = await getAiRuntimeSettings()
         const imageModel = settings.openrouterImageModel
-        const animModel = settings.openrouterInviteAnimatedModel
 
         const sessionId = `e-inv-gen-${userId}-${Date.now()}`
+        const refinedPrompt = await enhancePromptWithMastra({
+            occasion,
+            userPrompt,
+            eventName,
+            hostNames,
+            eventDate,
+            eventTime,
+            venue,
+            chatHistory,
+            sessionId,
+        })
 
         const baseArgs = {
             occasion,
-            userPrompt,
+            userPrompt: refinedPrompt,
             eventName,
             hostNames: hostNames || undefined,
             eventDate: eventDate || undefined,
@@ -77,12 +180,13 @@ export async function POST(req: Request) {
         let storagePath: string
         let uploadBody: Buffer
         let contentType: string
+        let outputMime: string
 
         if (mediaKind === 'static') {
             const prompt = buildEInviteImagePrompt({
                 ...baseArgs,
                 compositionHint:
-                    'Single static frame — rich shadows, subtle paper texture, magazine finish.',
+                    'Single static frame — rich shadows, subtle paper texture, magazine finish. Frozen typography; no motion artifacts.',
             })
             const { imageRef } = await generateImageWithOpenRouter({
                 model: imageModel,
@@ -92,33 +196,36 @@ export async function POST(req: Request) {
             uploadBody = await imageRefToBuffer(imageRef)
             contentType = 'image/png'
             storagePath = `e-invites/${userId}/${randomUUID()}.png`
+            outputMime = 'image/png'
         } else {
             const prompt1 = buildEInviteImagePrompt({
                 ...baseArgs,
                 compositionHint:
-                    'Frame 1 of 2 for a gentle GIF loop — establish composition, typography, and lighting baseline.',
+                    'Frozen invitation artwork — a single still moment. Typography razor-sharp and fully readable: no glow, no motion blur, no double-exposure, no strobe, no “shimmer” on letters.',
             })
             const prompt2 = buildEInviteImagePrompt({
                 ...baseArgs,
                 compositionHint:
-                    'Frame 2 of 2 — same layout and palette as frame 1; subtly shift lights, confetti, or depth for a soft celebratory motion when looped.',
+                    'Companion frame for a subtle motion loop: reproduce the SAME invitation as the companion frame — identical wording, fonts, sizes, positions, and ink colors. Adjust ONLY soft background ambience behind the type (paper sheen, mandala watermark depth, corner motif lighting, gentle bokeh). Do NOT restyle typography, do NOT add effects on text, no flicker.',
             })
 
             const [{ imageRef: ref1 }, { imageRef: ref2 }] = await Promise.all([
                 generateImageWithOpenRouter({ model: imageModel, prompt: prompt1, sessionId }),
-                generateImageWithOpenRouter({ model: animModel, prompt: prompt2, sessionId }),
+                generateImageWithOpenRouter({ model: imageModel, prompt: prompt2, sessionId }),
             ])
             const buf1 = await imageRefToBuffer(ref1)
             const buf2 = await imageRefToBuffer(ref2)
-            let gifBuf: Buffer
             try {
-                gifBuf = await buildGifFromPngBuffers([buf1, buf2])
+                uploadBody = await buildMp4FromPngBuffers([buf1, buf2])
+                contentType = 'video/mp4'
+                storagePath = `e-invites/${userId}/${randomUUID()}.mp4`
+                outputMime = 'video/mp4'
             } catch {
-                gifBuf = await buildGifFromPngBuffers([buf1, buf1])
+                uploadBody = await buildGifFromPngBuffers([buf1, buf2])
+                contentType = 'image/gif'
+                storagePath = `e-invites/${userId}/${randomUUID()}.gif`
+                outputMime = 'image/gif'
             }
-            uploadBody = gifBuf
-            contentType = 'image/gif'
-            storagePath = `e-invites/${userId}/${randomUUID()}.gif`
         }
 
         const { error: upErr } = await supabase.storage.from(BUCKET).upload(storagePath, uploadBody, {
@@ -129,7 +236,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: upErr.message || 'Storage upload failed' }, { status: 500 })
         }
 
-        const priceInr = priceInrForMediaKind(mediaKind)
+        const priceInr = await priceInrForMediaKind(mediaKind)
         const combinedPrompt = buildEInviteImagePrompt({
             ...baseArgs,
         })
@@ -137,6 +244,7 @@ export async function POST(req: Request) {
         const formPayload = {
             occasion,
             media_type: rawMedia,
+            output_mime: outputMime,
             event_name: eventName,
             host_names: hostNames,
             event_date: eventDate,
@@ -144,6 +252,10 @@ export async function POST(req: Request) {
             venue,
             design,
             prompt: userPrompt,
+            invitation_texts: invitationTexts,
+            preferred_language: preferredLanguage,
+            chat_history: chatHistory,
+            prompt_refined: refinedPrompt,
         }
 
         const { data: row, error: insErr } = await supabase
@@ -163,6 +275,14 @@ export async function POST(req: Request) {
         if (insErr || !row) {
             return NextResponse.json({ error: insErr?.message || 'Could not save invite record' }, { status: 500 })
         }
+        await supabase.from('user_e_invite_generation_counters').upsert(
+            {
+                user_id: userId,
+                total_generations: usedIterations + 1,
+                updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'user_id', ignoreDuplicates: false }
+        )
 
         const mediaUrl = await signedUrlForStorageRef(storagePath)
 
@@ -170,10 +290,15 @@ export async function POST(req: Request) {
             user_e_invite_id: row.id,
             media_url: mediaUrl,
             storage_path: storagePath,
+            output_mime: outputMime,
             payment_status: row.payment_status,
             price_inr: row.price_inr,
             media_kind: row.media_kind,
             prompt: combinedPrompt,
+            max_iterations: MAX_EINVITE_ITERATIONS,
+            used_iterations: usedIterations + 1,
+            remaining_iterations: Math.max(0, MAX_EINVITE_ITERATIONS - (usedIterations + 1)),
+            estimated_seconds: mediaKind === 'animated' ? 130 : 80,
         })
     } catch (e) {
         const msg = (e as Error)?.message || String(e)

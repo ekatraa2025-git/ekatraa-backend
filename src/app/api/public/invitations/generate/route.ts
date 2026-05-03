@@ -19,6 +19,25 @@ type Body = {
     session_id?: string
 }
 
+type MultilingualInviteText = {
+    en: string
+    hi: string
+    or: string
+}
+
+async function translateViaFreeApi(text: string, targetLang: 'hi' | 'or'): Promise<string> {
+    const q = encodeURIComponent(text)
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${q}`
+    const res = await fetch(url, { cache: 'no-store' })
+    if (!res.ok) return ''
+    const json = (await res.json().catch(() => null)) as unknown
+    if (!Array.isArray(json) || !Array.isArray(json[0])) return ''
+    const parts = (json[0] as unknown[])
+        .map((p) => (Array.isArray(p) ? String(p[0] || '') : ''))
+        .filter(Boolean)
+    return parts.join('').trim()
+}
+
 /**
  * POST /api/public/invitations/generate
  * Uses OpenRouter-backed model to produce invitation copy.
@@ -75,7 +94,7 @@ Rules:
                     },
                 ],
                 temperature: 0.7,
-                maxTokens: 2048,
+                maxTokens: 4096,
             })
             const raw = String(out.text || '').trim()
             const parsed = tryParseJson(raw)
@@ -100,16 +119,28 @@ ${ctx}
 
 ${samplesHint}
 
-Produce ONE final, highly creative, unique invitation message for WhatsApp (140–260 words).
-Rich imagery, elegant tone, match the ${body.variation || 'classic'} style and ${body.colorTheme || 'gold'} mood.
-No markdown. Plain text only.`,
+Produce ONE final invitation message in English only.
+Rules:
+- 1 to 2 short paragraphs total
+- warm, elegant, festive tone for WhatsApp
+- plain text only (no markdown)`,
                 },
             ],
             temperature: 0.65,
-            maxTokens: 2048,
+            maxTokens: 4096,
         })
-        const final = String(out.text || '').trim()
-        return NextResponse.json({ samples: [] as string[], final: final || '' })
+        const raw = String(out.text || '').trim()
+        const english = raw || ''
+        const [hindi, odia] = await Promise.all([
+            translateViaFreeApi(english, 'hi'),
+            translateViaFreeApi(english, 'or'),
+        ])
+        const finalMultilingual: MultilingualInviteText = { en: english, hi: hindi, or: odia }
+        return NextResponse.json({
+            samples: [] as string[],
+            final: finalMultilingual.en || '',
+            final_multilingual: finalMultilingual,
+        })
     } catch (e) {
         const msg = e instanceof Error ? e.message : 'Could not generate invitation text'
         return NextResponse.json({ error: msg }, { status: 500 })
@@ -139,3 +170,4 @@ function normalizeSamples(samples: unknown, raw: string): string[] {
     if (parts.length >= 2) return parts.slice(0, 3)
     return [raw.slice(0, 2000) || 'Invitation text could not be split into samples.']
 }
+

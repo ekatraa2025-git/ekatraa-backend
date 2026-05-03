@@ -19,7 +19,6 @@ type OmggifCtor = new (
 }
 
 const require = createRequire(import.meta.url)
-// Vendored MIT omggif (deanm/omggif) — avoids fragile npm installs in CI.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { GifWriter } = require('./vendor-omggif.js') as { GifWriter: OmggifCtor }
 
@@ -71,6 +70,41 @@ function quantizeToPalette(rgba: Uint8ClampedArray, width: number, height: numbe
     return { palette: padPaletteRgb(palette), indices }
 }
 
+/** Map RGBA pixels to existing palette indices (reduces color flicker between GIF frames). */
+function mapRgbaToFixedPalette(
+    rgba: Uint8ClampedArray,
+    pixels: number,
+    paletteRgb: number[]
+): Uint8Array {
+    const palLen = Math.min(256, paletteRgb.length)
+    const pr: number[][] = []
+    for (let j = 0; j < palLen; j++) {
+        const c = paletteRgb[j]
+        pr.push([(c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff])
+    }
+    const indices = new Uint8Array(pixels)
+    for (let i = 0; i < pixels; i++) {
+        const o = i * 4
+        const r = rgba[o]
+        const g = rgba[o + 1]
+        const b = rgba[o + 2]
+        let best = 0
+        let bestD = Infinity
+        for (let j = 0; j < pr.length; j++) {
+            const dr = r - pr[j][0]
+            const dg = g - pr[j][1]
+            const db = b - pr[j][2]
+            const d = dr * dr + dg * dg + db * db
+            if (d < bestD) {
+                bestD = d
+                best = j
+            }
+        }
+        indices[i] = best
+    }
+    return indices
+}
+
 async function pngToQuantized(buf: Buffer, width: number, height: number) {
     const { data, info } = await sharp(buf)
         .resize(width, height, { fit: 'cover' })
@@ -81,7 +115,18 @@ async function pngToQuantized(buf: Buffer, width: number, height: number) {
     return quantizeToPalette(rgba, info.width, info.height)
 }
 
-/** Two PNG buffers → single animated GIF (short loop). */
+async function pngToIndicesWithPalette(buf: Buffer, width: number, height: number, palette: number[]) {
+    const { data, info } = await sharp(buf)
+        .resize(width, height, { fit: 'cover' })
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true })
+    const rgba = new Uint8ClampedArray(data.buffer, data.byteOffset, data.byteLength)
+    const pixels = info.width * info.height
+    return mapRgbaToFixedPalette(rgba, pixels, palette)
+}
+
+/** Two PNG buffers → animated GIF using one shared palette (calmer loop, less flicker). */
 export async function buildGifFromPngBuffers(pngBuffers: Buffer[]): Promise<Buffer> {
     if (!pngBuffers.length) throw new Error('No frames for GIF')
     const firstMeta = await sharp(pngBuffers[0]).metadata()
@@ -89,15 +134,17 @@ export async function buildGifFromPngBuffers(pngBuffers: Buffer[]): Promise<Buff
     const th = firstMeta.height || 1024
 
     const q0 = await pngToQuantized(pngBuffers[0], tw, th)
-    const q1 =
+    const palette = q0.palette
+    const indices1 =
         pngBuffers.length > 1
-            ? await pngToQuantized(pngBuffers[1], tw, th)
-            : q0
+            ? await pngToIndicesWithPalette(pngBuffers[1], tw, th, palette)
+            : q0.indices
 
     const scratch = new Uint8Array(8 * 1024 * 1024)
     const gw = new GifWriter(scratch, tw, th, { loop: 0 })
-    gw.addFrame(0, 0, tw, th, q0.indices, { palette: q0.palette, delay: 12 })
-    gw.addFrame(0, 0, tw, th, q1.indices, { palette: q1.palette, delay: 14 })
+    // Longer holds = readable typography; subtle motion only
+    gw.addFrame(0, 0, tw, th, q0.indices, { palette, delay: 35 })
+    gw.addFrame(0, 0, tw, th, indices1, { palette, delay: 38 })
     const end = gw.end()
     return Buffer.from(scratch.slice(0, end))
 }

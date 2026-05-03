@@ -2,11 +2,22 @@ import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import type { BookingProtectionMode } from '@/lib/booking-protection'
 import type { AiPrimaryProvider } from '@/lib/ai-runtime-settings'
+import { requireAdminSession } from '@/lib/require-admin-session'
+
+function pickPositiveInrUpdate(value: unknown): number | undefined {
+    if (value === undefined) return undefined
+    const n = Number(value)
+    if (!Number.isFinite(n)) return undefined
+    return Math.max(1, Math.round(n))
+}
 
 /**
  * GET /api/admin/platform-settings — single row for id `default`
  */
 export async function GET() {
+    const auth = await requireAdminSession()
+    if (!auth.ok) return auth.response
+
     const { data, error } = await supabase.from('platform_settings').select('*').eq('id', 'default').maybeSingle()
 
     if (error) {
@@ -26,6 +37,8 @@ export async function GET() {
             ai_openrouter_invite_animated_model: 'sourceful/riverflow-v2-pro',
             ai_claude_model: 'claude-sonnet-4-6',
             ai_gemini_model: 'gemini-3.1-flash-lite-preview',
+            e_invite_static_inr: 300,
+            e_invite_animated_inr: 500,
         })
     }
 
@@ -38,7 +51,18 @@ export async function GET() {
  */
 export async function PATCH(req: Request) {
     try {
-        const body = await req.json().catch(() => ({}))
+        const auth = await requireAdminSession()
+        if (!auth.ok) return auth.response
+
+        const text = await req.text()
+        let raw: unknown
+        try {
+            raw = text.trim() ? JSON.parse(text) : null
+        } catch {
+            raw = null
+        }
+        const body =
+            raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
         const updates: Record<string, unknown> = {}
 
         if (body.booking_protection_mode !== undefined) {
@@ -94,6 +118,24 @@ export async function PATCH(req: Request) {
             const m = String(body.ai_gemini_model || '').trim()
             if (!m) return NextResponse.json({ error: 'ai_gemini_model cannot be empty' }, { status: 400 })
             updates.ai_gemini_model = m
+        }
+        const staticInr = pickPositiveInrUpdate(
+            body.e_invite_static_inr !== undefined ? body.e_invite_static_inr : body.static_inr
+        )
+        if (body.e_invite_static_inr !== undefined || body.static_inr !== undefined) {
+            if (staticInr === undefined) {
+                return NextResponse.json({ error: 'e_invite_static_inr must be a finite number' }, { status: 400 })
+            }
+            updates.e_invite_static_inr = staticInr
+        }
+        const animatedInr = pickPositiveInrUpdate(
+            body.e_invite_animated_inr !== undefined ? body.e_invite_animated_inr : body.animated_inr
+        )
+        if (body.e_invite_animated_inr !== undefined || body.animated_inr !== undefined) {
+            if (animatedInr === undefined) {
+                return NextResponse.json({ error: 'e_invite_animated_inr must be a finite number' }, { status: 400 })
+            }
+            updates.e_invite_animated_inr = animatedInr
         }
 
         if (Object.keys(updates).length === 0) {

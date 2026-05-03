@@ -3,36 +3,39 @@ import { getEndUserIdFromRequest } from '@/lib/user-auth'
 import { supabase } from '@/lib/supabase/server'
 import { signedUrlForStorageRef } from '@/lib/storage-display-url'
 
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+/**
+ * GET /api/public/e-invites/mine/[id]/download
+ * Fresh signed URL for the owner's paid invite (URLs from list/generate expire).
+ */
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
-        const { userId, error: authError } = await getEndUserIdFromRequest(req)
+        const { userId, error: authError } = await getEndUserIdFromRequest(_req)
         if (authError) return authError
 
         const { id } = await params
-        const inviteId = String(id || '').trim()
-        if (!inviteId) {
-            return NextResponse.json({ error: 'id required' }, { status: 400 })
+        if (!id?.trim()) {
+            return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
         }
 
-        const { data: inv, error } = await supabase
+        const { data: row, error } = await supabase
             .from('user_e_invites')
-            .select('id, user_id, storage_path, payment_status')
-            .eq('id', inviteId)
-            .single()
+            .select('user_id, storage_path, payment_status')
+            .eq('id', id)
+            .maybeSingle()
 
-        if (error || !inv) {
+        if (error) {
+            return NextResponse.json({ error: error.message }, { status: 500 })
+        }
+        if (!row || row.user_id !== userId) {
             return NextResponse.json({ error: 'Not found' }, { status: 404 })
         }
-        if (inv.user_id !== userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-        }
-        if (inv.payment_status !== 'paid') {
-            return NextResponse.json({ error: 'Payment required', code: 'PAYMENT_REQUIRED' }, { status: 402 })
+        if (row.payment_status !== 'paid') {
+            return NextResponse.json({ error: 'Payment required' }, { status: 402 })
         }
 
-        const url = await signedUrlForStorageRef(inv.storage_path)
+        const url = await signedUrlForStorageRef(row.storage_path)
         if (!url) {
-            return NextResponse.json({ error: 'Could not sign URL' }, { status: 500 })
+            return NextResponse.json({ error: 'Could not create download URL' }, { status: 500 })
         }
 
         return NextResponse.json({ url })

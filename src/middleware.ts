@@ -3,11 +3,9 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { isAllowlistedAdminEmail } from '@/lib/admin-config'
 
 export async function middleware(request: NextRequest) {
-    let response = NextResponse.next({
-        request: {
-            headers: request.headers,
-        },
-    })
+    // Single pass-through response; mutating cookies on it preserves the original request
+    // body for API routes (recreating NextResponse with only `headers` can drop bodies on Next 16+).
+    let response = NextResponse.next()
 
     const supabase = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,14 +16,6 @@ export async function middleware(request: NextRequest) {
                     return request.cookies.getAll()
                 },
                 setAll(cookiesToSet) {
-                    cookiesToSet.forEach(({ name, value }) =>
-                        request.cookies.set(name, value)
-                    )
-                    response = NextResponse.next({
-                        request: {
-                            headers: request.headers,
-                        },
-                    })
                     cookiesToSet.forEach(({ name, value, options }) =>
                         response.cookies.set(name, value, options)
                     )
