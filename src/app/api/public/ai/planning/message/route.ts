@@ -81,9 +81,11 @@ export async function POST(req: Request) {
 
         if (runtime.provider === 'openrouter') {
             const system = messages.find((m) => m.role === 'system')?.content || ''
-            const historyMessages = messages
-                .filter((m) => m.role === 'user' || m.role === 'assistant')
-                .map((m) => ({ role: m.role, content: m.content }))
+            const historyMessages: Array<{ role: 'user' | 'assistant'; content: string }> = messages.flatMap((m) =>
+                m.role === 'user' || m.role === 'assistant'
+                    ? [{ role: m.role, content: m.content }]
+                    : []
+            )
             const out = await chatWithOpenRouter({
                 model: runtime.openrouterModel || runtime.primaryModel,
                 system,
@@ -100,9 +102,11 @@ export async function POST(req: Request) {
 
         if (runtime.provider === 'claude') {
             const system = messages.find((m) => m.role === 'system')?.content || ''
-            const anthropicMessages = messages
-                .filter((m) => m.role === 'user' || m.role === 'assistant')
-                .map((m) => ({ role: m.role, content: m.content }))
+            const anthropicMessages: Array<{ role: 'user' | 'assistant'; content: string }> = messages.flatMap((m) =>
+                m.role === 'user' || m.role === 'assistant'
+                    ? [{ role: m.role, content: m.content }]
+                    : []
+            )
             const raw = await withTimeout(
                 getAnthropicClient().messages.create({
                     model: runtime.claudeModel || runtime.primaryModel,
