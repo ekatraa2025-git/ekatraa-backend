@@ -10,10 +10,29 @@ function isOpenRouterDebugLogsEnabled(): boolean {
     return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on'
 }
 
+/**
+ * Reads the OpenRouter key from the **server** environment (never from Expo PUBLIC_ vars).
+ * Accepts a few common naming mistakes. Strips accidental "Bearer " prefix.
+ */
 export function getOpenRouterApiKey(): string {
-    const key = String(process.env.OPENROUTER_API_KEY || '').trim()
+    const candidates = [
+        process.env.OPENROUTER_API_KEY,
+        process.env.OPEN_ROUTER_API_KEY,
+        process.env.OPENROUTER_KEY,
+    ]
+    let key = ''
+    for (const raw of candidates) {
+        const v = String(raw ?? '').trim()
+        if (v) {
+            key = v.replace(/^Bearer\s+/i, '').trim()
+            break
+        }
+    }
     if (!key) {
-        throw new Error('OPENROUTER_API_KEY is not configured')
+        throw new Error(
+            'OpenRouter is not configured on this server: set OPENROUTER_API_KEY. ' +
+                'If the mobile app uses a deployed API (e.g. Vercel), add OPENROUTER_API_KEY in the host project Environment Variables and redeploy—local .env.local only applies when you run the backend locally and point the app at that URL.'
+        )
     }
     return key
 }
@@ -149,41 +168,115 @@ export async function chatWithOpenRouter(input: {
     return { text, model }
 }
 
+/** Image generations can exceed 4k “tokens”; capping at 2048 truncates the response and drops the image payload. */
+const IMAGE_COMPLETION_MAX_TOKENS = 32768
+
+function extractDataUrlFromString(s: string): string | null {
+    const t = String(s || '').trim()
+    if (t.startsWith('data:image/')) return t
+    const m = t.match(/data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=_-]+/i)
+    return m ? m[0] : null
+}
+
+function pickUrlFromImagePart(im: Record<string, unknown>): string | null {
+    const holder = (im.image_url ?? im.imageUrl) as Record<string, unknown> | string | undefined
+    if (holder && typeof holder === 'object') {
+        const u = (holder as Record<string, unknown>).url ?? (holder as Record<string, unknown>).uri
+        if (typeof u === 'string' && u.length > 0) return u
+    }
+    if (typeof holder === 'string' && holder.length > 0) return holder
+
+    const topUrl = (im.url ?? im.uri) as unknown
+    if (typeof topUrl === 'string' && topUrl.length > 0) return topUrl
+
+    const b64 = (im.b64_json ?? im.base64 ?? im.data) as unknown
+    if (typeof b64 === 'string' && b64.length > 0) {
+        if (b64.startsWith('data:image/')) return b64
+        return `data:image/png;base64,${b64}`
+    }
+    return null
+}
+
 function pickFirstImageUrlFromMessage(message: Record<string, unknown>): string | null {
     const images = message.images
     if (Array.isArray(images)) {
         for (const img of images) {
             if (!img || typeof img !== 'object') continue
             const im = img as Record<string, unknown>
-            const holder = im.image_url ?? im.imageUrl
-            if (holder && typeof holder === 'object') {
-                const url = (holder as Record<string, unknown>).url
-                if (typeof url === 'string' && url.length > 0) return url
+            const fromPart = pickUrlFromImagePart(im)
+            if (fromPart) return fromPart
+            if (String(im.type || '').toLowerCase() === 'image_url') {
+                const u = pickUrlFromImagePart(im)
+                if (u) return u
             }
-            const b64 = im.b64_json
-            if (typeof b64 === 'string' && b64.length > 0) return `data:image/png;base64,${b64}`
         }
     }
+
     const content = message.content
+    if (typeof content === 'string') {
+        const direct = extractDataUrlFromString(content)
+        if (direct) return direct
+    }
     if (Array.isArray(content)) {
         for (const part of content) {
             if (!part || typeof part !== 'object') continue
             const p = part as Record<string, unknown>
-            if (p.type === 'image_url' && p.image_url && typeof p.image_url === 'object') {
-                const url = (p.image_url as Record<string, unknown>).url
-                if (typeof url === 'string' && url.length > 0) return url
+            const typ = String(p.type || '').toLowerCase()
+            if (typ === 'image_url' || typ === 'image' || typ === 'output_image') {
+                const u = pickUrlFromImagePart(p)
+                if (u) return u
+                if (p.image_url && typeof p.image_url === 'object') {
+                    const url = (p.image_url as Record<string, unknown>).url
+                    if (typeof url === 'string' && url.length > 0) return url
+                }
             }
         }
     }
     return null
 }
 
+function deepScanForImageRef(obj: unknown, depth = 0): string | null {
+    if (depth > 12) return null
+    if (typeof obj === 'string') {
+        const d = extractDataUrlFromString(obj)
+        if (d && d.length > 80) return d
+        if (/^https?:\/\/.+\.(png|jpe?g|gif|webp)(\?|#|$)/i.test(obj)) return obj.trim()
+        return null
+    }
+    if (!obj || typeof obj !== 'object') return null
+    if (Array.isArray(obj)) {
+        for (const x of obj) {
+            const f = deepScanForImageRef(x, depth + 1)
+            if (f) return f
+        }
+        return null
+    }
+    for (const v of Object.values(obj as Record<string, unknown>)) {
+        const f = deepScanForImageRef(v, depth + 1)
+        if (f) return f
+    }
+    return null
+}
+
 function extractImageRefFromChatCompletion(json: Record<string, unknown>): string | null {
     const choice = json?.choices
-    if (!Array.isArray(choice) || !choice[0] || typeof choice[0] !== 'object') return null
-    const msg = (choice[0] as Record<string, unknown>).message
-    if (!msg || typeof msg !== 'object') return null
-    return pickFirstImageUrlFromMessage(msg as Record<string, unknown>)
+    if (!Array.isArray(choice) || !choice[0] || typeof choice[0] !== 'object') {
+        return deepScanForImageRef(json)
+    }
+    const c0 = choice[0] as Record<string, unknown>
+    const msg = c0.message
+    if (msg && typeof msg === 'object') {
+        const m = msg as Record<string, unknown>
+        const direct = pickFirstImageUrlFromMessage(m)
+        if (direct) return direct
+        const deep = deepScanForImageRef(m)
+        if (deep) return deep
+    }
+    return deepScanForImageRef(c0)
+}
+
+function modelPrefersImageOnlyFirst(model: string): boolean {
+    return /sourceful|riverflow|flux|black-forest|gemini.*image|image-preview/i.test(model)
 }
 
 /**
@@ -199,10 +292,15 @@ export async function generateImageWithOpenRouter(input: {
     const model = String(input.model || '').trim()
     if (!model) throw new Error('OpenRouter image model is not configured')
 
-    const modalitySets: Array<Array<'image' | 'text'>> = [
-        ['image', 'text'],
-        ['image'],
-    ]
+    const modalitySets: Array<Array<'image' | 'text'>> = modelPrefersImageOnlyFirst(model)
+        ? [
+              ['image'],
+              ['image', 'text'],
+          ]
+        : [
+              ['image', 'text'],
+              ['image'],
+          ]
 
     let lastErr = 'OpenRouter returned no image'
     for (const modalities of modalitySets) {
@@ -212,7 +310,8 @@ export async function generateImageWithOpenRouter(input: {
                 model,
                 messages: [{ role: 'user', content: input.prompt }],
                 modalities,
-                max_tokens: 2048,
+                max_tokens: IMAGE_COMPLETION_MAX_TOKENS,
+                max_completion_tokens: IMAGE_COMPLETION_MAX_TOKENS,
                 ...(input.imageConfig && Object.keys(input.imageConfig).length > 0
                     ? { image_config: input.imageConfig }
                     : {}),
@@ -232,6 +331,18 @@ export async function generateImageWithOpenRouter(input: {
         }
         const imageRef = extractImageRefFromChatCompletion(json)
         if (imageRef) return { imageRef, model }
+
+        if (isOpenRouterDebugLogsEnabled()) {
+            const msg = (json.choices as unknown[])
+                ? JSON.stringify((json.choices as Record<string, unknown>[])[0]?.message ?? null, (_, v) =>
+                      typeof v === 'string' && v.length > 200 && v.startsWith('data:image/')
+                          ? `${v.slice(0, 48)}…(truncated)…`
+                          : v
+                  ).slice(0, 2400)
+                : 'no choices'
+            console.warn('[OpenRouter][image] no image ref in response; first choice message (truncated)=', msg)
+        }
+        lastErr = 'OpenRouter response contained no usable image URL or data URL'
     }
 
     throw new Error(lastErr)

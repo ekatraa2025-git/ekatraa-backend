@@ -34,12 +34,13 @@ WHERE id = 'default';
 CREATE TABLE IF NOT EXISTS user_e_invites (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
-    media_kind TEXT NOT NULL CHECK (media_kind IN ('static', 'animated')),
-    status TEXT NOT NULL DEFAULT 'awaiting_payment'
-        CHECK (status IN ('awaiting_payment', 'paid', 'cancelled')),
+    media_kind TEXT NOT NULL DEFAULT 'static' CHECK (media_kind IN ('static', 'animated')),
+    payment_status TEXT NOT NULL DEFAULT 'unpaid' CHECK (payment_status IN ('unpaid', 'paid', 'failed')),
     price_inr INT NOT NULL CHECK (price_inr > 0),
     storage_path TEXT NOT NULL,
     form_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    prompt TEXT,
+    -- Legacy column; prefer prompt for new rows
     prompt_used TEXT,
     model_used TEXT,
     razorpay_order_id TEXT,
@@ -51,7 +52,7 @@ CREATE TABLE IF NOT EXISTS user_e_invites (
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_e_invites_user_created ON user_e_invites (user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_user_e_invites_status ON user_e_invites (status);
+CREATE INDEX IF NOT EXISTS idx_user_e_invites_payment_status ON user_e_invites (payment_status);
 
 NOTIFY pgrst, 'reload schema';
 
