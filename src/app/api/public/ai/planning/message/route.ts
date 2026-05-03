@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server'
 import { mastra } from '@/mastra'
 import { getAiAppCatalogContext } from '@/lib/ai-app-context'
+import { getAiRuntimeSettings } from '@/lib/ai-runtime-settings'
+import { chatWithOpenRouter } from '@/lib/openrouter-client'
+import {
+    anthropicErrorToHttp,
+    extractAnthropicText,
+    getAnthropicClient,
+    sanitizeAssistantReplyText,
+    withTimeout,
+} from '@/lib/claude-client'
 import { z } from 'zod'
 
 const bodySchema = z.object({
@@ -38,6 +47,10 @@ export async function POST(req: Request) {
             req.headers.get('x-thread-id')?.trim() ||
             (typeof json.thread_id === 'string' && json.thread_id) ||
             'anonymous-mobile'
+        const sessionId =
+            (typeof json.session_id === 'string' && json.session_id.trim()) ||
+            threadId ||
+            `planning-${Date.now()}`
 
         const catalog = await getAiAppCatalogContext({
             city: city?.trim() || null,
@@ -64,6 +77,50 @@ export async function POST(req: Request) {
         }
         messages.push({ role: 'user', content: message })
 
+        const runtime = await getAiRuntimeSettings()
+
+        if (runtime.provider === 'openrouter') {
+            const system = messages.find((m) => m.role === 'system')?.content || ''
+            const historyMessages = messages
+                .filter((m) => m.role === 'user' || m.role === 'assistant')
+                .map((m) => ({ role: m.role, content: m.content }))
+            const out = await chatWithOpenRouter({
+                model: runtime.openrouterModel || runtime.primaryModel,
+                system,
+                messages: historyMessages,
+                temperature: 0.6,
+                maxTokens: 2048,
+                sessionId,
+            })
+            return NextResponse.json({
+                reply: out.text,
+                ai_meta: { source: 'openrouter', provider: 'openrouter', model: out.model },
+            })
+        }
+
+        if (runtime.provider === 'claude') {
+            const system = messages.find((m) => m.role === 'system')?.content || ''
+            const anthropicMessages = messages
+                .filter((m) => m.role === 'user' || m.role === 'assistant')
+                .map((m) => ({ role: m.role, content: m.content }))
+            const raw = await withTimeout(
+                getAnthropicClient().messages.create({
+                    model: runtime.claudeModel || runtime.primaryModel,
+                    max_tokens: 4096,
+                    temperature: 0.6,
+                    system,
+                    messages: anthropicMessages,
+                }),
+                45_000,
+                'Planning chat'
+            )
+            const reply = sanitizeAssistantReplyText(extractAnthropicText(raw))
+            return NextResponse.json({
+                reply: reply || 'No reply from planner.',
+                ai_meta: { source: 'claude', provider: 'claude', model: runtime.claudeModel || runtime.primaryModel },
+            })
+        }
+
         const agent = mastra.getAgentById('event-planning-agent')
         const out = await agent.generate(messages, {
             memory: {
@@ -73,8 +130,16 @@ export async function POST(req: Request) {
         })
 
         const reply = out.text?.trim() || 'No reply from planner.'
-        return NextResponse.json({ reply })
+        return NextResponse.json({
+            reply,
+            ai_meta: { source: 'mastra-gemini', provider: 'gemini', model: runtime.geminiModel || runtime.primaryModel },
+        })
     } catch (e) {
+        const m = e instanceof Error ? e.message : ''
+        if (m.includes('ANTHROPIC') || m.includes('CLAUDE_API_KEY')) {
+            const { status, body } = anthropicErrorToHttp(e)
+            return NextResponse.json(body, { status })
+        }
         const msg = e instanceof Error ? e.message : 'Planner failed'
         return NextResponse.json({ error: msg }, { status: 500 })
     }

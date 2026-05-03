@@ -1,11 +1,6 @@
 import { NextResponse } from 'next/server'
-import {
-    getAnthropicClient,
-    getClaudeModel,
-    extractAnthropicText,
-    sanitizeAssistantReplyText,
-    anthropicErrorToHttp,
-} from '@/lib/claude-client'
+import { getAiRuntimeSettings } from '@/lib/ai-runtime-settings'
+import { chatWithOpenRouter } from '@/lib/openrouter-client'
 
 type Body = {
     eventName?: string
@@ -20,11 +15,13 @@ type Body = {
     mode?: 'samples' | 'final'
     samples?: string[]
     selectedSampleIndex?: number
+    templateType?: 'image' | 'video'
+    session_id?: string
 }
 
 /**
  * POST /api/public/invitations/generate
- * Uses Claude to produce 2–3 sample invitation texts or one final creative block.
+ * Uses OpenRouter-backed model to produce invitation copy.
  */
 export async function POST(req: Request) {
     try {
@@ -35,7 +32,9 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
         }
 
-        const mode = body.mode === 'final' ? 'final' : 'samples'
+        const mode = body.mode === 'samples' ? 'samples' : 'final'
+        const templateType =
+            String(body.templateType || '').toLowerCase() === 'video' ? 'video' : 'image'
         const ctx = [
             `Event: ${body.eventName || 'Event'}`,
             `Date: ${body.eventDate || ''}`,
@@ -45,26 +44,40 @@ export async function POST(req: Request) {
             body.message ? `Note: ${body.message}` : '',
             `Visual theme color: ${body.colorTheme || 'gold'}`,
             `Style variation: ${body.variation || 'classic'}`,
+            `Template type: ${templateType}`,
         ]
             .filter(Boolean)
             .join('\n')
-
-        const client = getAnthropicClient()
-        const model = getClaudeModel()
+        const runtime = await getAiRuntimeSettings()
+        const model = runtime.openrouterModel || runtime.primaryModel
 
         if (mode === 'samples') {
-            const prompt = `You are a creative copywriter for Indian celebrations. ${ctx}
-
-Return ONLY valid JSON, no markdown, no explanation. Shape:
-{"samples":["...","...","..."]}
-Each sample is a complete WhatsApp-ready invitation (150–280 words), warm and festive, different wording. Use occasional emoji sparingly.`
-
-            const msg = await client.messages.create({
+            const out = await chatWithOpenRouter({
                 model,
-                max_tokens: 4096,
-                messages: [{ role: 'user', content: prompt }],
+                sessionId: String(body.session_id || '').trim() || `invite-samples-${Date.now()}`,
+                messages: [
+                    {
+                        role: 'user',
+                        content: `You are a creative copywriter for Indian celebrations.
+Context:
+${ctx}
+
+Return ONLY valid JSON (no markdown) in this exact shape:
+{"samples":["...","...","..."]}
+
+Rules:
+- 3 samples
+- each sample 120-220 words
+- warm, festive, and WhatsApp-ready
+- if template type is video, use cinematic narration style
+- if template type is image, use elegant invite-card style
+- no extra keys`,
+                    },
+                ],
+                temperature: 0.7,
+                maxTokens: 2048,
             })
-            const raw = sanitizeAssistantReplyText(extractAnthropicText(msg))
+            const raw = String(out.text || '').trim()
             const parsed = tryParseJson(raw)
             const samples = normalizeSamples(parsed?.samples, raw)
             return NextResponse.json({ samples, final: null as string | null })
@@ -75,22 +88,31 @@ Each sample is a complete WhatsApp-ready invitation (150–280 words), warm and 
                 ? `Earlier samples:\n${body.samples.slice(0, 3).map((s, i) => `${i + 1}. ${s.slice(0, 400)}...`).join('\n')}`
                 : ''
 
-        const prompt = `You are a premium invitation designer for Indian events. ${ctx}
+        const out = await chatWithOpenRouter({
+            model,
+            sessionId: String(body.session_id || '').trim() || `invite-final-${Date.now()}`,
+            messages: [
+                {
+                    role: 'user',
+                    content: `You are a premium invitation designer for Indian events.
+Context:
+${ctx}
 
 ${samplesHint}
 
-Produce ONE final, highly creative, unique invitation message for WhatsApp (200–350 words). Rich imagery, elegant tone, match the ${body.variation || 'classic'} style and ${body.colorTheme || 'gold'} mood. No JSON — plain text only.`
-
-        const msg = await client.messages.create({
-            model,
-            max_tokens: 4096,
-            messages: [{ role: 'user', content: prompt }],
+Produce ONE final, highly creative, unique invitation message for WhatsApp (140–260 words).
+Rich imagery, elegant tone, match the ${body.variation || 'classic'} style and ${body.colorTheme || 'gold'} mood.
+No markdown. Plain text only.`,
+                },
+            ],
+            temperature: 0.65,
+            maxTokens: 2048,
         })
-        const final = sanitizeAssistantReplyText(extractAnthropicText(msg))
+        const final = String(out.text || '').trim()
         return NextResponse.json({ samples: [] as string[], final: final || '' })
     } catch (e) {
-        const mapped = anthropicErrorToHttp(e)
-        return NextResponse.json(mapped.body, { status: mapped.status })
+        const msg = e instanceof Error ? e.message : 'Could not generate invitation text'
+        return NextResponse.json({ error: msg }, { status: 500 })
     }
 }
 

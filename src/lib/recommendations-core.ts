@@ -3,7 +3,6 @@ import { budgetToInr, clampBudgetInr } from '@/lib/budget-mapping'
 import {
     buildTiersForService,
     effectivePercentages,
-    getMinTierPrice,
     normalizeWeightsForCategories,
     selectionNoteForService,
     type OfferableServiceRow,
@@ -159,7 +158,7 @@ export async function getRecommendationsCore(
             const { data: services, error: svcError } = await supabase
                 .from('offerable_services')
                 .select(
-                    'id, category_id, name, description, image_url, display_order, price_min, price_max, price_basic, price_classic_value, price_signature, price_prestige, price_royal, price_imperial'
+                    'id, category_id, name, description, image_url, display_order, price_min, price_max, price_basic, price_classic_value, price_signature, price_prestige, price_royal, price_imperial, qty_label_basic, qty_label_classic_value, qty_label_signature, qty_label_prestige, qty_label_royal, qty_label_imperial, sub_variety_basic, sub_variety_classic_value, sub_variety_signature, sub_variety_prestige, sub_variety_royal, sub_variety_imperial'
                 )
                 .eq('category_id', alloc.category_id)
                 .eq('is_active', true)
@@ -176,11 +175,7 @@ export async function getRecommendationsCore(
                 continue
             }
 
-            const eligible = (services ?? []).filter((s: OfferableServiceRow) => {
-                if (!allowedServiceIds.has(s.id)) return false
-                const minPrice = getMinTierPrice(s)
-                return minPrice <= allocatedBudget
-            })
+            const eligible = (services ?? []).filter((s: OfferableServiceRow) => allowedServiceIds.has(s.id))
 
             categoriesResult.push({
                 id: alloc.category_id,
@@ -230,7 +225,7 @@ export async function getRecommendationsCore(
             const { data: services, error: svcError } = await supabase
                 .from('offerable_services')
                 .select(
-                    'id, category_id, name, description, image_url, display_order, price_min, price_max, price_basic, price_classic_value, price_signature, price_prestige, price_royal, price_imperial'
+                    'id, category_id, name, description, image_url, display_order, price_min, price_max, price_basic, price_classic_value, price_signature, price_prestige, price_royal, price_imperial, qty_label_basic, qty_label_classic_value, qty_label_signature, qty_label_prestige, qty_label_royal, qty_label_imperial, sub_variety_basic, sub_variety_classic_value, sub_variety_signature, sub_variety_prestige, sub_variety_royal, sub_variety_imperial'
                 )
                 .eq('category_id', cat.id)
                 .eq('is_active', true)
@@ -247,12 +242,7 @@ export async function getRecommendationsCore(
                 continue
             }
 
-            const eligible = (services ?? []).filter((s: OfferableServiceRow) => {
-                if (!allowedServiceIds.has(s.id)) return false
-                if (allocatedBudget <= 0) return true
-                const minPrice = getMinTierPrice(s)
-                return minPrice <= allocatedBudget
-            })
+            const eligible = (services ?? []).filter((s: OfferableServiceRow) => allowedServiceIds.has(s.id))
 
             categoriesResult.push({
                 id: cat.id,

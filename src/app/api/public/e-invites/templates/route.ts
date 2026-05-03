@@ -27,11 +27,13 @@ export async function GET(req: Request) {
 
     const rows = data ?? []
     const resolved = await Promise.all(
-        rows.map(async (row: { thumbnail_url?: string | null; [k: string]: unknown }) => {
+        rows.map(async (row: { thumbnail_url?: string | null; preview_url?: string | null; [k: string]: unknown }) => {
             const signedThumb = await signedUrlForStorageRef(row.thumbnail_url ?? null)
+            const signedPreview = await signedUrlForStorageRef(row.preview_url ?? null)
             return {
                 ...row,
                 thumbnail_url: signedThumb ?? row.thumbnail_url ?? null,
+                preview_url: signedPreview ?? row.preview_url ?? null,
             }
         })
     )

@@ -1,14 +1,16 @@
 import { NextResponse } from 'next/server'
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages'
 import { getAiAppCatalogContext } from '@/lib/ai-app-context'
+import { getAiRuntimeSettings } from '@/lib/ai-runtime-settings'
 import {
     anthropicErrorToHttp,
     extractAnthropicText,
     getAnthropicClient,
-    getClaudeModel,
     sanitizeAssistantReplyText,
     withTimeout,
 } from '@/lib/claude-client'
+import { chatWithOpenRouter } from '@/lib/openrouter-client'
+import { generateTextWithGemini } from '@/lib/gemini-client'
 
 const CHAT_SYSTEM_BASE = `You are Ekatraa AI, a friendly assistant for people in India using the Ekatraa app to plan weddings, birthdays, funerals, and other gatherings.
 
@@ -54,12 +56,12 @@ export async function POST(req: Request) {
         }
 
         const history = clampHistory(body.history, 24)
-        const client = getAnthropicClient()
-        const model = getClaudeModel()
+        const runtime = await getAiRuntimeSettings()
 
         const city = typeof body.city === 'string' ? body.city.trim() : ''
         const occasion_id = typeof body.occasion_id === 'string' ? body.occasion_id.trim() : ''
         const occasion_name = typeof body.occasion_name === 'string' ? body.occasion_name.trim() : ''
+        const session_id = typeof body.session_id === 'string' ? body.session_id.trim() : ''
         const planned_budget_inr = Number(body.planned_budget_inr)
         const budgetHint =
             Number.isFinite(planned_budget_inr) && planned_budget_inr > 0
@@ -73,38 +75,87 @@ export async function POST(req: Request) {
                 : ''
         const system = `${CHAT_SYSTEM_BASE}\n\n${catalog}${occasionHint}${budgetHint}`
 
-        const messages: MessageParam[] = []
-        for (const h of history) {
-            messages.push({
-                role: h.role as 'user' | 'assistant',
-                content: h.text,
-            })
+        let reply = ''
+        let model = runtime.primaryModel
+        let source: 'claude' | 'openrouter' | 'gemini' = runtime.provider
+
+        if (runtime.provider === 'openrouter') {
+            const joined = history.map((h) => ({ role: h.role as 'user' | 'assistant', content: h.text }))
+            joined.push({ role: 'user', content: message })
+            const out = await withTimeout(
+                chatWithOpenRouter({
+                    model: runtime.openrouterModel || runtime.primaryModel,
+                    system,
+                    messages: joined,
+                    temperature: 0.6,
+                    maxTokens: 4096,
+                    sessionId: session_id || `chat-${Date.now()}`,
+                }),
+                45_000,
+                'OpenRouter chat'
+            )
+            reply = sanitizeAssistantReplyText(out.text)
+            model = out.model
+            source = 'openrouter'
+        } else if (runtime.provider === 'gemini') {
+            const historyText = history
+                .map((h) => `${h.role === 'assistant' ? 'Assistant' : 'User'}: ${h.text}`)
+                .join('\n\n')
+            const out = await withTimeout(
+                generateTextWithGemini({
+                    model: runtime.geminiModel || runtime.primaryModel,
+                    systemInstruction: system,
+                    userText: `${historyText ? `${historyText}\n\n` : ''}User: ${message}\nAssistant:`,
+                    temperature: 0.6,
+                    maxOutputTokens: 4096,
+                }),
+                45_000,
+                'Gemini chat'
+            )
+            reply = sanitizeAssistantReplyText(out.text)
+            model = out.model
+            source = 'gemini'
+        } else {
+            const client = getAnthropicClient()
+            const messages: MessageParam[] = []
+            for (const h of history) {
+                messages.push({
+                    role: h.role as 'user' | 'assistant',
+                    content: h.text,
+                })
+            }
+            messages.push({ role: 'user', content: message })
+
+            const raw = await withTimeout(
+                client.messages.create({
+                    model: runtime.claudeModel || runtime.primaryModel,
+                    max_tokens: 4096,
+                    temperature: 0.6,
+                    system,
+                    messages,
+                }),
+                45_000,
+                'Chat'
+            )
+            reply = sanitizeAssistantReplyText(extractAnthropicText(raw))
+            model = runtime.claudeModel || runtime.primaryModel
+            source = 'claude'
         }
-        messages.push({ role: 'user', content: message })
 
-        const raw = await withTimeout(
-            client.messages.create({
-                model,
-                max_tokens: 4096,
-                temperature: 0.6,
-                system,
-                messages,
-            }),
-            45_000,
-            'Chat'
-        )
-
-        const reply = sanitizeAssistantReplyText(extractAnthropicText(raw))
         if (!reply) {
             return NextResponse.json({ error: 'AI returned an empty reply' }, { status: 502 })
         }
 
         return NextResponse.json({
             reply: reply.slice(0, 12_000),
-            ai_meta: { source: 'claude' },
+            ai_meta: { source, model },
         })
     } catch (e) {
-        const { status, body } = anthropicErrorToHttp(e)
-        return NextResponse.json(body, { status })
+        const message = e instanceof Error ? e.message : ''
+        if (/anthropic|claude/i.test(message)) {
+            const { status, body } = anthropicErrorToHttp(e)
+            return NextResponse.json(body, { status })
+        }
+        return NextResponse.json({ error: message || 'AI chat failed' }, { status: 500 })
     }
 }

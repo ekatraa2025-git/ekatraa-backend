@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import type { BookingProtectionMode } from '@/lib/booking-protection'
+import type { AiPrimaryProvider } from '@/lib/ai-runtime-settings'
 
 /**
  * GET /api/admin/platform-settings — single row for id `default`
@@ -18,6 +19,11 @@ export async function GET() {
             booking_protection_mode: 'none',
             booking_protection_fixed_inr: 0,
             booking_protection_percent: 0,
+            ai_primary_provider: 'openrouter',
+            ai_primary_model: 'nvidia/nemotron-3-nano-omni:free',
+            ai_openrouter_model: 'nvidia/nemotron-3-nano-omni:free',
+            ai_claude_model: 'claude-sonnet-4-6',
+            ai_gemini_model: 'gemini-3.1-flash-lite-preview',
         })
     }
 
@@ -26,7 +32,7 @@ export async function GET() {
 
 /**
  * PATCH /api/admin/platform-settings
- * Body: { booking_protection_mode?, booking_protection_fixed_inr?, booking_protection_percent? }
+ * Body: { booking_protection_mode?, booking_protection_fixed_inr?, booking_protection_percent?, ai_primary_provider?, ai_primary_model?, ai_openrouter_model?, ai_claude_model?, ai_gemini_model? }
  */
 export async function PATCH(req: Request) {
     try {
@@ -50,9 +56,48 @@ export async function PATCH(req: Request) {
             }
             updates.booking_protection_percent = p
         }
+        if (body.ai_primary_provider !== undefined) {
+            const p = String(body.ai_primary_provider || '').trim().toLowerCase()
+            if (p !== 'openrouter' && p !== 'claude' && p !== 'gemini') {
+                return NextResponse.json({ error: 'ai_primary_provider must be openrouter, claude, or gemini' }, { status: 400 })
+            }
+            updates.ai_primary_provider = p as AiPrimaryProvider
+        }
+        if (body.ai_primary_model !== undefined) {
+            const m = String(body.ai_primary_model || '').trim()
+            if (!m) return NextResponse.json({ error: 'ai_primary_model cannot be empty' }, { status: 400 })
+            updates.ai_primary_model = m
+        }
+        if (body.ai_openrouter_model !== undefined) {
+            const m = String(body.ai_openrouter_model || '').trim()
+            if (!m) return NextResponse.json({ error: 'ai_openrouter_model cannot be empty' }, { status: 400 })
+            updates.ai_openrouter_model = m
+        }
+        if (body.ai_claude_model !== undefined) {
+            const m = String(body.ai_claude_model || '').trim()
+            if (!m) return NextResponse.json({ error: 'ai_claude_model cannot be empty' }, { status: 400 })
+            updates.ai_claude_model = m
+        }
+        if (body.ai_gemini_model !== undefined) {
+            const m = String(body.ai_gemini_model || '').trim()
+            if (!m) return NextResponse.json({ error: 'ai_gemini_model cannot be empty' }, { status: 400 })
+            updates.ai_gemini_model = m
+        }
 
         if (Object.keys(updates).length === 0) {
             return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
+        }
+
+        // Keep `ai_primary_model` aligned with provider-specific model unless explicitly set.
+        if (!updates.ai_primary_model) {
+            const nextProvider = String(updates.ai_primary_provider || body.ai_primary_provider || '').trim().toLowerCase()
+            if (nextProvider === 'openrouter') {
+                updates.ai_primary_model = String(updates.ai_openrouter_model || body.ai_openrouter_model || '').trim()
+            } else if (nextProvider === 'claude') {
+                updates.ai_primary_model = String(updates.ai_claude_model || body.ai_claude_model || '').trim()
+            } else if (nextProvider === 'gemini') {
+                updates.ai_primary_model = String(updates.ai_gemini_model || body.ai_gemini_model || '').trim()
+            }
         }
 
         updates.updated_at = new Date().toISOString()

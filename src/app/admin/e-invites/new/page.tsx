@@ -124,6 +124,27 @@ export default function NewEInviteTemplatePage() {
                                 value={form.preview_url}
                                 onChange={(e) => setForm((p) => ({ ...p, preview_url: e.target.value }))}
                             />
+                            <div className="mt-2 flex items-center gap-3">
+                                <input
+                                    type="file"
+                                    accept="image/*,video/*"
+                                    onChange={async (e) => {
+                                        const file = e.target.files?.[0]
+                                        if (!file) return
+                                        const path = await uploadFile(file, 'e-invites')
+                                        if (!path) {
+                                            toast.error('Upload failed')
+                                            return
+                                        }
+                                        const inferredType = file.type.startsWith('video/') ? 'video' : 'image'
+                                        setForm((p) => ({ ...p, preview_url: path, template_type: inferredType }))
+                                    }}
+                                    className="text-sm"
+                                />
+                                <span className="text-xs text-muted-foreground">
+                                    Upload image/video template file
+                                </span>
+                            </div>
                         </div>
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <div>

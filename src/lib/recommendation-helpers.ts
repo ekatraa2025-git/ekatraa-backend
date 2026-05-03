@@ -36,6 +36,18 @@ export type OfferableServiceRow = {
     price_prestige: number | null
     price_royal: number | null
     price_imperial: number | null
+    qty_label_basic?: string | null
+    qty_label_classic_value?: string | null
+    qty_label_signature?: string | null
+    qty_label_prestige?: string | null
+    qty_label_royal?: string | null
+    qty_label_imperial?: string | null
+    sub_variety_basic?: string | null
+    sub_variety_classic_value?: string | null
+    sub_variety_signature?: string | null
+    sub_variety_prestige?: string | null
+    sub_variety_royal?: string | null
+    sub_variety_imperial?: string | null
 }
 
 export function getMinTierPrice(s: OfferableServiceRow): number {
@@ -54,15 +66,29 @@ export function getMinTierPrice(s: OfferableServiceRow): number {
 export function buildTiersForService(
     s: OfferableServiceRow,
     allocatedBudget: number
-): Array<{ key: string; label: string; price: number | null; fits_allocation: boolean }> {
+): Array<{
+    key: string
+    label: string
+    price: number | null
+    fits_allocation: boolean
+    qtyLabel: string | null
+    subVariety: string | null
+}> {
     return OFFERABLE_TIER_DEFS.map((def) => {
         const raw = s[def.key as keyof OfferableServiceRow]
         const price = coercePrice(raw)
+        const suffix = def.key.replace(/^price_/, '')
+        const qtyKey = `qty_label_${suffix}` as keyof OfferableServiceRow
+        const subKey = `sub_variety_${suffix}` as keyof OfferableServiceRow
+        const qtyLabel = s[qtyKey] == null ? null : String(s[qtyKey])
+        const subVariety = s[subKey] == null ? null : String(s[subKey])
         return {
             key: def.key,
             label: def.label,
             price,
             fits_allocation: price != null && price <= allocatedBudget,
+            qtyLabel,
+            subVariety,
         }
     })
 }

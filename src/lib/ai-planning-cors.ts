@@ -8,12 +8,17 @@ export function planningCorsHeaders(request: Request): HeadersInit {
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean)
+    const strict = String(process.env.EKATRAA_WEB_ORIGINS_STRICT || '').trim() === '1'
+    const wildcardMatch = allowlist.includes('*')
+    const listed = origin && allowlist.includes(origin)
     const allow =
-        allowlist.length === 0
+        allowlist.length === 0 || wildcardMatch
             ? '*'
-            : origin && allowlist.includes(origin)
+            : listed
               ? origin
-              : allowlist[0] || '*'
+              : strict
+                ? allowlist[0] || '*'
+                : origin || allowlist[0] || '*'
     return {
         'Access-Control-Allow-Origin': allow,
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
