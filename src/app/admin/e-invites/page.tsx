@@ -16,21 +16,24 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AdminImage } from '@/components/Common/AdminImage'
-import { Edit, Loader2, MoreHorizontal, Trash2, Image as ImageIcon, HelpCircle } from 'lucide-react'
+import { Edit, ExternalLink, Loader2, MoreHorizontal, Trash2, HelpCircle, Download } from 'lucide-react'
 import { toast } from 'sonner'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
-type EInviteTemplate = {
+type UserEInvite = {
     id: string
-    section_key: string
-    title: string
-    subtitle?: string | null
-    thumbnail_url?: string | null
-    template_type?: string | null
-    duration_seconds?: number | null
-    price?: number | null
-    list_price?: number | null
-    display_order?: number | null
-    is_active?: boolean
+    user_id: string
+    media_kind: string
+    status: string
+    price_inr: number
+    storage_path: string
+    form_payload?: Record<string, unknown> | null
+    preview_url?: string | null
+    created_at?: string
+    paid_at?: string | null
+    admin_note?: string | null
 }
 
 type EInviteFaq = {
@@ -41,38 +44,34 @@ type EInviteFaq = {
     is_active?: boolean
 }
 
-function sectionLabel(key: string): string {
-    const map: Record<string, string> = {
-        wedding_cards: 'Wedding Cards',
-        video_invites: 'Video Invites',
-        save_the_date: 'Save The Date',
-    }
-    return map[key] || key
-}
-
 export default function EInvitesAdminPage() {
     const [loading, setLoading] = useState(true)
-    const [templates, setTemplates] = useState<EInviteTemplate[]>([])
+    const [invites, setInvites] = useState<UserEInvite[]>([])
+    const [filteredInvites, setFilteredInvites] = useState<UserEInvite[]>([])
     const [faqs, setFaqs] = useState<EInviteFaq[]>([])
-    const [filteredTemplates, setFilteredTemplates] = useState<EInviteTemplate[]>([])
     const [filteredFaqs, setFilteredFaqs] = useState<EInviteFaq[]>([])
-    const [deleteTemplateTarget, setDeleteTemplateTarget] = useState<{ id: string; title: string } | null>(null)
     const [deleteFaqTarget, setDeleteFaqTarget] = useState<{ id: string; question: string } | null>(null)
+    const [editRow, setEditRow] = useState<UserEInvite | null>(null)
+    const [editNote, setEditNote] = useState('')
+    const [savingNote, setSavingNote] = useState(false)
 
     const fetchAll = async () => {
         setLoading(true)
         try {
-            const [tplRes, faqRes] = await Promise.all([
-                fetch('/api/admin/e-invites/templates'),
+            const [invRes, faqRes] = await Promise.all([
+                fetch('/api/admin/user-e-invites?limit=120'),
                 fetch('/api/admin/e-invites/faqs'),
             ])
-            const [tplJson, faqJson] = await Promise.all([tplRes.json(), faqRes.json()])
-            const tplList = Array.isArray(tplJson) ? tplJson : []
+            const invJson = await invRes.json()
+            const faqJson = await faqRes.json()
+            const invList = Array.isArray(invJson?.invites) ? invJson.invites : []
             const faqList = Array.isArray(faqJson) ? faqJson : []
-            setTemplates(tplList)
-            setFilteredTemplates(tplList)
+            setInvites(invList)
+            setFilteredInvites(invList)
             setFaqs(faqList)
             setFilteredFaqs(faqList)
+        } catch {
+            toast.error('Could not load e-invites')
         } finally {
             setLoading(false)
         }
@@ -82,49 +81,49 @@ export default function EInvitesAdminPage() {
         fetchAll()
     }, [])
 
-    const templateColumns = useMemo(
+    const inviteColumns = useMemo(
         () => [
             {
-                header: 'Thumb',
-                key: 'thumbnail_url',
-                render: (url: string | null) =>
-                    url ? (
+                header: 'Preview',
+                key: 'preview_url',
+                render: (_: unknown, row: UserEInvite) =>
+                    row.preview_url ? (
                         <AdminImage
-                            url={url}
+                            url={row.preview_url}
                             alt=""
-                            className="h-12 w-12 rounded-md object-cover"
-                            placeholderClassName="h-12 w-12 rounded-md bg-muted"
+                            className="h-14 w-10 rounded-md object-cover"
+                            placeholderClassName="h-14 w-10 rounded-md bg-muted"
                         />
                     ) : (
-                        <div className="h-12 w-12 rounded-md bg-muted flex items-center justify-center">
-                            <ImageIcon className="h-5 w-5 text-muted-foreground" />
-                        </div>
+                        <div className="h-14 w-10 rounded-md bg-muted" />
                     ),
             },
-            { header: 'Title', key: 'title' },
             {
-                header: 'Section',
-                key: 'section_key',
-                render: (v: string) => sectionLabel(v),
+                header: 'User',
+                key: 'user_id',
+                render: (v: string) => <span className="font-mono text-xs">{String(v).slice(0, 8)}…</span>,
             },
             {
-                header: 'Type',
-                key: 'template_type',
-                render: (v: string | null) => <Badge variant="outline">{v || 'image'}</Badge>,
+                header: 'Kind',
+                key: 'media_kind',
+                render: (v: string) => <Badge variant="outline">{v}</Badge>,
             },
             {
-                header: 'Price',
-                key: 'price',
-                render: (v: number | null) =>
-                    Number.isFinite(Number(v)) ? `₹${Number(v).toLocaleString('en-IN')}` : '—',
-            },
-            { header: 'Order', key: 'display_order' },
-            {
-                header: 'Active',
-                key: 'is_active',
-                render: (v: boolean) => (
-                    <Badge variant={v ? 'secondary' : 'outline'}>{v ? 'Yes' : 'No'}</Badge>
+                header: 'Status',
+                key: 'status',
+                render: (v: string) => (
+                    <Badge variant={v === 'paid' ? 'secondary' : v === 'cancelled' ? 'outline' : 'default'}>{v}</Badge>
                 ),
+            },
+            {
+                header: '₹',
+                key: 'price_inr',
+                render: (v: number) => `₹${Number(v || 0).toLocaleString('en-IN')}`,
+            },
+            {
+                header: 'Created',
+                key: 'created_at',
+                render: (v: string) => (v ? new Date(v).toLocaleString() : '—'),
             },
         ],
         []
@@ -152,14 +151,14 @@ export default function EInvitesAdminPage() {
         []
     )
 
-    const onTemplateSearch = (value: string) => {
+    const onInviteSearch = (value: string) => {
         const q = value.toLowerCase()
-        setFilteredTemplates(
-            templates.filter(
-                (t) =>
-                    t.title?.toLowerCase().includes(q) ||
-                    (t.subtitle || '').toLowerCase().includes(q) ||
-                    (t.section_key || '').toLowerCase().includes(q)
+        setFilteredInvites(
+            invites.filter(
+                (r) =>
+                    r.id.toLowerCase().includes(q) ||
+                    r.user_id.toLowerCase().includes(q) ||
+                    (r.status || '').toLowerCase().includes(q)
             )
         )
     }
@@ -175,18 +174,11 @@ export default function EInvitesAdminPage() {
         )
     }
 
-    const deleteTemplate = async () => {
-        if (!deleteTemplateTarget) return
-        const res = await fetch(`/api/admin/e-invites/templates/${deleteTemplateTarget.id}`, {
-            method: 'DELETE',
-        })
-        const data = await res.json()
-        if (data?.error) toast.error(data.error)
-        else {
-            toast.success('Template deleted')
-            fetchAll()
-        }
-        setDeleteTemplateTarget(null)
+    const adminDownload = async (id: string) => {
+        const res = await fetch(`/api/admin/user-e-invites/${id}/signed-url`)
+        const json = await res.json().catch(() => ({}))
+        if (json?.url) window.open(json.url, '_blank', 'noopener,noreferrer')
+        else toast.error(json?.error || 'Could not get download URL')
     }
 
     const deleteFaq = async () => {
@@ -203,6 +195,27 @@ export default function EInvitesAdminPage() {
         setDeleteFaqTarget(null)
     }
 
+    const saveAdminNote = async () => {
+        if (!editRow) return
+        setSavingNote(true)
+        try {
+            const res = await fetch(`/api/admin/user-e-invites/${editRow.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_note: editNote }),
+            })
+            const json = await res.json()
+            if (json?.error) toast.error(json.error)
+            else {
+                toast.success('Saved')
+                setEditRow(null)
+                fetchAll()
+            }
+        } finally {
+            setSavingNote(false)
+        }
+    }
+
     if (loading) {
         return (
             <DefaultLayout>
@@ -216,15 +229,21 @@ export default function EInvitesAdminPage() {
     return (
         <DefaultLayout>
             <div className="space-y-8">
+                <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+                    <p className="font-medium text-foreground">AI e-invites (user-generated)</p>
+                    <p className="mt-1">
+                        Fixed pricing: <strong>₹300</strong> static image, <strong>₹500</strong> animated GIF. Users pay in-app after
+                        generation; downloads unlock after Razorpay confirmation.
+                    </p>
+                </div>
+
                 <DataTableView
-                    title="E-Invite Templates"
-                    description="Manage wedding cards, video invites, and save-the-date templates."
-                    columns={templateColumns}
-                    data={filteredTemplates}
-                    onSearch={onTemplateSearch}
-                    addNewLink="/admin/e-invites/new"
-                    addNewLabel="Add template"
-                    actions={(item: EInviteTemplate) => (
+                    title="Generated e-invites by user"
+                    description="Preview, download, and attach admin notes. Edit record updates metadata only — not the image file."
+                    columns={inviteColumns}
+                    data={filteredInvites}
+                    onSearch={onInviteSearch}
+                    actions={(item: UserEInvite) => (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" className="h-8 w-8 p-0">
@@ -233,25 +252,25 @@ export default function EInvitesAdminPage() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                <DropdownMenuItem asChild>
-                                    <Link href={`/admin/e-invites/${item.id}`} className="flex items-center">
-                                        <Edit className="mr-2 h-4 w-4" />
-                                        Edit
-                                    </Link>
+                                <DropdownMenuItem onClick={() => adminDownload(item.id)}>
+                                    <Download className="mr-2 h-4 w-4" />
+                                    Download file
                                 </DropdownMenuItem>
-                                <DropdownMenuSeparator />
                                 <DropdownMenuItem
-                                    className="text-destructive focus:bg-destructive/10"
-                                    onClick={() =>
-                                        setDeleteTemplateTarget({
-                                            id: item.id,
-                                            title: item.title || 'Template',
-                                        })
-                                    }
+                                    onClick={() => {
+                                        setEditRow(item)
+                                        setEditNote(String(item.admin_note || ''))
+                                    }}
                                 >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Delete
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Edit / note
                                 </DropdownMenuItem>
+                                {item.preview_url ? (
+                                    <DropdownMenuItem onClick={() => window.open(item.preview_url!, '_blank')}>
+                                        <ExternalLink className="mr-2 h-4 w-4" />
+                                        Open preview
+                                    </DropdownMenuItem>
+                                ) : null}
                             </DropdownMenuContent>
                         </DropdownMenu>
                     )}
@@ -259,7 +278,7 @@ export default function EInvitesAdminPage() {
 
                 <DataTableView
                     title="E-Invite FAQs"
-                    description="Dynamic FAQ items shown in the app invite flow."
+                    description="FAQ items shown in the app invite flow."
                     columns={faqColumns}
                     data={filteredFaqs}
                     onSearch={onFaqSearch}
@@ -299,13 +318,34 @@ export default function EInvitesAdminPage() {
                 />
             </div>
 
-            <ConfirmDialog
-                open={!!deleteTemplateTarget}
-                onOpenChange={(open) => !open && setDeleteTemplateTarget(null)}
-                title="Delete template"
-                description={`Remove "${deleteTemplateTarget?.title}"?`}
-                onConfirm={deleteTemplate}
-            />
+            <Dialog open={!!editRow} onOpenChange={(o) => !o && setEditRow(null)}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>Admin note &amp; context</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3 text-sm">
+                        <div>
+                            <Label>Invite id</Label>
+                            <Input readOnly value={editRow?.id || ''} className="font-mono text-xs" />
+                        </div>
+                        <div>
+                            <Label>Form payload (read-only)</Label>
+                            <pre className="max-h-40 overflow-auto rounded border bg-muted p-2 text-xs">
+                                {JSON.stringify(editRow?.form_payload || {}, null, 2)}
+                            </pre>
+                        </div>
+                        <div>
+                            <Label>Admin note</Label>
+                            <Input value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder="Internal note" />
+                        </div>
+                        <Button type="button" onClick={() => void saveAdminNote()} disabled={savingNote}>
+                            {savingNote ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Save note
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
             <ConfirmDialog
                 open={!!deleteFaqTarget}
                 onOpenChange={(open) => !open && setDeleteFaqTarget(null)}

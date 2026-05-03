@@ -22,6 +22,8 @@ export async function GET() {
             ai_primary_provider: 'openrouter',
             ai_primary_model: 'nvidia/nemotron-3-nano-omni:free',
             ai_openrouter_model: 'nvidia/nemotron-3-nano-omni:free',
+            ai_openrouter_image_model: 'sourceful/riverflow-v2-fast',
+            ai_openrouter_invite_animated_model: 'sourceful/riverflow-v2-pro',
             ai_claude_model: 'claude-sonnet-4-6',
             ai_gemini_model: 'gemini-3.1-flash-lite-preview',
         })
@@ -32,7 +34,7 @@ export async function GET() {
 
 /**
  * PATCH /api/admin/platform-settings
- * Body: { booking_protection_mode?, booking_protection_fixed_inr?, booking_protection_percent?, ai_primary_provider?, ai_primary_model?, ai_openrouter_model?, ai_claude_model?, ai_gemini_model? }
+ * Body: { booking_protection_mode?, booking_protection_fixed_inr?, booking_protection_percent?, ai_primary_provider?, ai_primary_model?, ai_openrouter_model?, ai_openrouter_image_model?, ai_openrouter_invite_animated_model?, ai_claude_model?, ai_gemini_model? }
  */
 export async function PATCH(req: Request) {
     try {
@@ -72,6 +74,16 @@ export async function PATCH(req: Request) {
             const m = String(body.ai_openrouter_model || '').trim()
             if (!m) return NextResponse.json({ error: 'ai_openrouter_model cannot be empty' }, { status: 400 })
             updates.ai_openrouter_model = m
+        }
+        if (body.ai_openrouter_image_model !== undefined) {
+            const m = String(body.ai_openrouter_image_model || '').trim()
+            if (!m) return NextResponse.json({ error: 'ai_openrouter_image_model cannot be empty' }, { status: 400 })
+            updates.ai_openrouter_image_model = m
+        }
+        if (body.ai_openrouter_invite_animated_model !== undefined) {
+            const m = String(body.ai_openrouter_invite_animated_model || '').trim()
+            if (!m) return NextResponse.json({ error: 'ai_openrouter_invite_animated_model cannot be empty' }, { status: 400 })
+            updates.ai_openrouter_invite_animated_model = m
         }
         if (body.ai_claude_model !== undefined) {
             const m = String(body.ai_claude_model || '').trim()

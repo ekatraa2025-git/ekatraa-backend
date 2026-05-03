@@ -2,6 +2,8 @@ type OpenRouterMessage = { role: 'system' | 'user' | 'assistant'; content: strin
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1'
 const DEFAULT_OPENROUTER_MODEL = 'nvidia/nemotron-3-nano-omni:free'
+const DEFAULT_OPENROUTER_IMAGE_MODEL = 'sourceful/riverflow-v2-fast'
+const DEFAULT_OPENROUTER_INVITE_ANIMATED_MODEL = 'sourceful/riverflow-v2-pro'
 
 function isOpenRouterDebugLogsEnabled(): boolean {
     const raw = String(process.env.OPENROUTER_DEBUG_LOGS || '').trim().toLowerCase()
@@ -20,6 +22,16 @@ export function getDefaultOpenRouterModel(): string {
     return DEFAULT_OPENROUTER_MODEL
 }
 
+export function getDefaultOpenRouterImageModel(): string {
+    const env = String(process.env.OPENROUTER_IMAGE_MODEL || '').trim()
+    return env || DEFAULT_OPENROUTER_IMAGE_MODEL
+}
+
+export function getDefaultOpenRouterInviteAnimatedModel(): string {
+    const env = String(process.env.OPENROUTER_INVITE_ANIMATED_MODEL || '').trim()
+    return env || DEFAULT_OPENROUTER_INVITE_ANIMATED_MODEL
+}
+
 async function openRouterFetch(path: string, init?: RequestInit): Promise<Response> {
     const apiKey = getOpenRouterApiKey()
     const appUrl = String(process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || '').trim()
@@ -34,8 +46,10 @@ async function openRouterFetch(path: string, init?: RequestInit): Promise<Respon
     return fetch(`${OPENROUTER_BASE}${path}`, { ...init, headers, cache: 'no-store' })
 }
 
-export async function listOpenRouterModels() {
-    const res = await openRouterFetch('/models', { method: 'GET' })
+export async function listOpenRouterModels(opts?: { outputModalities?: string }) {
+    const modalities = String(opts?.outputModalities ?? 'all').trim() || 'all'
+    const q = `?output_modalities=${encodeURIComponent(modalities)}`
+    const res = await openRouterFetch(`/models${q}`, { method: 'GET' })
     const json = await res.json().catch(() => null)
     if (!res.ok) {
         const msg = String(json?.error?.message || json?.message || res.statusText || 'Failed to fetch OpenRouter models')
@@ -133,4 +147,92 @@ export async function chatWithOpenRouter(input: {
         })
     }
     return { text, model }
+}
+
+function pickFirstImageUrlFromMessage(message: Record<string, unknown>): string | null {
+    const images = message.images
+    if (Array.isArray(images)) {
+        for (const img of images) {
+            if (!img || typeof img !== 'object') continue
+            const im = img as Record<string, unknown>
+            const holder = im.image_url ?? im.imageUrl
+            if (holder && typeof holder === 'object') {
+                const url = (holder as Record<string, unknown>).url
+                if (typeof url === 'string' && url.length > 0) return url
+            }
+            const b64 = im.b64_json
+            if (typeof b64 === 'string' && b64.length > 0) return `data:image/png;base64,${b64}`
+        }
+    }
+    const content = message.content
+    if (Array.isArray(content)) {
+        for (const part of content) {
+            if (!part || typeof part !== 'object') continue
+            const p = part as Record<string, unknown>
+            if (p.type === 'image_url' && p.image_url && typeof p.image_url === 'object') {
+                const url = (p.image_url as Record<string, unknown>).url
+                if (typeof url === 'string' && url.length > 0) return url
+            }
+        }
+    }
+    return null
+}
+
+function extractImageRefFromChatCompletion(json: Record<string, unknown>): string | null {
+    const choice = json?.choices
+    if (!Array.isArray(choice) || !choice[0] || typeof choice[0] !== 'object') return null
+    const msg = (choice[0] as Record<string, unknown>).message
+    if (!msg || typeof msg !== 'object') return null
+    return pickFirstImageUrlFromMessage(msg as Record<string, unknown>)
+}
+
+/**
+ * Image generation via OpenRouter chat/completions + modalities.
+ * Tries image+text then image-only when the first attempt returns no image.
+ */
+export async function generateImageWithOpenRouter(input: {
+    model: string
+    prompt: string
+    sessionId?: string
+    imageConfig?: Record<string, unknown>
+}): Promise<{ imageRef: string; model: string }> {
+    const model = String(input.model || '').trim()
+    if (!model) throw new Error('OpenRouter image model is not configured')
+
+    const modalitySets: Array<Array<'image' | 'text'>> = [
+        ['image', 'text'],
+        ['image'],
+    ]
+
+    let lastErr = 'OpenRouter returned no image'
+    for (const modalities of modalitySets) {
+        const res = await openRouterFetch('/chat/completions', {
+            method: 'POST',
+            body: JSON.stringify({
+                model,
+                messages: [{ role: 'user', content: input.prompt }],
+                modalities,
+                max_tokens: 2048,
+                ...(input.imageConfig && Object.keys(input.imageConfig).length > 0
+                    ? { image_config: input.imageConfig }
+                    : {}),
+                ...(input.sessionId?.trim() ? { session_id: input.sessionId.trim() } : {}),
+            }),
+        })
+        const json = (await res.json().catch(() => null)) as Record<string, unknown> | null
+        if (!res.ok) {
+            lastErr = String(json?.error && typeof json.error === 'object' && 'message' in json.error
+                ? (json.error as { message?: string }).message
+                : json?.message || res.statusText || 'OpenRouter image request failed')
+            continue
+        }
+        if (!json) {
+            lastErr = 'Empty OpenRouter response'
+            continue
+        }
+        const imageRef = extractImageRefFromChatCompletion(json)
+        if (imageRef) return { imageRef, model }
+    }
+
+    throw new Error(lastErr)
 }

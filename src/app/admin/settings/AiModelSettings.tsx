@@ -17,6 +17,12 @@ type ModelOption = {
 
 const CLAUDE_DEFAULTS = ['claude-sonnet-4-6', 'claude-opus-4-1', 'claude-haiku-3-5']
 const GEMINI_DEFAULTS = ['gemini-3.1-flash-lite-preview', 'gemini-2.5-flash', 'gemini-2.5-pro']
+const IMAGE_MODEL_DEFAULTS = [
+    'sourceful/riverflow-v2-fast',
+    'sourceful/riverflow-v2-pro',
+    'black-forest-labs/flux.2-pro',
+    'google/gemini-2.5-flash-image',
+]
 
 function fmtUsd(v: number) {
     if (!Number.isFinite(v)) return '$0.00'
@@ -31,7 +37,9 @@ export default function AiModelSettings() {
     const [openrouterModel, setOpenrouterModel] = useState('nvidia/nemotron-3-nano-omni:free')
     const [claudeModel, setClaudeModel] = useState('claude-sonnet-4-6')
     const [geminiModel, setGeminiModel] = useState('gemini-3.1-flash-lite-preview')
+    const [openrouterImageModel, setOpenrouterImageModel] = useState('sourceful/riverflow-v2-fast')
     const [openrouterModels, setOpenrouterModels] = useState<ModelOption[]>([])
+    const [openrouterImageModels, setOpenrouterImageModels] = useState<ModelOption[]>([])
     const [balance, setBalance] = useState<{ total_credits: number; total_usage: number } | null>(null)
     const [orLoading, setOrLoading] = useState(false)
 
@@ -41,17 +49,38 @@ export default function AiModelSettings() {
         return geminiModel
     }, [provider, openrouterModel, claudeModel, geminiModel])
 
+    const imageModelOptions = useMemo(() => {
+        const ids = new Set<string>()
+        const out: ModelOption[] = []
+        for (const id of IMAGE_MODEL_DEFAULTS) {
+            if (!id || ids.has(id)) continue
+            ids.add(id)
+            out.push({ id, name: id, context_length: 0 })
+        }
+        for (const m of openrouterImageModels) {
+            if (!m.id || ids.has(m.id)) continue
+            ids.add(m.id)
+            out.push(m)
+        }
+        if (openrouterImageModel && !ids.has(openrouterImageModel)) {
+            out.unshift({ id: openrouterImageModel, name: openrouterImageModel, context_length: 0 })
+        }
+        return out
+    }, [openrouterImageModels, openrouterImageModel])
+
     useEffect(() => {
         let cancelled = false
         ;(async () => {
             try {
-                const [settingsRes, modelsRes, balanceRes] = await Promise.all([
+                const [settingsRes, modelsRes, imageModelsRes, balanceRes] = await Promise.all([
                     fetch('/api/admin/platform-settings'),
-                    fetch('/api/admin/openrouter/models'),
+                    fetch('/api/admin/openrouter/models?output_modalities=all'),
+                    fetch('/api/admin/openrouter/models?output_modalities=image'),
                     fetch('/api/admin/openrouter/balance'),
                 ])
                 const settings = await settingsRes.json()
                 const modelsJson = await modelsRes.json().catch(() => ({}))
+                const imageModelsJson = await imageModelsRes.json().catch(() => ({}))
                 const balanceJson = await balanceRes.json().catch(() => ({}))
 
                 if (!cancelled) {
@@ -62,10 +91,22 @@ export default function AiModelSettings() {
                         setOpenrouterModel(String(settings.ai_openrouter_model || 'nvidia/nemotron-3-nano-omni:free'))
                         setClaudeModel(String(settings.ai_claude_model || 'claude-sonnet-4-6'))
                         setGeminiModel(String(settings.ai_gemini_model || 'gemini-3.1-flash-lite-preview'))
+                        setOpenrouterImageModel(String(settings.ai_openrouter_image_model || 'sourceful/riverflow-v2-fast'))
                     }
                     if (Array.isArray(modelsJson?.models)) {
                         setOpenrouterModels(
                             modelsJson.models
+                                .map((m: any) => ({
+                                    id: String(m.id || ''),
+                                    name: String(m.name || m.id || ''),
+                                    context_length: Number(m.context_length || 0) || 0,
+                                }))
+                                .filter((m: ModelOption) => !!m.id)
+                        )
+                    }
+                    if (Array.isArray(imageModelsJson?.models)) {
+                        setOpenrouterImageModels(
+                            imageModelsJson.models
                                 .map((m: any) => ({
                                     id: String(m.id || ''),
                                     name: String(m.name || m.id || ''),
@@ -95,15 +136,28 @@ export default function AiModelSettings() {
     const refreshOpenRouterData = async () => {
         setOrLoading(true)
         try {
-            const [modelsRes, balanceRes] = await Promise.all([
-                fetch('/api/admin/openrouter/models'),
+            const [modelsRes, imageModelsRes, balanceRes] = await Promise.all([
+                fetch('/api/admin/openrouter/models?output_modalities=all'),
+                fetch('/api/admin/openrouter/models?output_modalities=image'),
                 fetch('/api/admin/openrouter/balance'),
             ])
             const modelsJson = await modelsRes.json().catch(() => ({}))
+            const imageModelsJson = await imageModelsRes.json().catch(() => ({}))
             const balanceJson = await balanceRes.json().catch(() => ({}))
             if (Array.isArray(modelsJson?.models)) {
                 setOpenrouterModels(
                     modelsJson.models
+                        .map((m: any) => ({
+                            id: String(m.id || ''),
+                            name: String(m.name || m.id || ''),
+                            context_length: Number(m.context_length || 0) || 0,
+                        }))
+                        .filter((m: ModelOption) => !!m.id)
+                )
+            }
+            if (Array.isArray(imageModelsJson?.models)) {
+                setOpenrouterImageModels(
+                    imageModelsJson.models
                         .map((m: any) => ({
                             id: String(m.id || ''),
                             name: String(m.name || m.id || ''),
@@ -133,6 +187,7 @@ export default function AiModelSettings() {
                 ai_primary_provider: provider,
                 ai_primary_model: activeModel,
                 ai_openrouter_model: openrouterModel,
+                ai_openrouter_image_model: openrouterImageModel,
                 ai_claude_model: claudeModel,
                 ai_gemini_model: geminiModel,
             }
@@ -270,6 +325,29 @@ export default function AiModelSettings() {
                         <Input value={geminiModel} onChange={(e) => setGeminiModel(e.target.value)} placeholder="Custom Gemini model id" />
                     </div>
                 ) : null}
+
+                <div className="space-y-2 rounded-md border border-dashed p-4">
+                    <label className="text-sm font-medium">E-invite image model (OpenRouter)</label>
+                    <p className="text-xs text-muted-foreground">
+                        Used by the mobile app AI invite studio. Requires an image-capable OpenRouter model (e.g. Riverflow v2 Fast).
+                    </p>
+                    <select
+                        value={openrouterImageModel}
+                        onChange={(e) => setOpenrouterImageModel(e.target.value)}
+                        className="flex h-10 w-full max-w-2xl rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                        {imageModelOptions.map((m) => (
+                            <option key={m.id} value={m.id}>
+                                {m.id}
+                            </option>
+                        ))}
+                    </select>
+                    <Input
+                        value={openrouterImageModel}
+                        onChange={(e) => setOpenrouterImageModel(e.target.value)}
+                        placeholder="Custom OpenRouter image model id"
+                    />
+                </div>
 
                 <div className="rounded-md border p-3 text-xs text-muted-foreground">
                     <div>Current primary model: {primaryModel || activeModel}</div>

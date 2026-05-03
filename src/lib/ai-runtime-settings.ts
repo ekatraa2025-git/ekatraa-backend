@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase/server'
 import { getClaudeModel } from '@/lib/claude-client'
-import { getDefaultOpenRouterModel } from '@/lib/openrouter-client'
+import { getDefaultOpenRouterModel, getDefaultOpenRouterImageModel, getDefaultOpenRouterInviteAnimatedModel } from '@/lib/openrouter-client'
 
 export type AiPrimaryProvider = 'openrouter' | 'claude' | 'gemini'
 
@@ -8,6 +8,8 @@ export type AiRuntimeSettings = {
     provider: AiPrimaryProvider
     primaryModel: string
     openrouterModel: string
+    openrouterImageModel: string
+    openrouterInviteAnimatedModel: string
     claudeModel: string
     geminiModel: string
 }
@@ -24,15 +26,23 @@ export async function getAiRuntimeSettings(): Promise<AiRuntimeSettings> {
     const envClaude = getClaudeModel()
     const envGemini = String(process.env.MASTRA_GEMINI_MODEL || process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL).trim()
     const envOpenRouter = String(process.env.OPENROUTER_MODEL || getDefaultOpenRouterModel()).trim()
+    const envOpenRouterImage = getDefaultOpenRouterImageModel()
+    const envOpenRouterAnim = getDefaultOpenRouterInviteAnimatedModel()
 
     const { data } = await supabase
         .from('platform_settings')
-        .select('ai_primary_provider, ai_primary_model, ai_openrouter_model, ai_claude_model, ai_gemini_model')
+        .select(
+            'ai_primary_provider, ai_primary_model, ai_openrouter_model, ai_openrouter_image_model, ai_openrouter_invite_animated_model, ai_claude_model, ai_gemini_model'
+        )
         .eq('id', 'default')
         .maybeSingle()
 
     const provider = safeProvider(data?.ai_primary_provider)
     const openrouterModel = String(data?.ai_openrouter_model || envOpenRouter).trim() || envOpenRouter
+    const openrouterImageModel = String(data?.ai_openrouter_image_model || envOpenRouterImage).trim() || envOpenRouterImage
+    const openrouterInviteAnimatedModel = String(
+        data?.ai_openrouter_invite_animated_model || envOpenRouterAnim
+    ).trim() || envOpenRouterAnim
     const claudeModel = String(data?.ai_claude_model || envClaude).trim() || envClaude
     const geminiModel = String(data?.ai_gemini_model || envGemini).trim() || envGemini
 
@@ -44,6 +54,8 @@ export async function getAiRuntimeSettings(): Promise<AiRuntimeSettings> {
         provider,
         primaryModel,
         openrouterModel,
+        openrouterImageModel,
+        openrouterInviteAnimatedModel,
         claudeModel,
         geminiModel,
     }
