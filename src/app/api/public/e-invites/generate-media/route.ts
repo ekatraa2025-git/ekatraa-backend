@@ -1,62 +1,34 @@
+import { randomUUID } from 'crypto'
 import { NextResponse } from 'next/server'
+import { getEndUserIdFromRequest } from '@/lib/user-auth'
 import { supabase } from '@/lib/supabase/server'
-import { signedUrlForStorageRef } from '@/lib/storage-display-url'
 import { getAiRuntimeSettings } from '@/lib/ai-runtime-settings'
 import { generateImageWithOpenRouter } from '@/lib/openrouter-client'
-import { getEndUserIdFromRequest } from '@/lib/user-auth'
-import { composeGifFromImageBuffers } from '@/lib/e-invite-gif'
 import { priceInrForMediaKind, type EInviteMediaKind } from '@/lib/e-invite-pricing'
+import { buildEInviteImagePrompt } from '@/lib/e-invite-prompt'
+import { signedUrlForStorageRef } from '@/lib/storage-display-url'
+import { buildGifFromPngBuffers } from '@/lib/e-invite-gif'
 
 const BUCKET = 'ekatraa2025'
 
-function sanitizeSegment(value: string): string {
-    return value
-        .toLowerCase()
-        .replace(/[^a-z0-9-_./]/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .slice(0, 80)
+async function imageRefToBuffer(ref: string): Promise<Buffer> {
+    const r = String(ref || '').trim()
+    if (!r) throw new Error('Empty image reference')
+    if (r.startsWith('data:')) {
+        const idx = r.indexOf('base64,')
+        if (idx === -1) throw new Error('Invalid data URL')
+        return Buffer.from(r.slice(idx + 7), 'base64')
+    }
+    const res = await fetch(r)
+    if (!res.ok) throw new Error('Could not download generated image')
+    return Buffer.from(await res.arrayBuffer())
 }
 
-async function bufferFromImageRef(ref: string): Promise<{ buffer: Buffer; contentType: string }> {
-    const s = ref.trim()
-    if (s.startsWith('data:')) {
-        const m = s.match(/^data:([^;]+);base64,(.+)$/i)
-        if (!m) throw new Error('Invalid image data URL')
-        return { buffer: Buffer.from(m[2], 'base64'), contentType: m[1] || 'image/png' }
-    }
-    if (s.startsWith('http://') || s.startsWith('https://')) {
-        const r = await fetch(s, { cache: 'no-store' })
-        if (!r.ok) throw new Error('Could not download generated image')
-        const ct = r.headers.get('content-type') || 'image/png'
-        const buf = Buffer.from(await r.arrayBuffer())
-        if (!buf.length) throw new Error('Empty image bytes')
-        return { buffer: buf, contentType: ct }
-    }
-    throw new Error('Unsupported image reference')
-}
-
-function parseDesignPayload(body: Record<string, unknown>): Record<string, unknown> {
-    const d = body.design && typeof body.design === 'object' ? (body.design as Record<string, unknown>) : {}
-    return {
-        color_theme: String(d.color_theme ?? body.color_theme ?? '').trim() || null,
-        font_style: String(d.font_style ?? body.font_style ?? '').trim() || null,
-        sticker_pack: String(d.sticker_pack ?? body.sticker_pack ?? '').trim() || null,
-        layout_variation: String(d.layout_variation ?? body.layout_variation ?? '').trim() || null,
-    }
-}
-
-function buildCreativePrompt(base: string, design: Record<string, unknown>): string {
-    const parts: string[] = [base]
-    const c = design.color_theme ? `Colour direction: ${design.color_theme}.` : ''
-    const f = design.font_style ? `Typography / font personality: ${design.font_style}.` : ''
-    const s = design.sticker_pack ? `Decorative motifs and stickers to include: ${design.sticker_pack}.` : ''
-    const v = design.layout_variation ? `Layout vibe: ${design.layout_variation}.` : ''
-    if (c) parts.push(c)
-    if (f) parts.push(f)
-    if (s) parts.push(s)
-    if (v) parts.push(v)
-    return parts.join('\n')
+type DesignBody = {
+    color_theme?: string
+    variation?: string
+    font_style?: string
+    sticker_pack?: string
 }
 
 export async function POST(req: Request) {
@@ -65,120 +37,113 @@ export async function POST(req: Request) {
         if (authError) return authError
 
         const body = await req.json().catch(() => ({}))
-        const prompt = String(body.prompt || '').trim()
-        if (!prompt || prompt.length < 8) {
-            return NextResponse.json({ error: 'prompt is required (min 8 chars)' }, { status: 400 })
-        }
-        if (prompt.length > 12000) {
-            return NextResponse.json({ error: 'prompt is too long' }, { status: 400 })
-        }
-
-        const occasion = String(body.occasion || 'event').trim()
-        const eventName = String(body.event_name || body.eventName || '').trim()
+        const occasion = String(body.occasion || 'Celebration').trim()
         const rawMedia = String(body.media_type || 'image').toLowerCase()
-        const mediaKind: EInviteMediaKind =
-            rawMedia === 'animated' || rawMedia === 'gif' || rawMedia === 'video' ? 'animated' : 'static'
+        const mediaKind: EInviteMediaKind = rawMedia === 'animated' ? 'animated' : 'static'
+        const userPrompt = String(body.prompt || '').trim()
+        const eventName = String(body.event_name || '').trim()
+        if (!eventName) {
+            return NextResponse.json({ error: 'event_name is required' }, { status: 400 })
+        }
+        if (!userPrompt) {
+            return NextResponse.json({ error: 'prompt is required' }, { status: 400 })
+        }
 
-        const design = parseDesignPayload(body as Record<string, unknown>)
+        const hostNames = String(body.host_names || '').trim()
+        const eventDate = String(body.event_date || '').trim()
+        const eventTime = String(body.event_time || '').trim()
+        const venue = String(body.venue || '').trim()
+
+        const design: DesignBody =
+            body.design && typeof body.design === 'object' ? (body.design as DesignBody) : {}
+
         const settings = await getAiRuntimeSettings()
-        const staticModel = settings.openrouterImageModel
-        const animatedModel = settings.openrouterInviteAnimatedModel
-        const model = mediaKind === 'animated' ? animatedModel : staticModel
-        const price_inr = priceInrForMediaKind(mediaKind)
+        const imageModel = settings.openrouterImageModel
+        const animModel = settings.openrouterInviteAnimatedModel
 
-        const lines: string[] = [
-            'Create a polished digital event invitation design suitable for mobile sharing (e.g. WhatsApp).',
-            'High quality composition; readable headline text where appropriate; festive elegance; no watermarks; no browser or app UI chrome.',
-            `Occasion: ${occasion}.`,
-        ]
-        if (eventName) lines.push(`Event name (may appear on the design): ${eventName}.`)
-        lines.push('Creative direction from the host:')
-        lines.push(buildCreativePrompt(prompt, design))
+        const sessionId = `e-inv-gen-${userId}-${Date.now()}`
 
-        if (mediaKind === 'animated') {
-            lines.push(
-                'This is frame 1 of a short looping invite animation — strong readable focal, leave subtle room for motion in sequels (sparkles, light shifts, confetti).'
-            )
+        const baseArgs = {
+            occasion,
+            userPrompt,
+            eventName,
+            hostNames: hostNames || undefined,
+            eventDate: eventDate || undefined,
+            eventTime: eventTime || undefined,
+            venue: venue || undefined,
+            design,
         }
 
-        let fullPrompt = lines.join('\n')
-        const sessionId = typeof body.session_id === 'string' ? body.session_id.trim() : ''
-
-        const runGen = async (p: string) => {
-            try {
-                return await generateImageWithOpenRouter({
-                    model,
-                    prompt: p,
-                    sessionId: sessionId || undefined,
-                    imageConfig: { aspect_ratio: '3:4' },
-                })
-            } catch {
-                return generateImageWithOpenRouter({
-                    model,
-                    prompt: p,
-                    sessionId: sessionId || undefined,
-                })
-            }
-        }
-
-        let finalBuffer: Buffer
+        let storagePath: string
+        let uploadBody: Buffer
         let contentType: string
-        let ext: string
-        let modelUsed = model
 
-        if (mediaKind === 'animated') {
-            const p2 = fullPrompt.replace(
-                'frame 1 of a short looping',
-                'frame 2 of the same looping invite — evolve motion: slightly more sparkle, confetti, or light bloom while keeping layout consistent'
-            )
-            const [frame1, frame2] = await Promise.all([runGen(fullPrompt), runGen(p2)])
-            const b1 = await bufferFromImageRef(frame1.imageRef)
-            const b2 = await bufferFromImageRef(frame2.imageRef)
-            modelUsed = `${model} (2 frames)`
-            try {
-                finalBuffer = await composeGifFromImageBuffers([b1.buffer, b2.buffer])
-                contentType = 'image/gif'
-                ext = 'gif'
-            } catch {
-                finalBuffer = b1.buffer
-                contentType = b1.contentType.split(';')[0] || 'image/png'
-                ext = contentType.includes('jpeg') || contentType.includes('jpg') ? 'jpg' : 'png'
-            }
+        if (mediaKind === 'static') {
+            const prompt = buildEInviteImagePrompt({
+                ...baseArgs,
+                compositionHint:
+                    'Single static frame — rich shadows, subtle paper texture, magazine finish.',
+            })
+            const { imageRef } = await generateImageWithOpenRouter({
+                model: imageModel,
+                prompt,
+                sessionId,
+            })
+            uploadBody = await imageRefToBuffer(imageRef)
+            contentType = 'image/png'
+            storagePath = `e-invites/${userId}/${randomUUID()}.png`
         } else {
-            const imageRefResult = await runGen(fullPrompt)
-            const { imageRef } = imageRefResult
-            const parsed = await bufferFromImageRef(imageRef)
-            finalBuffer = parsed.buffer
-            contentType = parsed.contentType.split(';')[0] || 'image/png'
-            ext =
-                contentType.includes('jpeg') || contentType.includes('jpg')
-                    ? 'jpg'
-                    : contentType.includes('webp')
-                      ? 'webp'
-                      : 'png'
+            const prompt1 = buildEInviteImagePrompt({
+                ...baseArgs,
+                compositionHint:
+                    'Frame 1 of 2 for a gentle GIF loop — establish composition, typography, and lighting baseline.',
+            })
+            const prompt2 = buildEInviteImagePrompt({
+                ...baseArgs,
+                compositionHint:
+                    'Frame 2 of 2 — same layout and palette as frame 1; subtly shift lights, confetti, or depth for a soft celebratory motion when looped.',
+            })
+
+            const [{ imageRef: ref1 }, { imageRef: ref2 }] = await Promise.all([
+                generateImageWithOpenRouter({ model: imageModel, prompt: prompt1, sessionId }),
+                generateImageWithOpenRouter({ model: animModel, prompt: prompt2, sessionId }),
+            ])
+            const buf1 = await imageRefToBuffer(ref1)
+            const buf2 = await imageRefToBuffer(ref2)
+            let gifBuf: Buffer
+            try {
+                gifBuf = await buildGifFromPngBuffers([buf1, buf2])
+            } catch {
+                gifBuf = await buildGifFromPngBuffers([buf1, buf1])
+            }
+            uploadBody = gifBuf
+            contentType = 'image/gif'
+            storagePath = `e-invites/${userId}/${randomUUID()}.gif`
         }
 
-        const slug = sanitizeSegment(eventName || occasion || 'invite')
-        const path = `e-invites/generated/${userId}/${Date.now()}-${slug}.${ext}`
-
-        const { error: uploadErr } = await supabase.storage.from(BUCKET).upload(path, finalBuffer, {
+        const { error: upErr } = await supabase.storage.from(BUCKET).upload(storagePath, uploadBody, {
             contentType,
             upsert: false,
         })
-        if (uploadErr) {
-            return NextResponse.json({ error: uploadErr.message || 'Storage upload failed' }, { status: 500 })
+        if (upErr) {
+            return NextResponse.json({ error: upErr.message || 'Storage upload failed' }, { status: 500 })
         }
+
+        const priceInr = priceInrForMediaKind(mediaKind)
+        const combinedPrompt = buildEInviteImagePrompt({
+            ...baseArgs,
+        })
 
         const formPayload = {
             occasion,
+            media_type: rawMedia,
             event_name: eventName,
-            host_names: String(body.host_names || '').trim() || null,
-            event_date: String(body.event_date || '').trim() || null,
-            event_time: String(body.event_time || '').trim() || null,
-            venue: String(body.venue || '').trim() || null,
-            invitation_message: String(body.invitation_message ?? body.message ?? '').trim() || null,
-            media_kind: mediaKind,
+            host_names: hostNames,
+            event_date: eventDate,
+            event_time: eventTime,
+            venue,
             design,
+            prompt: userPrompt,
         }
 
         const { data: row, error: insErr } = await supabase
@@ -186,37 +151,32 @@ export async function POST(req: Request) {
             .insert({
                 user_id: userId,
                 media_kind: mediaKind,
-                status: 'awaiting_payment',
-                price_inr,
-                storage_path: path,
+                storage_path: storagePath,
+                price_inr: priceInr,
+                payment_status: 'unpaid',
+                prompt: combinedPrompt,
                 form_payload: formPayload,
-                prompt_used: fullPrompt,
-                model_used: modelUsed,
             })
-            .select('id')
+            .select('id, payment_status, price_inr, media_kind')
             .single()
 
-        if (insErr || !row?.id) {
+        if (insErr || !row) {
             return NextResponse.json({ error: insErr?.message || 'Could not save invite record' }, { status: 500 })
         }
 
-        const media_url = await signedUrlForStorageRef(path)
-        if (!media_url) {
-            return NextResponse.json({ error: 'Could not sign storage URL' }, { status: 500 })
-        }
+        const mediaUrl = await signedUrlForStorageRef(storagePath)
 
         return NextResponse.json({
             user_e_invite_id: row.id,
-            media_url,
-            storage_path: path,
-            prompt_used: fullPrompt,
-            model_used: modelUsed,
-            media_kind: mediaKind,
-            price_inr,
-            payment_status: 'awaiting_payment',
+            media_url: mediaUrl,
+            storage_path: storagePath,
+            payment_status: row.payment_status,
+            price_inr: row.price_inr,
+            media_kind: row.media_kind,
+            prompt: combinedPrompt,
         })
     } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Generation failed'
+        const msg = (e as Error)?.message || String(e)
         return NextResponse.json({ error: msg }, { status: 500 })
     }
 }

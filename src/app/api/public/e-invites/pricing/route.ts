@@ -5,6 +5,5 @@ export async function GET() {
     return NextResponse.json({
         static_inr: E_INVITE_STATIC_INR,
         animated_inr: E_INVITE_ANIMATED_INR,
-        currency: 'INR',
     })
 }

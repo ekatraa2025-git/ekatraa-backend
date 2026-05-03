@@ -16,11 +16,9 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AdminImage } from '@/components/Common/AdminImage'
-import { Edit, ExternalLink, Loader2, MoreHorizontal, Trash2, HelpCircle, Download } from 'lucide-react'
+import { Edit, ExternalLink, Loader2, MoreHorizontal, Trash2, Download } from 'lucide-react'
 import { toast } from 'sonner'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 
 type UserEInvite = {
     id: string
@@ -86,7 +84,7 @@ export default function EInvitesAdminPage() {
             {
                 header: 'Preview',
                 key: 'preview_url',
-                render: (_: unknown, row: UserEInvite) =>
+                render: (_url: unknown, row: UserEInvite) =>
                     row.preview_url ? (
                         <AdminImage
                             url={row.preview_url}
@@ -318,33 +316,38 @@ export default function EInvitesAdminPage() {
                 />
             </div>
 
-            <Dialog open={!!editRow} onOpenChange={(o) => !o && setEditRow(null)}>
-                <DialogContent className="max-w-lg">
-                    <DialogHeader>
-                        <DialogTitle>Admin note &amp; context</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-3 text-sm">
-                        <div>
-                            <Label>Invite id</Label>
-                            <Input readOnly value={editRow?.id || ''} className="font-mono text-xs" />
+            {editRow ? (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-lg border bg-card p-6 shadow-lg">
+                        <h3 className="text-lg font-semibold">Admin note &amp; context</h3>
+                        <div className="mt-4 space-y-3 text-sm">
+                            <div>
+                                <p className="mb-1 text-muted-foreground">Invite id</p>
+                                <Input readOnly value={editRow.id} className="font-mono text-xs" />
+                            </div>
+                            <div>
+                                <p className="mb-1 text-muted-foreground">Form payload</p>
+                                <pre className="max-h-40 overflow-auto rounded border bg-muted p-2 text-xs">
+                                    {JSON.stringify(editRow.form_payload || {}, null, 2)}
+                                </pre>
+                            </div>
+                            <div>
+                                <p className="mb-1 text-muted-foreground">Admin note</p>
+                                <Input value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder="Internal note" />
+                            </div>
+                            <div className="flex gap-2 pt-2">
+                                <Button type="button" variant="outline" onClick={() => setEditRow(null)}>
+                                    Cancel
+                                </Button>
+                                <Button type="button" onClick={() => void saveAdminNote()} disabled={savingNote}>
+                                    {savingNote ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                    Save note
+                                </Button>
+                            </div>
                         </div>
-                        <div>
-                            <Label>Form payload (read-only)</Label>
-                            <pre className="max-h-40 overflow-auto rounded border bg-muted p-2 text-xs">
-                                {JSON.stringify(editRow?.form_payload || {}, null, 2)}
-                            </pre>
-                        </div>
-                        <div>
-                            <Label>Admin note</Label>
-                            <Input value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder="Internal note" />
-                        </div>
-                        <Button type="button" onClick={() => void saveAdminNote()} disabled={savingNote}>
-                            {savingNote ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                            Save note
-                        </Button>
                     </div>
-                </DialogContent>
-            </Dialog>
+                </div>
+            ) : null}
 
             <ConfirmDialog
                 open={!!deleteFaqTarget}

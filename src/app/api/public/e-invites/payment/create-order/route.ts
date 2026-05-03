@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import Razorpay from 'razorpay'
-import { supabase } from '@/lib/supabase/server'
 import { getEndUserIdFromRequest } from '@/lib/user-auth'
+import { supabase } from '@/lib/supabase/server'
 
 /**
  * POST /api/public/e-invites/payment/create-order
- * Body: { user_e_invite_id: string }
+ * Body: { user_e_invite_id }
  */
 export async function POST(req: Request) {
     try {
@@ -21,56 +21,56 @@ export async function POST(req: Request) {
         const body = await req.json().catch(() => ({}))
         const inviteId = String(body.user_e_invite_id || '').trim()
         if (!inviteId) {
-            return NextResponse.json({ error: 'user_e_invite_id is required' }, { status: 400 })
+            return NextResponse.json({ error: 'user_e_invite_id required' }, { status: 400 })
         }
 
-        const { data: row, error } = await supabase
+        const { data: inv, error: invErr } = await supabase
             .from('user_e_invites')
-            .select('id, user_id, price_inr, status')
+            .select('id, user_id, price_inr, payment_status')
             .eq('id', inviteId)
             .single()
 
-        if (error || !row) {
+        if (invErr || !inv) {
             return NextResponse.json({ error: 'E-invite not found' }, { status: 404 })
         }
-        if (row.user_id !== userId) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        if (inv.user_id !== userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
         }
-        if (row.status === 'paid') {
+        if (inv.payment_status === 'paid') {
             return NextResponse.json({ error: 'Already paid' }, { status: 400 })
         }
-        if (row.status === 'cancelled') {
-            return NextResponse.json({ error: 'Invite cancelled' }, { status: 400 })
-        }
 
-        const amountPaise = Math.max(100, Math.round(Number(row.price_inr) * 100))
+        const priceInr = Math.max(1, Math.round(Number(inv.price_inr || 0)))
+        const amountInPaise = Math.max(100, priceInr * 100)
+
         const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret })
-        const order = await razorpay.orders.create({
-            amount: amountPaise,
+        const rzOrder = await razorpay.orders.create({
+            amount: amountInPaise,
             currency: 'INR',
-            receipt: `einv_${inviteId.slice(0, 8)}`,
+            receipt: `einv_${String(inviteId).slice(0, 8)}_${Date.now().toString(36)}`,
             notes: {
+                type: 'e_invite',
                 user_e_invite_id: inviteId,
-                user_id: userId,
+                user_id: String(userId),
             },
         })
 
         await supabase
             .from('user_e_invites')
-            .update({ razorpay_order_id: order.id, updated_at: new Date().toISOString() })
+            .update({ razorpay_order_id: rzOrder.id })
             .eq('id', inviteId)
+            .eq('user_id', userId)
 
         return NextResponse.json({
+            razorpay_order_id: rzOrder.id,
+            amount: amountInPaise,
+            amount_inr: priceInr,
             key: keyId,
-            amount: order.amount,
-            currency: order.currency,
-            razorpay_order_id: order.id,
             user_e_invite_id: inviteId,
-            price_inr: row.price_inr,
         })
     } catch (e) {
         const err = e as Error & { error?: { description?: string } }
-        const msg = err?.error?.description || err?.message || 'Could not create payment order'
+        const msg = err?.error?.description || err?.message || String(e)
         return NextResponse.json({ error: msg }, { status: 500 })
     }
 }
