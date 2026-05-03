@@ -5,8 +5,12 @@ import { NextResponse } from 'next/server'
 import {
     fetchPlatformProtectionSettings,
     computeProtectionAmountInr,
-    computeAdvanceInrFromBase,
 } from '@/lib/booking-protection'
+import {
+    cartRequiresFullPayment,
+    computeOnlineChargeInr,
+    type CartLineForPaymentMode,
+} from '@/lib/cart-payment-mode'
 
 const ADVANCE_PERCENT = 20
 
@@ -72,7 +76,7 @@ export async function POST(req: Request) {
 
         const { data: items, error: itemsError } = await supabase
             .from('cart_items')
-            .select('service_id, quantity, unit_price, offerable_services(name)')
+            .select('service_id, quantity, unit_price, options, offerable_services(name, is_special_catalog)')
             .eq('cart_id', cart_id)
 
         if (itemsError || !items?.length) {
@@ -87,19 +91,27 @@ export async function POST(req: Request) {
 
         const settings = await fetchPlatformProtectionSettings()
         const protectionAmount = computeProtectionAmountInr(totalAmount, settings, wantProtection)
-        const calculatedAdvancePaise = Math.max(
-            computeAdvanceInrFromBase(totalAmount, protectionAmount, ADVANCE_PERCENT) * 100,
-            100
+        const fullPayment = cartRequiresFullPayment(items as CartLineForPaymentMode[])
+        const expectedChargeInr = computeOnlineChargeInr(
+            totalAmount,
+            protectionAmount,
+            fullPayment,
+            ADVANCE_PERCENT
         )
+        const calculatedExpectedPaise = Math.max(expectedChargeInr * 100, 100)
 
         // 3. Verify the amount Razorpay actually charged matches what we calculated
         //    Reject if they differ by more than ₹1 (100 paise) to account for any rounding
-        if (Math.abs(rzpOrder.amount - calculatedAdvancePaise) > 100) {
+        if (Math.abs(rzpOrder.amount - calculatedExpectedPaise) > 100) {
             return NextResponse.json({ error: 'Payment amount does not match order total' }, { status: 400 })
         }
 
         // Use the Razorpay-authoritative amount (in rupees) for the order record
         const advanceAmount = rzpOrder.amount / 100
+
+        const payNote = fullPayment
+            ? 'Full payment (digital add-ons / special catalog in cart) paid via Razorpay.'
+            : `Order created. Advance (${ADVANCE_PERCENT}%) paid via Razorpay.`
 
         const { data: order, error: orderError } = await supabase
             .from('orders')
@@ -155,7 +167,7 @@ export async function POST(req: Request) {
         }
 
         await supabase.from('order_status_history').insert([
-            { order_id: order.id, status: 'pending', note: `Order created. Advance (${ADVANCE_PERCENT}%) paid via Razorpay.` },
+            { order_id: order.id, status: 'pending', note: payNote },
         ])
 
         return NextResponse.json(order, { status: 201 })

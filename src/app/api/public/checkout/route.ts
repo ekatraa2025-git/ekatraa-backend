@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { fetchPlatformProtectionSettings, computeProtectionAmountInr } from '@/lib/booking-protection'
+import { cartRequiresFullPayment, type CartLineForPaymentMode } from '@/lib/cart-payment-mode'
 
 /**
  * POST /api/public/checkout
@@ -10,7 +11,7 @@ import { fetchPlatformProtectionSettings, computeProtectionAmountInr } from '@/l
 export async function POST(req: Request) {
     try {
         const body = await req.json()
-        const { cart_id, user_id, booking_protection } = body
+        const { cart_id, user_id, booking_protection, payment_mode } = body
         const wantProtection = booking_protection === true
 
         if (!cart_id) {
@@ -37,12 +38,25 @@ export async function POST(req: Request) {
 
         const { data: items, error: itemsError } = await supabase
             .from('cart_items')
-            .select('service_id, quantity, unit_price, offerable_services(name)')
+            .select('service_id, quantity, unit_price, options, offerable_services(name, is_special_catalog)')
             .eq('cart_id', cart_id)
 
         if (itemsError || !items?.length) {
             return NextResponse.json(
                 { error: 'Cart has no items' },
+                { status: 400 }
+            )
+        }
+
+        if (
+            payment_mode === 'on_finalization' &&
+            cartRequiresFullPayment(items as CartLineForPaymentMode[])
+        ) {
+            return NextResponse.json(
+                {
+                    error:
+                        'This cart includes digital e-invites or special-catalog items. Pay in full online at checkout—pay-on-finalization is not available.',
+                },
                 { status: 400 }
             )
         }

@@ -1,12 +1,13 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import Razorpay from 'razorpay'
-import {
-    fetchPlatformProtectionSettings,
-    computeProtectionAmountInr,
-    computeAdvanceInrFromBase,
-} from '@/lib/booking-protection'
+import { fetchPlatformProtectionSettings, computeProtectionAmountInr } from '@/lib/booking-protection'
 import { getEndUserIdFromRequest } from '@/lib/user-auth'
+import {
+    cartRequiresFullPayment,
+    computeOnlineChargeInr,
+    type CartLineForPaymentMode,
+} from '@/lib/cart-payment-mode'
 
 const ADVANCE_PERCENT = 20
 
@@ -23,7 +24,8 @@ export async function GET() {
 
 /**
  * POST /api/public/payment/create-order
- * Creates Razorpay order for 20% advance payment. Body: { cart_id }
+ * Creates Razorpay order: 20% advance by default, or full order total when the cart
+ * includes e-invites or special-catalog lines. Body: { cart_id, booking_protection? }
  */
 export async function POST(req: Request) {
     try {
@@ -63,7 +65,7 @@ export async function POST(req: Request) {
 
         const { data: items, error: itemsError } = await supabase
             .from('cart_items')
-            .select('quantity, unit_price')
+            .select('quantity, unit_price, options, offerable_services(is_special_catalog)')
             .eq('cart_id', cart_id)
 
         if (itemsError || !items?.length) {
@@ -78,8 +80,14 @@ export async function POST(req: Request) {
 
         const settings = await fetchPlatformProtectionSettings()
         const protectionAmount = computeProtectionAmountInr(totalAmount, settings, wantProtection)
-        const advanceAmount = computeAdvanceInrFromBase(totalAmount, protectionAmount, ADVANCE_PERCENT)
-        const amountInPaise = Math.max(advanceAmount * 100, 100)
+        const fullPayment = cartRequiresFullPayment(items as CartLineForPaymentMode[])
+        const chargeInr = computeOnlineChargeInr(
+            totalAmount,
+            protectionAmount,
+            fullPayment,
+            ADVANCE_PERCENT
+        )
+        const amountInPaise = Math.max(chargeInr * 100, 100)
 
         const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret })
         const order = await razorpay.orders.create({
@@ -92,10 +100,12 @@ export async function POST(req: Request) {
         return NextResponse.json({
             razorpay_order_id: order.id,
             amount: amountInPaise,
-            advance_amount: advanceAmount,
+            advance_amount: chargeInr,
             total_amount: totalAmount,
             protection_amount: protectionAmount,
             booking_protection: wantProtection,
+            full_payment_required: fullPayment,
+            grand_total_inr: totalAmount + protectionAmount,
             key: keyId,
         })
     } catch (e) {
