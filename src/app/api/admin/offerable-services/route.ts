@@ -16,6 +16,7 @@ function parseCsvIds(searchParams: URLSearchParams, key: string): string[] {
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const categoryId = searchParams.get('category_id')
+    const categoryIdsCsv = parseCsvIds(searchParams, 'category_ids')
     const specialCatalog = searchParams.get('special_catalog')
     const occasionIdSingle = searchParams.get('occasion_id')
     const occasionIdsCsv = parseCsvIds(searchParams, 'occasion_ids')
@@ -25,7 +26,7 @@ export async function GET(req: Request) {
             : occasionIdSingle
               ? [occasionIdSingle]
               : []
-    const vendorIdsCsv = parseCsvIds(searchParams, 'vendor_ids')
+    // const vendorIdsCsv = parseCsvIds(searchParams, 'vendor_ids')
 
     let query = supabase
         .from('offerable_services')
@@ -33,6 +34,7 @@ export async function GET(req: Request) {
         .order('display_order', { ascending: true })
 
     if (categoryId) query = query.eq('category_id', categoryId)
+    if (categoryIdsCsv.length > 0) query = query.in('category_id', categoryIdsCsv)
     if (specialCatalog === '1' || specialCatalog === 'true') {
         query = query.eq('is_special_catalog', true)
     }
@@ -59,30 +61,32 @@ export async function GET(req: Request) {
     }
     let list = data ?? []
 
-    if (vendorIdsCsv.length > 0 && list.length > 0) {
-        const candidateIds = list.map((r: { id: string }) => r.id)
-        const { data: vrows, error: vErr } = await supabase
-            .from('offerable_service_vendors')
-            .select('offerable_service_id, vendor_id')
-            .in('offerable_service_id', candidateIds)
-        if (vErr) {
-            return NextResponse.json({ error: vErr.message }, { status: 500 })
-        }
-        const byService = new Map<string, Set<string>>()
-        for (const r of vrows ?? []) {
-            const row = r as { offerable_service_id: string; vendor_id: string }
-            if (!byService.has(row.offerable_service_id))
-                byService.set(row.offerable_service_id, new Set())
-            byService.get(row.offerable_service_id)!.add(row.vendor_id)
-        }
-        const want = new Set(vendorIdsCsv)
-        list = list.filter((row: { id: string }) => {
-            const vset = byService.get(row.id)
-            if (!vset || vset.size === 0) return true
-            for (const v of want) if (vset.has(v)) return true
-            return false
-        })
-    }
+    // Vendor-level filter is intentionally hidden in admin UI for now.
+    // Keep this block for future re-enable.
+    // if (vendorIdsCsv.length > 0 && list.length > 0) {
+    //     const candidateIds = list.map((r: { id: string }) => r.id)
+    //     const { data: vrows, error: vErr } = await supabase
+    //         .from('offerable_service_vendors')
+    //         .select('offerable_service_id, vendor_id')
+    //         .in('offerable_service_id', candidateIds)
+    //     if (vErr) {
+    //         return NextResponse.json({ error: vErr.message }, { status: 500 })
+    //     }
+    //     const byService = new Map<string, Set<string>>()
+    //     for (const r of vrows ?? []) {
+    //         const row = r as { offerable_service_id: string; vendor_id: string }
+    //         if (!byService.has(row.offerable_service_id))
+    //             byService.set(row.offerable_service_id, new Set())
+    //         byService.get(row.offerable_service_id)!.add(row.vendor_id)
+    //     }
+    //     const want = new Set(vendorIdsCsv)
+    //     list = list.filter((row: { id: string }) => {
+    //         const vset = byService.get(row.id)
+    //         if (!vset || vset.size === 0) return true
+    //         for (const v of want) if (vset.has(v)) return true
+    //         return false
+    //     })
+    // }
 
     return NextResponse.json(list)
 }

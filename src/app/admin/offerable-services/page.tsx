@@ -5,7 +5,7 @@ import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import { ConfirmDialog } from '@/components/Common/ConfirmDialog'
 import { toast } from 'sonner'
 import { DataTableView } from '@/components/admin-panel/data-table-view'
-import { Edit, Trash2, Loader2, MoreHorizontal } from 'lucide-react'
+import { Edit, Trash2, Loader2, MoreHorizontal, X } from 'lucide-react'
 import Link from 'next/link'
 import {
     DropdownMenu,
@@ -45,9 +45,17 @@ export default function OfferableServicesPage() {
     const [loading, setLoading] = useState(true)
     const [deleteTarget, setDeleteTarget] = useState<{id: string; name: string} | null>(null)
     const [occasions, setOccasions] = useState<{ id: string; name: string }[]>([])
-    const [vendors, setVendors] = useState<{ id: string; business_name: string }[]>([])
+    const [catalogCategories, setCatalogCategories] = useState<{ id: string; name: string }[]>([])
+    // const [vendors, setVendors] = useState<{ id: string; business_name: string }[]>([])
     const [occasionFilterIds, setOccasionFilterIds] = useState<string[]>([])
-    const [vendorFilterIds, setVendorFilterIds] = useState<string[]>([])
+    const [categoryFilterIds, setCategoryFilterIds] = useState<string[]>([])
+    // const [vendorFilterIds, setVendorFilterIds] = useState<string[]>([])
+    const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([])
+    const [bulkAssignModalOpen, setBulkAssignModalOpen] = useState(false)
+    const [bulkAssignOccasionIds, setBulkAssignOccasionIds] = useState<string[]>([])
+    const [bulkAssignCategoryId, setBulkAssignCategoryId] = useState<string>('')
+    const [assigningBulk, setAssigningBulk] = useState(false)
+    const [reloadKey, setReloadKey] = useState(0)
 
     useEffect(() => {
         fetch('/api/admin/occasions')
@@ -56,12 +64,19 @@ export default function OfferableServicesPage() {
                 if (Array.isArray(data)) setOccasions(data)
             })
             .catch(() => {})
-        fetch('/api/admin/vendors?status=active')
+        fetch('/api/admin/catalog-categories')
             .then((r) => r.json())
             .then((data) => {
-                if (Array.isArray(data)) setVendors(data)
+                if (Array.isArray(data)) setCatalogCategories(data)
             })
             .catch(() => {})
+        // Vendor filter intentionally hidden in UI for now.
+        // fetch('/api/admin/vendors?status=active')
+        //     .then((r) => r.json())
+        //     .then((data) => {
+        //         if (Array.isArray(data)) setVendors(data)
+        //     })
+        //     .catch(() => {})
     }, [])
 
     useEffect(() => {
@@ -70,9 +85,13 @@ export default function OfferableServicesPage() {
         if (occasionFilterIds.length > 0) {
             params.set('occasion_ids', occasionFilterIds.join(','))
         }
-        if (vendorFilterIds.length > 0) {
-            params.set('vendor_ids', vendorFilterIds.join(','))
+        if (categoryFilterIds.length > 0) {
+            params.set('category_ids', categoryFilterIds.join(','))
         }
+        // Vendor filter intentionally hidden in UI for now.
+        // if (vendorFilterIds.length > 0) {
+        //     params.set('vendor_ids', vendorFilterIds.join(','))
+        // }
         const q = params.toString() ? `?${params.toString()}` : ''
         fetch(`/api/admin/offerable-services${q}`)
             .then((r) => r.json())
@@ -84,15 +103,25 @@ export default function OfferableServicesPage() {
                 }
                 setLoading(false)
             })
-    }, [occasionFilterIds, vendorFilterIds])
+    }, [occasionFilterIds, categoryFilterIds, reloadKey])
 
     const toggleOccasionFilter = (id: string) => {
         setOccasionFilterIds((prev) =>
             prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
         )
     }
-    const toggleVendorFilter = (id: string) => {
-        setVendorFilterIds((prev) =>
+    // const toggleVendorFilter = (id: string) => {
+    //     setVendorFilterIds((prev) =>
+    //         prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    //     )
+    // }
+    const toggleCategoryFilter = (id: string) => {
+        setCategoryFilterIds((prev) =>
+            prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+        )
+    }
+    const toggleBulkAssignOccasion = (id: string) => {
+        setBulkAssignOccasionIds((prev) =>
             prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
         )
     }
@@ -128,6 +157,47 @@ export default function OfferableServicesPage() {
         await Promise.all(ids.map((id) => fetch(`/api/admin/offerable-services/${id}`, { method: 'DELETE' }).then((r) => r.json())))
         setItems((prev) => prev.filter((e) => !ids.includes(e.id)))
         setFiltered((prev) => prev.filter((e) => !ids.includes(e.id)))
+    }
+
+    const handleBulkAssign = async () => {
+        if (selectedServiceIds.length === 0) {
+            toast.error('Select at least one service')
+            return
+        }
+        if (bulkAssignOccasionIds.length === 0) {
+            toast.error('Select at least one occasion')
+            return
+        }
+        if (!bulkAssignCategoryId) {
+            toast.error('Select a catalogue category for bulk assignment')
+            return
+        }
+
+        setAssigningBulk(true)
+        try {
+            const res = await fetch('/api/admin/offerable-services/bulk-assign', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    service_ids: selectedServiceIds,
+                    occasion_ids: bulkAssignOccasionIds,
+                    category_id: bulkAssignCategoryId,
+                    replace_occasion_links: true,
+                }),
+            })
+            const out = await res.json()
+            if (!res.ok || out?.error) {
+                toast.error(out?.error || 'Bulk assignment failed')
+                return
+            }
+            toast.success(`Updated ${selectedServiceIds.length} service(s)`)
+            setReloadKey((v) => v + 1)
+            setBulkAssignModalOpen(false)
+            setBulkAssignOccasionIds([])
+            setBulkAssignCategoryId('')
+        } finally {
+            setAssigningBulk(false)
+        }
     }
 
     const columns = [
@@ -243,43 +313,46 @@ export default function OfferableServicesPage() {
                 </div>
                 <div className="min-w-[220px] max-w-md">
                     <div className="flex items-center justify-between">
-                        <label className="text-sm font-medium">Vendors (multi)</label>
+                        <label className="text-sm font-medium">Catalogue Categories (multi)</label>
                         <div className="flex items-center gap-3 text-xs">
                             <label className="flex cursor-pointer items-center gap-1">
                                 <input
                                     type="checkbox"
-                                    checked={hasAllSelected(vendorFilterIds, vendors.map((v) => v.id))}
-                                    onChange={(e) => setVendorFilterIds(e.target.checked ? vendors.map((v) => v.id) : [])}
-                                    disabled={vendors.length === 0}
+                                    checked={hasAllSelected(categoryFilterIds, catalogCategories.map((c) => c.id))}
+                                    onChange={(e) => setCategoryFilterIds(e.target.checked ? catalogCategories.map((c) => c.id) : [])}
+                                    disabled={catalogCategories.length === 0}
                                 />
                                 <span>Select all</span>
                             </label>
                             <button
                                 type="button"
                                 className="text-primary underline"
-                                onClick={() => setVendorFilterIds([])}
+                                onClick={() => setCategoryFilterIds([])}
                             >
                                 Clear all
                             </button>
                         </div>
                     </div>
                     <div className="mt-1 max-h-40 overflow-y-auto rounded-md border px-3 py-2 text-sm">
-                        {vendors.map((v) => (
-                            <label key={v.id} className="flex cursor-pointer items-center gap-2 py-1">
+                        {catalogCategories.map((c) => (
+                            <label key={c.id} className="flex cursor-pointer items-center gap-2 py-1">
                                 <input
                                     type="checkbox"
-                                    checked={vendorFilterIds.includes(v.id)}
-                                    onChange={() => toggleVendorFilter(v.id)}
+                                    checked={categoryFilterIds.includes(c.id)}
+                                    onChange={() => toggleCategoryFilter(c.id)}
                                 />
-                                <span>{v.business_name || v.id}</span>
+                                <span>{c.name || c.id}</span>
                             </label>
                         ))}
                     </div>
                     <p className="text-muted-foreground mt-1 text-xs">
-                        Optional. Empty vendor rows in catalog = all vendors; otherwise match assigned vendors.
+                        Leave empty for all. Services from any selected catalogue category are shown.
                     </p>
                 </div>
             </div>
+            {/* Vendor filter intentionally hidden for now; keep block for easy re-enable.
+            <div className="min-w-[220px] max-w-md">...</div>
+            */}
             <DataTableView
                 title="Services"
                 description="Offerable services in the new flow (category-based, no subcategory)."
@@ -290,6 +363,17 @@ export default function OfferableServicesPage() {
                 addNewLabel="Add Service"
                 selectable
                 onBulkDelete={handleBulkDelete}
+                onSelectionChange={setSelectedServiceIds}
+                headerActions={
+                    <Button
+                        type="button"
+                        variant="outline"
+                        disabled={selectedServiceIds.length === 0}
+                        onClick={() => setBulkAssignModalOpen(true)}
+                    >
+                        Bulk Assign ({selectedServiceIds.length})
+                    </Button>
+                }
                 editLinkBase="/admin/offerable-services"
                 editLinkSuffix=""
                 actions={(item) => (
@@ -326,6 +410,108 @@ export default function OfferableServicesPage() {
                 description={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
                 onConfirm={confirmDelete}
             />
+            {bulkAssignModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+                    <div className="w-full max-w-2xl rounded-lg bg-background shadow-xl">
+                        <div className="flex items-center justify-between border-b px-4 py-3">
+                            <div>
+                                <h3 className="text-base font-semibold">Bulk Assign Services</h3>
+                                <p className="text-muted-foreground text-xs">
+                                    Assign selected services to occasions and a catalogue category.
+                                </p>
+                            </div>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setBulkAssignModalOpen(false)}
+                            >
+                                <X className="h-4 w-4" />
+                            </Button>
+                        </div>
+
+                        <div className="space-y-4 px-4 py-4">
+                            <div>
+                                <label className="text-sm font-medium">Catalogue Category</label>
+                                <select
+                                    className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                                    value={bulkAssignCategoryId}
+                                    onChange={(e) => setBulkAssignCategoryId(e.target.value)}
+                                >
+                                    <option value="">Select catalogue category</option>
+                                    {catalogCategories.map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-medium">Occasions (multi)</label>
+                                    <div className="flex items-center gap-3 text-xs">
+                                        <label className="flex cursor-pointer items-center gap-1">
+                                            <input
+                                                type="checkbox"
+                                                checked={hasAllSelected(bulkAssignOccasionIds, occasions.map((o) => o.id))}
+                                                onChange={(e) =>
+                                                    setBulkAssignOccasionIds(
+                                                        e.target.checked ? occasions.map((o) => o.id) : []
+                                                    )
+                                                }
+                                                disabled={occasions.length === 0}
+                                            />
+                                            <span>Select all</span>
+                                        </label>
+                                        <button
+                                            type="button"
+                                            className="text-primary underline"
+                                            onClick={() => setBulkAssignOccasionIds([])}
+                                        >
+                                            Clear all
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="mt-1 max-h-48 overflow-y-auto rounded-md border px-3 py-2 text-sm">
+                                    {occasions.map((o) => (
+                                        <label key={o.id} className="flex cursor-pointer items-center gap-2 py-1">
+                                            <input
+                                                type="checkbox"
+                                                checked={bulkAssignOccasionIds.includes(o.id)}
+                                                onChange={() => toggleBulkAssignOccasion(o.id)}
+                                            />
+                                            <span>{o.name}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between border-t px-4 py-3">
+                            <p className="text-muted-foreground text-xs">
+                                Selected services: {selectedServiceIds.length}
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setBulkAssignModalOpen(false)}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="button"
+                                    onClick={handleBulkAssign}
+                                    disabled={assigningBulk || selectedServiceIds.length === 0}
+                                >
+                                    {assigningBulk ? 'Assigning...' : 'Apply Bulk Assign'}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </DefaultLayout>
     )
 }

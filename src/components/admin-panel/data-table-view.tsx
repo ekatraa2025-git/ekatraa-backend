@@ -44,6 +44,10 @@ interface DataTableViewProps {
     editLinkBase?: string
     /** Suffix after id for edit link (e.g. '' for vendors, '/edit' for event-types). Default '/edit'. */
     editLinkSuffix?: string
+    /** Exposes current selected row ids when selectable=true. */
+    onSelectionChange?: (ids: string[]) => void
+    /** Optional extra actions block in top-right toolbar. */
+    headerActions?: React.ReactNode | ((selectedIds: string[]) => React.ReactNode)
 }
 
 export function DataTableView({
@@ -60,6 +64,8 @@ export function DataTableView({
     onBulkDelete,
     editLinkBase,
     editLinkSuffix = '/edit',
+    onSelectionChange,
+    headerActions,
 }: DataTableViewProps) {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [bulkDeleting, setBulkDeleting] = useState(false)
@@ -70,6 +76,7 @@ export function DataTableView({
             const next = new Set(prev)
             if (next.has(id)) next.delete(id)
             else next.add(id)
+            onSelectionChange?.(Array.from(next))
             return next
         })
     }
@@ -77,8 +84,11 @@ export function DataTableView({
     const toggleAll = () => {
         if (selectedIds.size === data.length) {
             setSelectedIds(new Set())
+            onSelectionChange?.([])
         } else {
-            setSelectedIds(new Set(data.map((item) => String(item[idKey]))))
+            const next = new Set(data.map((item) => String(item[idKey])))
+            setSelectedIds(next)
+            onSelectionChange?.(Array.from(next))
         }
     }
 
@@ -123,6 +133,9 @@ export function DataTableView({
                             </Link>
                         </Button>
                     )}
+                    {typeof headerActions === 'function'
+                        ? headerActions(Array.from(selectedIds))
+                        : headerActions || null}
                 </div>
             </div>
 

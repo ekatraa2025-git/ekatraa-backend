@@ -97,6 +97,31 @@ export async function DELETE(
     { params }: { params: Promise<{ id: string }> }
 ) {
     const { id } = await params
+
+    // Explicit cleanup keeps behavior safe even if DB-level cascade constraints drift.
+    const [
+        { error: occasionLinkErr },
+        { error: vendorLinkErr },
+        { error: servicesRefErr },
+    ] = await Promise.all([
+        supabase.from('service_occasions').delete().eq('service_id', id),
+        supabase.from('offerable_service_vendors').delete().eq('offerable_service_id', id),
+        supabase.from('services').update({ catalog_service_id: null }).eq('catalog_service_id', id),
+    ])
+
+    if (occasionLinkErr || vendorLinkErr || servicesRefErr) {
+        return NextResponse.json(
+            {
+                error:
+                    occasionLinkErr?.message ||
+                    vendorLinkErr?.message ||
+                    servicesRefErr?.message ||
+                    'Could not cleanup linked records',
+            },
+            { status: 400 }
+        )
+    }
+
     const { error } = await supabase.from('offerable_services').delete().eq('id', id)
 
     if (error) {
