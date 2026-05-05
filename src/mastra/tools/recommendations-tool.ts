@@ -9,7 +9,7 @@ export const getRecommendationsTool = createTool({
         'Compute budget allocation and eligible offerable services for an occasion and total INR budget.',
     inputSchema: z.object({
         occasion_id: z.string().describe('Occasion UUID'),
-        budget_inr: z.number().positive().describe('Total planned budget in INR'),
+        budget_inr: z.number().min(0).describe('Total planned budget in INR'),
     }),
     execute: async (input) => {
         const result = await getRecommendationsCore(supabase, {

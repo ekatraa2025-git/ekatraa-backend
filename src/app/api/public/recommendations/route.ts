@@ -23,9 +23,9 @@ export async function GET(req: Request) {
 
     const totalBudget = resolveTotalBudgetInr(budgetParam, budgetInrRaw)
 
-    if (totalBudget <= 0) {
+    if (!Number.isFinite(totalBudget) || totalBudget < 0) {
         return NextResponse.json(
-            { error: 'Provide a valid budget string or budget_inr (INR)' },
+            { error: 'Provide a valid budget string or budget_inr (INR, 0 or greater)' },
             { status: 400 }
         )
     }

@@ -10,12 +10,16 @@ import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { uploadFile } from '@/utils/storage'
 import { AdminImage } from '@/components/Common/AdminImage'
+import { AdminVideoPreview } from '@/components/Common/AdminVideoPreview'
+
+const WEBM_UPLOAD = { cacheControl: '604800', contentType: 'video/webm' } as const
 
 export default function NewOccasionPage() {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
     const [uploading, setUploading] = useState(false)
-    const [form, setForm] = useState({ id: '', name: '', image_url: '', display_order: 0 })
+    const [uploadingVideo, setUploadingVideo] = useState(false)
+    const [form, setForm] = useState({ id: '', name: '', image_url: '', video_url: '', display_order: 0 })
 
     const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
@@ -85,6 +89,38 @@ export default function NewOccasionPage() {
                                 value={form.image_url}
                                 onChange={(e) => setForm((p) => ({ ...p, image_url: e.target.value }))}
                                 placeholder="Or paste image URL"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium">Occasion video (WebM, optional)</label>
+                            <div className="flex items-center gap-3">
+                                <input
+                                    type="file"
+                                    accept="video/webm,.webm"
+                                    onChange={async (e) => {
+                                        const file = e.target.files?.[0]
+                                        if (!file) return
+                                        setUploadingVideo(true)
+                                        const url = await uploadFile(file, 'occasions-video', undefined, WEBM_UPLOAD)
+                                        setUploadingVideo(false)
+                                        if (url) setForm((p) => ({ ...p, video_url: url }))
+                                    }}
+                                    className="text-sm"
+                                />
+                                {uploadingVideo && <Loader2 className="h-4 w-4 animate-spin" />}
+                            </div>
+                            {form.video_url ? (
+                                <AdminVideoPreview
+                                    url={form.video_url}
+                                    className="mt-2 h-28 max-w-xs rounded-md object-cover"
+                                    placeholderClassName="mt-2 h-28 max-w-xs rounded-md bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs"
+                                />
+                            ) : null}
+                            <Input
+                                className="mt-2"
+                                value={form.video_url}
+                                onChange={(e) => setForm((p) => ({ ...p, video_url: e.target.value }))}
+                                placeholder="Or paste WebM storage path / URL"
                             />
                         </div>
                         <div>

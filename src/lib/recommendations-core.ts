@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { budgetToInr, clampBudgetInr } from '@/lib/budget-mapping'
 import {
     buildTiersForService,
+    categoryTierPriceCeiling,
     effectivePercentages,
     normalizeWeightsForCategories,
     selectionNoteForService,
@@ -94,7 +95,7 @@ export async function getRecommendationsCore(
     if (!occasionId?.trim()) {
         return { ok: false, status: 400, message: 'occasion_id is required' }
     }
-    if (totalBudgetInr <= 0) {
+    if (totalBudgetInr < 0 || !Number.isFinite(totalBudgetInr)) {
         return {
             ok: false,
             status: 400,
@@ -145,7 +146,7 @@ export async function getRecommendationsCore(
 
         for (const alloc of allocations) {
             const effectivePct = pctMap.get(alloc.category_id) ?? Number(alloc.percentage)
-            const allocatedBudget = totalBudgetInr * (effectivePct / 100)
+            const rawAllocated = totalBudgetInr * (effectivePct / 100)
 
             const { data: cat } = await supabase
                 .from('categories')
@@ -169,18 +170,25 @@ export async function getRecommendationsCore(
                     id: alloc.category_id,
                     name: categoryName,
                     percentage: effectivePct,
-                    allocated_budget: allocatedBudget,
+                    allocated_budget: rawAllocated,
                     services: [],
                 })
                 continue
             }
 
             const eligible = (services ?? []).filter((s: OfferableServiceRow) => allowedServiceIds.has(s.id))
+            const ceiling = categoryTierPriceCeiling(eligible)
+            let allocatedBudget = rawAllocated
+            if (ceiling > 0 && rawAllocated > ceiling) {
+                allocatedBudget = ceiling
+            }
+            const displayPct =
+                totalBudgetInr > 0 ? (allocatedBudget / totalBudgetInr) * 100 : effectivePct
 
             categoriesResult.push({
                 id: alloc.category_id,
                 name: categoryName,
-                percentage: effectivePct,
+                percentage: displayPct,
                 allocated_budget: allocatedBudget,
                 services: eligible.map((s: OfferableServiceRow) => ({
                     id: s.id,
@@ -220,7 +228,7 @@ export async function getRecommendationsCore(
 
         for (const cat of categoryList) {
             const effectivePct = weightMap?.get(cat.id) ?? 0
-            const allocatedBudget = totalBudgetInr * (effectivePct / 100)
+            const rawAllocated = totalBudgetInr * (effectivePct / 100)
 
             const { data: services, error: svcError } = await supabase
                 .from('offerable_services')
@@ -236,18 +244,25 @@ export async function getRecommendationsCore(
                     id: cat.id,
                     name: cat.name,
                     percentage: effectivePct,
-                    allocated_budget: allocatedBudget,
+                    allocated_budget: rawAllocated,
                     services: [],
                 })
                 continue
             }
 
             const eligible = (services ?? []).filter((s: OfferableServiceRow) => allowedServiceIds.has(s.id))
+            const ceiling = categoryTierPriceCeiling(eligible)
+            let allocatedBudget = rawAllocated
+            if (ceiling > 0 && rawAllocated > ceiling) {
+                allocatedBudget = ceiling
+            }
+            const displayPct =
+                totalBudgetInr > 0 ? (allocatedBudget / totalBudgetInr) * 100 : effectivePct
 
             categoriesResult.push({
                 id: cat.id,
                 name: cat.name,
-                percentage: effectivePct,
+                percentage: displayPct,
                 allocated_budget: allocatedBudget,
                 services: eligible.map((s: OfferableServiceRow) => ({
                     id: s.id,

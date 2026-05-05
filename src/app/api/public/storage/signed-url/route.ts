@@ -1,8 +1,8 @@
 import { supabase } from '@/lib/supabase/server'
+import { storageSignedUrlTtlSeconds } from '@/lib/storage-display-url'
 import { NextResponse } from 'next/server'
 
 const BUCKET_NAME = 'ekatraa2025'
-const DEFAULT_EXPIRES_IN = 3600
 
 /**
  * GET /api/public/storage/signed-url?path=folder/file.ext
@@ -19,9 +19,10 @@ export async function GET(req: Request) {
     const trimmedPath = path.trim()
 
     try {
+        const expiresIn = storageSignedUrlTtlSeconds(trimmedPath)
         const { data, error } = await supabase.storage
             .from(BUCKET_NAME)
-            .createSignedUrl(trimmedPath, DEFAULT_EXPIRES_IN)
+            .createSignedUrl(trimmedPath, expiresIn)
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 })

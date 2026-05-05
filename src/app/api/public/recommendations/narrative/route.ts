@@ -83,8 +83,8 @@ export async function POST(req: Request) {
         if (!occasion_name) {
             return NextResponse.json({ error: 'occasion_name is required' }, { status: 400 })
         }
-        if (!Number.isFinite(budget_inr) || budget_inr <= 0) {
-            return NextResponse.json({ error: 'budget_inr must be a positive number' }, { status: 400 })
+        if (!Number.isFinite(budget_inr) || budget_inr < 0) {
+            return NextResponse.json({ error: 'budget_inr must be zero or a positive number' }, { status: 400 })
         }
         if (!Array.isArray(lines) || lines.length === 0) {
             return NextResponse.json({ error: 'allocation_lines must be a non-empty array' }, { status: 400 })

@@ -63,6 +63,26 @@ export function getMinTierPrice(s: OfferableServiceRow): number {
     return vals.length ? Math.min(...vals) : Infinity
 }
 
+/** Highest configured tier price (or price_max) for a service — used to cap category budget allocations. */
+export function getMaxTierPriceForService(s: OfferableServiceRow): number {
+    const tierVals = OFFERABLE_TIER_DEFS.map((def) => coercePrice(s[def.key as keyof OfferableServiceRow])).filter(
+        (v): v is number => v != null && Number.isFinite(v) && v > 0
+    )
+    const pm = coercePrice(s.price_max)
+    const candidates = [...tierVals, ...(pm != null && pm > 0 ? [pm] : [])]
+    return candidates.length > 0 ? Math.max(...candidates) : 0
+}
+
+/** Max of per-service top-tier prices in a category (eligible list). */
+export function categoryTierPriceCeiling(services: OfferableServiceRow[]): number {
+    let m = 0
+    for (const s of services) {
+        const v = getMaxTierPriceForService(s)
+        if (v > m) m = v
+    }
+    return m
+}
+
 export function buildTiersForService(
     s: OfferableServiceRow,
     allocatedBudget: number

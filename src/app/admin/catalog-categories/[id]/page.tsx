@@ -9,7 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { uploadFile } from '@/utils/storage'
 import { AdminImage } from '@/components/Common/AdminImage'
+import { AdminVideoPreview } from '@/components/Common/AdminVideoPreview'
 import { toast } from 'sonner'
+
+const WEBM_UPLOAD = { cacheControl: '604800', contentType: 'video/webm' } as const
 
 type Occasion = { id: string; name: string }
 
@@ -18,7 +21,7 @@ export default function EditCatalogCategoryPage() {
     const params = useParams()
     const id = params.id as string
     const [loading, setLoading] = useState(false)
-    const [form, setForm] = useState({ name: '', display_order: 0, is_active: true, icon_url: '' })
+    const [form, setForm] = useState({ name: '', display_order: 0, is_active: true, icon_url: '', video_url: '' })
     const [occasions, setOccasions] = useState<Occasion[]>([])
     const [selectedOccasionIds, setSelectedOccasionIds] = useState<string[]>([])
     const [initialOccasionIds, setInitialOccasionIds] = useState<string[]>([])
@@ -34,6 +37,7 @@ export default function EditCatalogCategoryPage() {
                         display_order: data.display_order ?? 0,
                         is_active: data.is_active !== false,
                         icon_url: data.icon_url ?? '',
+                        video_url: data.video_url ?? '',
                     })
             })
 
@@ -154,6 +158,42 @@ export default function EditCatalogCategoryPage() {
                                             if (url) setForm((p) => ({ ...p, icon_url: url }))
                                         }}
                                         className="w-full rounded-md border px-3 py-2 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:text-white"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium">Category video — WebM (optional)</label>
+                            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start">
+                                {form.video_url && (
+                                    <AdminVideoPreview
+                                        url={form.video_url}
+                                        className="h-24 w-40 rounded-lg object-cover border border-stroke dark:border-strokedark"
+                                        placeholderClassName="h-24 w-40 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs"
+                                    />
+                                )}
+                                <div className="flex-1">
+                                    <input
+                                        type="file"
+                                        accept="video/webm,.webm"
+                                        onChange={async (e) => {
+                                            const file = e.target.files?.[0]
+                                            if (!file) return
+                                            const url = await uploadFile(
+                                                file,
+                                                'catalog-categories-video',
+                                                undefined,
+                                                WEBM_UPLOAD
+                                            )
+                                            if (url) setForm((p) => ({ ...p, video_url: url }))
+                                        }}
+                                        className="w-full rounded-md border px-3 py-2 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:text-white"
+                                    />
+                                    <Input
+                                        className="mt-2"
+                                        value={form.video_url}
+                                        onChange={(e) => setForm((p) => ({ ...p, video_url: e.target.value }))}
+                                        placeholder="Or paste WebM path"
                                     />
                                 </div>
                             </div>

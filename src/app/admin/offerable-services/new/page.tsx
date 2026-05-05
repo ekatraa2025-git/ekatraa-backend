@@ -9,8 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { uploadFile } from '@/utils/storage'
 import { AdminImage } from '@/components/Common/AdminImage'
+import { AdminVideoPreview } from '@/components/Common/AdminVideoPreview'
 import { RichTextEditor } from '@/components/Common/RichTextEditor'
 import { toast } from 'sonner'
+
+const WEBM_UPLOAD = { cacheControl: '604800', contentType: 'video/webm' } as const
 
 const TIER_LABELS = [
     { key: 'price_basic', label: 'Basic', qtyKey: 'qty_label_basic', subKey: 'sub_variety_basic' },
@@ -47,6 +50,7 @@ export default function NewOfferableServicePage() {
         description: '',
         display_order: 0,
         image_url: '',
+        video_url: '',
         price_basic: '' as string,
         price_classic_value: '' as string,
         price_signature: '' as string,
@@ -162,6 +166,7 @@ export default function NewOfferableServicePage() {
             description: form.description || null,
             display_order: form.display_order,
             image_url: form.image_url || null,
+            video_url: form.video_url || null,
             is_active: form.is_active,
             is_special_catalog: form.is_special_catalog === true,
             price_min,
@@ -363,6 +368,44 @@ export default function NewOfferableServicePage() {
                                             if (url) setForm((p) => ({ ...p, image_url: url }))
                                         }}
                                         className="w-full rounded-md border px-3 py-2 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:text-white"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium">WebM video (optional)</label>
+                            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start">
+                                {form.video_url && (
+                                    <AdminVideoPreview
+                                        url={form.video_url}
+                                        className="h-24 w-40 rounded-lg object-cover border border-stroke dark:border-strokedark"
+                                        placeholderClassName="h-24 w-40 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs"
+                                    />
+                                )}
+                                <div className="flex-1">
+                                    <input
+                                        type="file"
+                                        accept="video/webm,.webm"
+                                        onChange={async (e) => {
+                                            const file = e.target.files?.[0]
+                                            if (!file) return
+                                            const url = await uploadFile(
+                                                file,
+                                                'offerable-services-video',
+                                                undefined,
+                                                WEBM_UPLOAD
+                                            )
+                                            if (url) setForm((p) => ({ ...p, video_url: url }))
+                                        }}
+                                        className="w-full rounded-md border px-3 py-2 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:text-white"
+                                    />
+                                    <Input
+                                        className="mt-2"
+                                        value={form.video_url}
+                                        onChange={(e) =>
+                                            setForm((p) => ({ ...p, video_url: e.target.value }))
+                                        }
+                                        placeholder="Or paste WebM path"
                                     />
                                 </div>
                             </div>

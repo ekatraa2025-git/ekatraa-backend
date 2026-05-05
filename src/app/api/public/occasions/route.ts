@@ -9,7 +9,7 @@ import { NextResponse } from 'next/server'
 export async function GET() {
     const { data, error } = await supabase
         .from('occasions')
-        .select('id, name, image_url, icon_url, icon, display_order')
+        .select('id, name, image_url, video_url, icon_url, icon, display_order')
         .eq('is_active', true)
         .order('display_order', { ascending: true })
 
@@ -19,9 +19,16 @@ export async function GET() {
 
     const rows = Array.isArray(data) ? data : []
     const withSignedImages = await Promise.all(
-        rows.map(async (row: { image_url?: string | null; [k: string]: unknown }) => {
-            const signed = await signedUrlForStorageRef(row.image_url ?? null)
-            return { ...row, image_url: signed ?? row.image_url ?? null }
+        rows.map(async (row: { image_url?: string | null; video_url?: string | null; [k: string]: unknown }) => {
+            const [imageSigned, videoSigned] = await Promise.all([
+                signedUrlForStorageRef(row.image_url ?? null),
+                signedUrlForStorageRef(row.video_url ?? null),
+            ])
+            return {
+                ...row,
+                image_url: imageSigned ?? row.image_url ?? null,
+                video_url: videoSigned ?? row.video_url ?? null,
+            }
         })
     )
 

@@ -4,6 +4,10 @@
  */
 
 export const BUDGET_OPTIONS: Record<string, number> = {
+    'Flexible (set later)': 0,
+    'Under ₹1 Lakh': 50_000,
+    '1-3 Lakhs': 200_000,
+    '3-6 Lakhs': 450_000,
     '6-10 Lakhs': 800_000,   // midpoint of 600k-1M
     '11-15 Lakhs': 1_300_000,
     '16-20 Lakhs': 1_800_000,
@@ -31,18 +35,19 @@ export function budgetToInr(budget: string | number): number {
     return 0
 }
 
-/** Slider range: ₹1 lakh to ₹2 crore (INR). */
-export const MIN_BUDGET_INR = 100_000
+/** Slider range: ₹0 to ₹2 crore (INR). Small events supported. */
+export const MIN_BUDGET_INR = 0
 export const MAX_BUDGET_INR = 20_000_000
 
 export function clampBudgetInr(inr: number): number {
-    if (!Number.isFinite(inr) || inr <= 0) return 0
+    if (!Number.isFinite(inr) || inr < 0) return 0
     return Math.min(MAX_BUDGET_INR, Math.max(MIN_BUDGET_INR, Math.round(inr)))
 }
 
 /** Short display label for cart / UI (e.g. ₹15.5 Lakhs). */
 export function formatBudgetInrLabel(inr: number): string {
-    if (!Number.isFinite(inr) || inr <= 0) return ''
+    if (!Number.isFinite(inr) || inr < 0) return ''
+    if (inr === 0) return '₹0'
     const lakhs = inr / 100_000
     if (lakhs >= 100) {
         const cr = lakhs / 100

@@ -28,6 +28,8 @@ const bodySchema = z.object({
     occasion_id: z.union([z.string(), z.number()]).transform((v) => String(v)).optional(),
     occasion_name: z.string().optional(),
     planned_budget_inr: z.number().optional(),
+    /** Rich snapshot from the app user-info wizard (contact, location, guests, budget label, etc.) */
+    event_form_snapshot: z.record(z.string(), z.unknown()).optional(),
 })
 
 /**
@@ -41,7 +43,8 @@ export async function POST(req: Request) {
         if (!parsed.success) {
             return NextResponse.json({ error: 'Invalid body', details: parsed.error.flatten() }, { status: 400 })
         }
-        const { message, history, city, occasion_id, occasion_name, planned_budget_inr } = parsed.data
+        const { message, history, city, occasion_id, occasion_name, planned_budget_inr, event_form_snapshot } =
+            parsed.data
 
         const threadId =
             req.headers.get('x-thread-id')?.trim() ||
@@ -57,19 +60,25 @@ export async function POST(req: Request) {
             occasion_id: occasion_id?.trim() || null,
         })
         const budgetHint =
-            typeof planned_budget_inr === 'number' &&
-            planned_budget_inr > 0 &&
-            Number.isFinite(planned_budget_inr)
-                ? `\nUser context: planned total budget about ₹${Math.round(planned_budget_inr).toLocaleString('en-IN')}.`
+            typeof planned_budget_inr === 'number' && Number.isFinite(planned_budget_inr)
+                ? `\nUser context: planned total budget about ₹${Math.round(planned_budget_inr).toLocaleString('en-IN')}${planned_budget_inr === 0 ? ' (flexible / to be decided)' : ''}.`
                 : ''
         const occasionHint = occasion_name?.trim()
             ? `\nUser is focused on "${occasion_name.trim()}" in the app.`
             : ''
+        let eventDetailsHint = ''
+        if (event_form_snapshot && typeof event_form_snapshot === 'object' && Object.keys(event_form_snapshot).length > 0) {
+            try {
+                eventDetailsHint = `\nUser event details (from app form): ${JSON.stringify(event_form_snapshot).slice(0, 3500)}`
+            } catch {
+                eventDetailsHint = ''
+            }
+        }
 
         const messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [
             {
                 role: 'system',
-                content: `Catalog and app context:\n${catalog}${occasionHint}${budgetHint}`,
+                content: `Catalog and app context:\n${catalog}${occasionHint}${budgetHint}${eventDetailsHint}`,
             },
         ]
         for (const h of history ?? []) {

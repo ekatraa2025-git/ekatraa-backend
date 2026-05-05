@@ -2,10 +2,16 @@ import { createClient } from '@/utils/supabase/client'
 
 const BUCKET_NAME = 'ekatraa2025'
 
+export type StorageUploadOptions = {
+    cacheControl?: string
+    contentType?: string
+}
+
 export async function uploadFile(
     file: File,
     folder: string = 'uploads',
-    fileName?: string
+    fileName?: string,
+    options?: StorageUploadOptions
 ): Promise<string | null> {
     try {
         const supabase = createClient()
@@ -15,12 +21,21 @@ export async function uploadFile(
         const finalFileName = fileName || `${timestamp}-${randomString}.${fileExt}`
         const filePath = `${folder}/${finalFileName}`
 
+        const uploadPayload: {
+            cacheControl: string
+            upsert: boolean
+            contentType?: string
+        } = {
+            cacheControl: options?.cacheControl ?? '3600',
+            upsert: false,
+        }
+        if (options?.contentType) {
+            uploadPayload.contentType = options.contentType
+        }
+
         const { data, error } = await supabase.storage
             .from(BUCKET_NAME)
-            .upload(filePath, file, {
-                cacheControl: '3600',
-                upsert: false
-            })
+            .upload(filePath, file, uploadPayload)
 
         if (error) {
             console.error('Upload error:', error)
