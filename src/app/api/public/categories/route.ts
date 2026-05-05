@@ -1,5 +1,20 @@
 import { supabase } from '@/lib/supabase/server'
+import { signedUrlForStorageRef } from '@/lib/storage-display-url'
 import { NextResponse } from 'next/server'
+
+async function signCategoryMedia(row: Record<string, unknown>) {
+    const iconRaw = typeof row.icon_url === 'string' ? row.icon_url : null
+    const videoRaw = typeof row.video_url === 'string' ? row.video_url : null
+    const [iconSigned, videoSigned] = await Promise.all([
+        signedUrlForStorageRef(iconRaw),
+        signedUrlForStorageRef(videoRaw),
+    ])
+    return {
+        ...row,
+        icon_url: iconSigned ?? iconRaw ?? null,
+        video_url: videoSigned ?? videoRaw ?? null,
+    }
+}
 
 /**
  * GET /api/public/categories?occasion_id=
@@ -31,7 +46,8 @@ export async function GET(req: Request) {
             .filter((x): x is Record<string, unknown> & { _occCatOrder: number } => x != null)
             .sort((a, b) => a._occCatOrder - b._occCatOrder)
             .map(({ _occCatOrder: _removed, ...rest }) => rest)
-        return NextResponse.json(list)
+        const signed = await Promise.all(list.map((r) => signCategoryMedia(r)))
+        return NextResponse.json(signed)
     }
 
     const { data, error } = await supabase
@@ -43,5 +59,7 @@ export async function GET(req: Request) {
     if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 })
     }
-    return NextResponse.json(data ?? [])
+    const rows = Array.isArray(data) ? data : []
+    const signed = await Promise.all(rows.map((r) => signCategoryMedia(r as Record<string, unknown>)))
+    return NextResponse.json(signed)
 }

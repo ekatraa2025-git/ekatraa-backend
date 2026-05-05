@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { AdminImage } from '@/components/Common/AdminImage'
+import { AdminListMedia } from '@/components/Common/AdminListMedia'
 
 function hasAllSelected(selectedIds: string[], allIds: string[]): boolean {
     return allIds.length > 0 && allIds.every((id) => selectedIds.includes(id))
@@ -30,6 +30,7 @@ export default function OfferableServicesPage() {
             name: string
             category_id: string
             image_url?: string
+            video_url?: string
             is_active?: boolean
             price_min?: number
             price_max?: number
@@ -202,12 +203,13 @@ export default function OfferableServicesPage() {
 
     const columns = [
         {
-            header: 'Image',
+            header: 'Media',
             key: 'image_url',
-            render: (v: string) => (
-                <AdminImage
-                    url={v}
-                    alt="Service"
+            render: (_v: string, row: (typeof items)[0]) => (
+                <AdminListMedia
+                    videoUrl={row.video_url}
+                    imageUrl={row.image_url}
+                    alt={row.name || 'Service'}
                     className="h-10 w-10 rounded-lg object-cover"
                     placeholderClassName="h-10 w-10 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-400 text-xs"
                 />

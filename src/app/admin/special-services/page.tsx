@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { AdminImage } from '@/components/Common/AdminImage'
+import { AdminListMedia } from '@/components/Common/AdminListMedia'
 
 type Row = {
     id: string
@@ -25,6 +25,7 @@ type Row = {
     category_id: string
     city?: string | null
     image_url?: string
+    video_url?: string
     is_active?: boolean
     price_basic?: number | null
     price_unit?: string | null
@@ -90,12 +91,13 @@ export default function SpecialCatalogServicesPage() {
 
     const columns = [
         {
-            header: 'Image',
+            header: 'Media',
             key: 'image_url',
-            render: (v: string) => (
-                <AdminImage
-                    url={v}
-                    alt="Service"
+            render: (_v: string, row: Row) => (
+                <AdminListMedia
+                    videoUrl={row.video_url}
+                    imageUrl={row.image_url}
+                    alt={row.name || 'Service'}
                     className="h-10 w-10 rounded-lg object-cover"
                     placeholderClassName="h-10 w-10 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-400 text-xs"
                 />

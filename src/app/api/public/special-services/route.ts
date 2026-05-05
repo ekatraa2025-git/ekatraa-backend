@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase/server'
+import { signedUrlForStorageRef } from '@/lib/storage-display-url'
 import { NextResponse } from 'next/server'
 
 /**
@@ -20,7 +21,22 @@ export async function GET() {
             return NextResponse.json({ error: error.message }, { status: 500 })
         }
 
-        return NextResponse.json(data ?? [])
+        const rows = Array.isArray(data) ? data : []
+        const withSignedMedia = await Promise.all(
+            rows.map(async (row: { image_url?: string | null; video_url?: string | null; [k: string]: unknown }) => {
+                const [imageSigned, videoSigned] = await Promise.all([
+                    signedUrlForStorageRef(row.image_url ?? null),
+                    signedUrlForStorageRef(row.video_url ?? null),
+                ])
+                return {
+                    ...row,
+                    image_url: imageSigned ?? row.image_url ?? null,
+                    video_url: videoSigned ?? row.video_url ?? null,
+                }
+            })
+        )
+
+        return NextResponse.json(withSignedMedia)
     } catch (e) {
         return NextResponse.json({ error: (e as Error).message }, { status: 500 })
     }

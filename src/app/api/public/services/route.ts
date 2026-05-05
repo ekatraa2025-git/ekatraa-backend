@@ -1,5 +1,24 @@
 import { supabase } from '@/lib/supabase/server'
+import { signedUrlForStorageRef } from '@/lib/storage-display-url'
 import { NextResponse } from 'next/server'
+
+async function withSignedOfferableMedia<
+    T extends { image_url?: string | null; video_url?: string | null; [k: string]: unknown },
+>(rows: T[]) {
+    return Promise.all(
+        rows.map(async (row) => {
+            const [imageSigned, videoSigned] = await Promise.all([
+                signedUrlForStorageRef(row.image_url ?? null),
+                signedUrlForStorageRef(row.video_url ?? null),
+            ])
+            return {
+                ...row,
+                image_url: imageSigned ?? row.image_url ?? null,
+                video_url: videoSigned ?? row.video_url ?? null,
+            }
+        })
+    )
+}
 
 /**
  * GET /api/public/services
@@ -59,12 +78,12 @@ export async function GET(req: Request) {
                 allowedIds.size > 0
                     ? (services ?? []).filter((s: { id: string }) => allowedIds.has(s.id))
                     : []
-            return NextResponse.json(list)
+            return NextResponse.json(await withSignedOfferableMedia(list))
         }
 
         const { data: services, error: svcError } = await query
         if (svcError) return NextResponse.json({ error: svcError.message }, { status: 500 })
-        return NextResponse.json(services ?? [])
+        return NextResponse.json(await withSignedOfferableMedia(services ?? []))
     }
 
     // Legacy: eventType + app_service_catalog

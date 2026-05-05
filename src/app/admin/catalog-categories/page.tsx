@@ -15,12 +15,14 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { AdminImage } from '@/components/Common/AdminImage'
+import { AdminListMedia } from '@/components/Common/AdminListMedia'
 import { ConfirmDialog } from '@/components/Common/ConfirmDialog'
 import { toast } from 'sonner'
 
 export default function CatalogCategoriesPage() {
-    const [items, setItems] = useState<{ id: string; name: string; icon_url?: string; display_order?: number; is_active?: boolean }[]>([])
+    const [items, setItems] = useState<
+        { id: string; name: string; icon_url?: string; video_url?: string; display_order?: number; is_active?: boolean }[]
+    >([])
     const [filtered, setFiltered] = useState<typeof items>([])
     const [loading, setLoading] = useState(true)
     const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
@@ -72,12 +74,13 @@ export default function CatalogCategoriesPage() {
     const columns = [
         { header: 'ID', key: 'id' },
         {
-            header: 'Icon',
+            header: 'Media',
             key: 'icon_url',
-            render: (v: string) => (
-                <AdminImage
-                    url={v}
-                    alt="Icon"
+            render: (_v: string, row: (typeof items)[0]) => (
+                <AdminListMedia
+                    videoUrl={row.video_url}
+                    imageUrl={row.icon_url}
+                    alt={row.name || 'Category'}
                     className="h-10 w-10 rounded-lg object-cover"
                     placeholderClassName="h-10 w-10 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-400 text-xs"
                 />
