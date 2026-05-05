@@ -12,7 +12,7 @@ export async function GET(req: Request) {
     if (occasionId) {
         const { data, error } = await supabase
             .from('occasion_categories')
-            .select('category_id, categories(id, name, icon_url, video_url, display_order)')
+            .select('category_id, display_order, categories(id, name, icon_url, video_url, display_order)')
             .eq('occasion_id', occasionId)
             .order('display_order', { ascending: true })
 
