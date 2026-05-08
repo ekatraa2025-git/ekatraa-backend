@@ -26,6 +26,10 @@ function catalogTierLabel(tierKey: string): string {
     return def?.label ?? tierKey.replace(/_/g, ' ')
 }
 
+function normalizeName(value: unknown): string {
+    return String(value || '').trim().toLowerCase()
+}
+
 export default function EditVendorPage() {
     const [loading, setLoading] = useState(false)
     const [fetching, setFetching] = useState(true)
@@ -94,11 +98,27 @@ export default function EditVendorPage() {
                 return
             }
 
+            const categoryById = (catalogData && Array.isArray(catalogData) && vendorData.category_id)
+                ? catalogData.find((c: any) => c.id === vendorData.category_id)
+                : null
+            const categoryByName = (catalogData && Array.isArray(catalogData) && !categoryById && vendorData.category)
+                ? catalogData.find((c: any) => normalizeName(c?.name) === normalizeName(vendorData.category))
+                : null
+            const resolvedCategoryId = categoryById?.id || categoryByName?.id || vendorData.category_id || ''
+            const resolvedCategoryName = categoryById?.name || categoryByName?.name || vendorData.category || ''
+            const resolvedPhone = vendorData.phone || vendorData.mobile || vendorData.contact_mobile || ''
+            const resolvedServiceArea =
+                vendorData.service_area ||
+                [vendorData.city, vendorData.state].filter(Boolean).join(', ')
+
             setFormData({
                 ...vendorData,
                 status: vendorData.status === 'active',
                 is_verified: vendorData.is_verified === true,
-                category: (catalogData && Array.isArray(catalogData) && catalogData.find((c: any) => c.id === vendorData.category_id)?.name) || vendorData.category || '',
+                category_id: resolvedCategoryId,
+                category: resolvedCategoryName,
+                phone: resolvedPhone,
+                service_area: resolvedServiceArea,
                 gallery_urls: Array.isArray(vendorData.gallery_urls) ? vendorData.gallery_urls.filter(Boolean) : [],
             })
 
@@ -106,8 +126,8 @@ export default function EditVendorPage() {
                 setAadhaarVerified(true)
             }
 
-            if (vendorData.category_id) {
-                const offerRes = await fetch(`/api/admin/offerable-services?category_id=${vendorData.category_id}`)
+            if (resolvedCategoryId) {
+                const offerRes = await fetch(`/api/admin/offerable-services?category_id=${resolvedCategoryId}`)
                 const offerData = await offerRes.json()
                 if (offerData && !offerData.error && Array.isArray(offerData)) {
                     setOfferableServices(offerData)

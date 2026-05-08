@@ -2,6 +2,19 @@ import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { extractCityFromAddress } from '@/utils/addressParser'
 import { pickVendorPayload } from '@/lib/vendor-fields'
+import { resolveVendorCategoryIdForDb } from '@/lib/vendor-category-resolve'
+
+function normalizeName(value: unknown): string {
+    return String(value || '').trim().toLowerCase()
+}
+
+function formatVendorLocation(vendor: Record<string, any>): string {
+    const serviceArea = String(vendor.service_area || '').trim()
+    if (serviceArea) return serviceArea
+    const city = String(vendor.city || '').trim()
+    const state = String(vendor.state || '').trim()
+    return [city, state].filter(Boolean).join(', ')
+}
 
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
@@ -26,14 +39,22 @@ export async function GET(req: Request) {
     const categoriesMap = new Map(catalogCategories?.map(c => [c.id, c.name]) || [])
 
     const data = vendors.map((vendor) => {
-        const fromCatalog =
+        const fromCatalogById =
             vendor.category_id != null ? categoriesMap.get(vendor.category_id as string) : null
+        const fromCatalogByName =
+            !fromCatalogById && vendor.category
+                ? (catalogCategories || []).find((c) => normalizeName(c.name) === normalizeName(vendor.category))?.name
+                : null
         const displayCategory =
-            (fromCatalog && String(fromCatalog).trim()) ||
+            (fromCatalogById && String(fromCatalogById).trim()) ||
+            (fromCatalogByName && String(fromCatalogByName).trim()) ||
             (vendor.category && String(vendor.category).trim()) ||
             null
+        const locationDisplay = formatVendorLocation(vendor)
         return {
             ...vendor,
+            phone: vendor.phone || vendor.mobile || '',
+            location_display: locationDisplay,
             vendor_categories: {
                 name: displayCategory,
             },
@@ -71,6 +92,24 @@ export async function POST(req: Request) {
             body.is_active = body.status === 'active'
         } else if (body.is_active !== undefined) {
             body.status = body.is_active ? 'active' : 'pending'
+        }
+
+        const wantsCategory =
+            (body.category_id != null && String(body.category_id).trim() !== '') ||
+            (body.category != null && String(body.category).trim() !== '')
+        if (wantsCategory) {
+            const { id: resolvedCatId, reason: catReason } = await resolveVendorCategoryIdForDb(
+                supabase,
+                body.category_id,
+                body.category
+            )
+            if (!resolvedCatId) {
+                return NextResponse.json(
+                    { error: catReason || 'Invalid category', auth_note: null },
+                    { status: 400 }
+                )
+            }
+            body.category_id = resolvedCatId
         }
 
         // If create_auth is enabled and phone is provided, create a Supabase auth user

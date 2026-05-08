@@ -20,6 +20,25 @@ async function withSignedOfferableMedia<
     )
 }
 
+function sortByCategoryAndOccasion(rows: Array<Record<string, unknown>>) {
+    return [...rows].sort((a, b) => {
+        const occA = String(a.occasion_name || a.occasion_id || '').toLowerCase()
+        const occB = String(b.occasion_name || b.occasion_id || '').toLowerCase()
+        if (occA !== occB) return occA.localeCompare(occB)
+
+        const catA = String(a.category_name || a.category_id || '').toLowerCase()
+        const catB = String(b.category_name || b.category_id || '').toLowerCase()
+        if (catA !== catB) return catA.localeCompare(catB)
+
+        const orderA = Number(a.display_order)
+        const orderB = Number(b.display_order)
+        if (Number.isFinite(orderA) || Number.isFinite(orderB)) {
+            return (Number.isFinite(orderA) ? orderA : 9999) - (Number.isFinite(orderB) ? orderB : 9999)
+        }
+        return String(a.name || '').localeCompare(String(b.name || ''))
+    })
+}
+
 /**
  * GET /api/public/services
  * New contract: ?occasion_id=&category_id=&city=&search=
@@ -55,8 +74,9 @@ export async function GET(req: Request) {
         if (categoryId) {
             query = query.eq('category_id', categoryId)
         }
-        if (city) {
-            query = query.eq('city', city)
+        if (city && city.trim()) {
+            const safeCity = city.trim().replace(/[%_]/g, '')
+            query = query.or(`city.ilike.%${safeCity}%,city.is.null`)
         }
         if (search && search.trim()) {
             query = query.or(`name.ilike.%${search.trim()}%,description.ilike.%${search.trim()}%`)
@@ -78,12 +98,12 @@ export async function GET(req: Request) {
                 allowedIds.size > 0
                     ? (services ?? []).filter((s: { id: string }) => allowedIds.has(s.id))
                     : []
-            return NextResponse.json(await withSignedOfferableMedia(list))
+            return NextResponse.json(await withSignedOfferableMedia(sortByCategoryAndOccasion(list)))
         }
 
         const { data: services, error: svcError } = await query
         if (svcError) return NextResponse.json({ error: svcError.message }, { status: 500 })
-        return NextResponse.json(await withSignedOfferableMedia(services ?? []))
+        return NextResponse.json(await withSignedOfferableMedia(sortByCategoryAndOccasion(services ?? [])))
     }
 
     // Legacy: eventType + app_service_catalog

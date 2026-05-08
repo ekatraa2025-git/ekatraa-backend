@@ -5,7 +5,6 @@ import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import { ConfirmDialog } from '@/components/Common/ConfirmDialog'
 import { toast } from 'sonner'
 import { DataTableView } from '@/components/admin-panel/data-table-view'
-import { createClient } from '@/utils/supabase/client'
 import { Edit, Trash2, Loader2, MoreHorizontal, Eye } from 'lucide-react'
 import Link from 'next/link'
 import {
@@ -23,31 +22,53 @@ export default function VendorsPage() {
     const [vendors, setVendors] = useState<any[]>([])
     const [filteredVendors, setFilteredVendors] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
+    const [defaultVendorLoading, setDefaultVendorLoading] = useState(false)
     const [deleteTarget, setDeleteTarget] = useState<{id: string; name: string} | null>(null)
-    const supabase = createClient()
+
+    const fetchVendors = async () => {
+        const res = await fetch('/api/admin/vendors')
+        const data = await res.json()
+
+        if (data && !data.error) {
+            setVendors(data)
+            setFilteredVendors(data)
+        } else if (data.error) {
+            console.error('API Error:', data.error)
+        }
+        setLoading(false)
+    }
 
     useEffect(() => {
-        const fetchVendors = async () => {
-            const res = await fetch('/api/admin/vendors')
-            const data = await res.json()
-
-            if (data && !data.error) {
-                setVendors(data)
-                setFilteredVendors(data)
-            } else if (data.error) {
-                console.error('API Error:', data.error)
-            }
-            setLoading(false)
-        }
         fetchVendors()
     }, [])
+
+    const ensureDefaultVendor = async () => {
+        setDefaultVendorLoading(true)
+        try {
+            const res = await fetch('/api/admin/seed/default-vendor', { method: 'POST' })
+            const data = await res.json()
+            if (!res.ok || data.error) {
+                toast.error(data.error || 'Could not create default vendor.')
+                return
+            }
+            toast.success(data.message || 'Default vendor ready.')
+            setLoading(true)
+            await fetchVendors()
+        } catch {
+            toast.error('Network error.')
+        } finally {
+            setDefaultVendorLoading(false)
+        }
+    }
 
     const handleSearch = (val: string) => {
         const filtered = vendors.filter(v =>
             v.business_name?.toLowerCase().includes(val.toLowerCase()) ||
             v.owner_name?.toLowerCase().includes(val.toLowerCase()) ||
             v.email?.toLowerCase().includes(val.toLowerCase()) ||
+            v.phone?.toLowerCase().includes(val.toLowerCase()) ||
             v.vendor_categories?.name?.toLowerCase().includes(val.toLowerCase()) ||
+            v.location_display?.toLowerCase().includes(val.toLowerCase()) ||
             v.category?.toLowerCase().includes(val.toLowerCase())
         )
         setFilteredVendors(filtered)
@@ -55,8 +76,25 @@ export default function VendorsPage() {
 
     const columns = [
         { header: 'Business Name', key: 'business_name' },
-        { header: 'Category', key: 'vendor_categories', render: (val: any) => val?.name || <span className="text-muted-foreground italic text-xs">Uncategorized</span> },
+        {
+            header: 'Catalogue Category',
+            key: 'vendor_categories',
+            render: (_val: any, row: any) =>
+                row?.vendor_categories?.name ||
+                row?.category ||
+                <span className="text-muted-foreground italic text-xs">Uncategorized</span>
+        },
         { header: 'Owner', key: 'owner_name' },
+        {
+            header: 'Phone',
+            key: 'phone',
+            render: (val: string) => val || <span className="text-muted-foreground italic text-xs">N/A</span>
+        },
+        {
+            header: 'Service Area',
+            key: 'location_display',
+            render: (val: string) => val || <span className="text-muted-foreground italic text-xs">Not set</span>
+        },
         { header: 'Email', key: 'email' },
         {
             header: 'Status',
@@ -105,6 +143,25 @@ export default function VendorsPage() {
 
     return (
         <DefaultLayout>
+            <div className="mx-auto mb-6 flex max-w-270 flex-col gap-3 rounded-lg border border-stroke bg-white p-4 shadow-sm dark:border-strokedark dark:bg-boxdark sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p className="text-sm font-semibold text-black dark:text-white">Default demo vendor</p>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Creates auth + vendor row if missing (email/password + OTP when configured). Uses{' '}
+                        <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">DEFAULT_VENDOR_*</code> env vars.
+                    </p>
+                </div>
+                <Button type="button" variant="secondary" disabled={defaultVendorLoading} onClick={ensureDefaultVendor}>
+                    {defaultVendorLoading ? (
+                        <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Working…
+                        </>
+                    ) : (
+                        'Ensure default vendor'
+                    )}
+                </Button>
+            </div>
             <DataTableView
                 title="Vendors Management"
                 description="View and manage all registered service providers."

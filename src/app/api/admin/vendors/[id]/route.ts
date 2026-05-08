@@ -3,13 +3,7 @@ import { NextResponse } from 'next/server'
 import { extractCityFromAddress } from '@/utils/addressParser'
 import { pickVendorPayload } from '@/lib/vendor-fields'
 import { notifyVendorActivated } from '@/lib/notifications'
-
-const UUID_RE =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-
-function isUuid(value: unknown): value is string {
-    return typeof value === 'string' && UUID_RE.test(value.trim())
-}
+import { isCatalogUuid, resolveVendorCategoryIdForDb } from '@/lib/vendor-category-resolve'
 
 export async function GET(
     req: Request,
@@ -38,9 +32,19 @@ export async function PATCH(
         const raw = await req.json()
         const body = pickVendorPayload(raw as Record<string, unknown>) as Record<string, unknown>
 
-        // Catalog categories use string slugs (e.g. "menu"); vendors.category_id is UUID (legacy FK)
-        if (body.category_id !== undefined && !isUuid(body.category_id)) {
-            delete body.category_id
+        // Admin UI may send legacy slug ids (e.g. venue-menu); vendors.category_id must be UUID in DB.
+        if (body.category_id !== undefined && body.category_id !== null && String(body.category_id).trim() !== '') {
+            if (!isCatalogUuid(body.category_id)) {
+                const { id: resolvedCatId, reason } = await resolveVendorCategoryIdForDb(
+                    supabase,
+                    body.category_id,
+                    body.category
+                )
+                if (!resolvedCatId) {
+                    return NextResponse.json({ error: reason || 'Invalid category_id' }, { status: 400 })
+                }
+                body.category_id = resolvedCatId
+            }
         }
         delete body.id
 
