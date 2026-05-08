@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ekatraa backend
 
-## Getting Started
+Next.js (App Router) API and admin for Ekatraa: Supabase-backed catalog and orders, Razorpay flows, AI planning (Mastra / Gemini / OpenRouter), and internal admin tools.
 
-First, run the development server:
+## Requirements
+
+- Node.js 20+
+- A Supabase project (URL + anon key + **service role** key for server routes)
+
+Install dependencies (pick one package manager and stick with it):
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Environment variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Create a local `.env` (never commit real secrets). Names commonly used in this repo:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Area | Variables |
+|------|-----------|
+| **Supabase** | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` |
+| **Payments** | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` (public payment routes) |
+| **AI / Mastra** | `GEMINI_API_KEY` or `GOOGLE_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY`; optional `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `MASTRA_LIBSQL_URL` |
+| **Planning CORS** | `EKATRAA_WEB_ORIGINS` (comma-separated); optional `EKATRAA_WEB_ORIGINS_STRICT=1` |
+| **Admin login** | `ADMIN_LOGIN_RSA_PRIVATE_KEY`, `ADMIN_LOGIN_RSA_PUBLIC_KEY` (see `src/app/api/auth/login`) |
+| **Default vendor seed** | Optional `DEFAULT_VENDOR_EMAIL`, `DEFAULT_VENDOR_PASSWORD`, `DEFAULT_VENDOR_PHONE` (10-digit Indian number; defaults exist for demos only — override in production) |
 
-## Learn More
+Server Supabase usage is wired in `src/lib/supabase/server.ts` (service role).
 
-To learn more about Next.js, take a look at the following resources:
+## Scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Command | Purpose |
+|---------|---------|
+| `pnpm dev` | Next.js dev server |
+| `pnpm build` / `pnpm start` | Production build and run |
+| `pnpm lint` | ESLint |
+| `pnpm test` | Cart/order lifecycle checks (`tests/cart-order-lifecycle.mjs`) |
+| `pnpm seed` | Offerable services seed script |
+| `pnpm mastra:dev` | Mastra dev server |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Notable features
 
-## Deploy on Vercel
+- **Admin vendors**: create/update accepts either a real catalog UUID for `category_id` or a legacy slug-style id (for example `venue-menu`). Resolution happens in `src/lib/vendor-category-resolve.ts` before writes to `vendors.category_id`.
+- **Default demo vendor**: `POST /api/admin/seed/default-vendor` ensures an Auth user plus a matching `vendors` row (idempotent). The admin vendors screen can call this for onboarding demos; configure credentials with `DEFAULT_VENDOR_*` env vars.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deploy
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Designed for [Vercel](https://vercel.com): mirror the same environment variables in the project settings. Use production-safe secrets for Supabase and Razorpay; **rotate** any keys that were ever committed or shared.
+
+## Learn more
+
+- [Next.js documentation](https://nextjs.org/docs)
