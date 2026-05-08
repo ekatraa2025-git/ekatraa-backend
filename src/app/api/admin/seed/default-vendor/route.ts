@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase/server'
+import { resolveVendorCategoryIdForDb } from '@/lib/vendor-category-resolve'
 import { NextResponse } from 'next/server'
 
 function normalizePhoneDigits(raw: string): string {
@@ -41,7 +42,11 @@ export async function POST() {
             .limit(1)
             .maybeSingle()
 
-        const categoryId = catRow?.id ?? null
+        const { id: categoryId } = await resolveVendorCategoryIdForDb(
+            supabase,
+            catRow?.id ?? null,
+            catRow?.name ?? null
+        )
         const categoryName = catRow?.name ?? 'Venue'
 
         let userId = await findUserIdByEmail(email)
