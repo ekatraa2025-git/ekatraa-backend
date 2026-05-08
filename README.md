@@ -41,6 +41,7 @@ Server Supabase usage is wired in `src/lib/supabase/server.ts` (service role).
 
 ## Notable features
 
+- **Vendor identity**: each vendor row uses `vendors.id` equal to the vendor’s Supabase Auth user id (JWT `sub`). There is no separate `user_id` column on `vendors` in the hosted schema—do not send `user_id` on insert/update.
 - **Admin vendors**: create/update accepts either a real catalog UUID for `category_id` or a legacy slug-style id (for example `venue-menu`). Resolution happens in `src/lib/vendor-category-resolve.ts` before writes to `vendors.category_id`.
 - **Default demo vendor**: `POST /api/admin/seed/default-vendor` ensures an Auth user plus a matching `vendors` row (idempotent). The admin vendors screen can call this for onboarding demos; configure credentials with `DEFAULT_VENDOR_*` env vars.
 
