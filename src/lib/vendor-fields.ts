@@ -29,7 +29,6 @@ export const VENDOR_WRITABLE_KEYS = new Set<string>([
   'account_number',
   'ifsc_code',
   'upi_id',
-  'user_id',
 ])
 
 export function pickVendorPayload(input: Record<string, unknown>): Record<string, unknown> {

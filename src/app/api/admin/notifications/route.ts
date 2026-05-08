@@ -76,25 +76,22 @@ export async function PUT(req: Request) {
       )
     }
 
-    // Map vendor IDs to auth user IDs
-    // Check if vendors table has user_id field, otherwise assume vendors.id = auth.users.id
+    // vendors.id is the Supabase auth user id used for vendor JWT / push routing
     const { data: vendorsData, error: vendorsError } = await supabase
-      .from('vendors')
-      .select('id, user_id')
-      .in('id', vendor_ids)
+        .from('vendors')
+        .select('id')
+        .in('id', vendor_ids)
 
     let mappedVendorIds = vendor_ids
 
-    if (!vendorsError && vendorsData) {
-      // If vendors have user_id field, use it; otherwise use vendors.id
-      mappedVendorIds = vendorsData.map((vendor: any) => vendor.user_id || vendor.id)
-      console.log('[Notifications] Mapped vendor IDs:', {
+    if (!vendorsError && vendorsData?.length) {
+      mappedVendorIds = vendorsData.map((vendor: { id: string }) => vendor.id)
+      console.log('[Notifications] Resolved vendor rows:', {
         original: vendor_ids,
         mapped: mappedVendorIds,
-        vendors: vendorsData
       })
-    } else {
-      console.log('[Notifications] Using vendor IDs as-is (assuming vendors.id = auth.users.id):', vendor_ids)
+    } else if (vendorsError) {
+      console.log('[Notifications] Vendor lookup failed; using IDs as-is:', vendorsError.message)
     }
 
     const currentTimestamp = new Date().toISOString();

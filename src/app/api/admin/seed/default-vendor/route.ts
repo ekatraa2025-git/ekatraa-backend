@@ -81,7 +81,6 @@ export async function POST() {
 
         const vendorRow: Record<string, unknown> = {
             id: userId,
-            user_id: userId,
             business_name: 'Default Vendor',
             owner_name: 'Demo Owner',
             email,

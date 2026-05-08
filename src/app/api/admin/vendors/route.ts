@@ -157,10 +157,9 @@ export async function POST(req: Request) {
             }
         }
 
-        // If we got an auth user ID, use it as the vendor ID so they're linked
+        // If we got an auth user ID, use it as vendors.id (matches JWT subject for vendor login)
         if (authUserId) {
             body.id = authUserId
-            body.user_id = authUserId
         }
 
         const { data, error } = await supabase
