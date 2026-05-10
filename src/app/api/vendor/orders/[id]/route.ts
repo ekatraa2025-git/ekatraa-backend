@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { getVendorFromRequest } from '@/lib/vendor-auth'
+import { getVendorFromRequest, isTeamMemberAssignedToOrder } from '@/lib/vendor-auth'
 
 /**
  * GET /api/vendor/orders/[id]
@@ -45,6 +45,9 @@ export async function GET(
         }
     }
     if (!hasOrderLevelAllocation && !hasItemAllocation) {
+        return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    }
+    if (!(await isTeamMemberAssignedToOrder(auth, id))) {
         return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 

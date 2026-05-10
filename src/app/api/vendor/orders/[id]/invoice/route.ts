@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { getVendorFromRequest } from '@/lib/vendor-auth'
+import { getVendorFromRequest, isTeamMemberAssignedToOrder } from '@/lib/vendor-auth'
 import { sendNotificationToUser } from '@/lib/notifications'
 
 type LineItem = { description: string; quantity: number; unit_price: number; amount: number }
@@ -44,6 +44,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const { ok, order } = await assertVendorAllocated(orderId, auth.vendorId!)
     if (!ok || !order) return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    if (!(await isTeamMemberAssignedToOrder(auth, orderId))) {
+        return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    }
 
     if ((order.status as string) !== 'completed') {
         return NextResponse.json({ error: 'Invoice is only available after the order is completed (completion OTP).' }, { status: 400 })
@@ -103,6 +106,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     const { ok, order } = await assertVendorAllocated(orderId, auth.vendorId!)
     if (!ok || !order) return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    if (!(await isTeamMemberAssignedToOrder(auth, orderId))) {
+        return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    }
 
     if ((order.status as string) !== 'completed') {
         return NextResponse.json({ error: 'Invoice can only be submitted after order is completed.' }, { status: 400 })

@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { getVendorFromRequest } from '@/lib/vendor-auth'
+import { getVendorFromRequest, isTeamMemberAssignedToOrder } from '@/lib/vendor-auth'
 import { sendNotificationToUser, sendNotificationToVendor } from '@/lib/notifications'
 
 /**
@@ -53,6 +53,9 @@ export async function POST(
         }
     }
     if (!hasOrderLevelAllocation && !hasItemAllocation) {
+        return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    }
+    if (!(await isTeamMemberAssignedToOrder(auth, orderId))) {
         return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
