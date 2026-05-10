@@ -59,5 +59,8 @@
     "mastra": "^1.6.3",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "glob": "10.4.5"
   }
 }

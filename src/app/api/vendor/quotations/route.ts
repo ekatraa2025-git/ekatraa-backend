@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { getVendorFromRequest } from '@/lib/vendor-auth'
+import { getVendorFromRequest, isTeamMemberAssignedToOrder } from '@/lib/vendor-auth'
 
 /**
  * POST /api/vendor/quotations
@@ -33,6 +33,7 @@ export async function POST(req: Request) {
         valid_until,
         confirmation_date,
         quotation_submitted_at,
+        quote_otp_challenge_id,
     } = body
 
     if (!order_id || amount == null) {
@@ -75,6 +76,33 @@ export async function POST(req: Request) {
     }
     if (!hasOrderLevelAllocation && !hasItemAllocation) {
         return NextResponse.json({ error: 'Order is not allocated to you' }, { status: 403 })
+    }
+    if (!(await isTeamMemberAssignedToOrder(auth, String(order_id)))) {
+        return NextResponse.json({ error: 'Order is not allocated to you' }, { status: 403 })
+    }
+
+    if (auth.isTeamMember && auth.teamMemberId) {
+        if (!quote_otp_challenge_id) {
+            return NextResponse.json(
+                { error: 'Vendor OTP approval is required before team member quotation submission.' },
+                { status: 403 }
+            )
+        }
+        const { data: challenge } = await supabase
+            .from('vendor_quote_otp_challenges')
+            .select('id, status, expires_at')
+            .eq('id', String(quote_otp_challenge_id))
+            .eq('vendor_id', auth.vendorId)
+            .eq('order_id', String(order_id))
+            .eq('team_member_id', auth.teamMemberId)
+            .maybeSingle()
+
+        if (!challenge || challenge.status !== 'verified' || new Date(challenge.expires_at) < new Date()) {
+            return NextResponse.json(
+                { error: 'Vendor OTP approval is missing or expired. Request a new OTP approval.' },
+                { status: 403 }
+            )
+        }
     }
 
     const { data: existingQuotation } = await supabase
@@ -129,6 +157,19 @@ export async function POST(req: Request) {
 
     if (writeError) {
         return NextResponse.json({ error: writeError.message }, { status: 500 })
+    }
+
+    if (auth.isTeamMember && auth.teamMemberId && quote_otp_challenge_id) {
+        await supabase
+            .from('vendor_quote_otp_challenges')
+            .update({
+                quotation_id: quotation?.id ?? null,
+                status: 'cancelled',
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', String(quote_otp_challenge_id))
+            .eq('vendor_id', auth.vendorId)
+            .eq('team_member_id', auth.teamMemberId)
     }
 
     // Update vendor expected revenue

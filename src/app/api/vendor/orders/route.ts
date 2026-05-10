@@ -65,6 +65,17 @@ export async function GET(req: Request) {
             (b.created_at ?? '').localeCompare(a.created_at ?? '')
         )
     }
+
+    if (auth.isTeamMember && auth.teamMemberId) {
+        const { data: assignmentRows } = await supabase
+            .from('vendor_order_team_assignments')
+            .select('order_id')
+            .eq('vendor_id', auth.vendorId!)
+            .eq('team_member_id', auth.teamMemberId)
+        const assignedOrderIds = new Set((assignmentRows ?? []).map((row: { order_id: string }) => row.order_id))
+        list = list.filter((o: { id: string }) => assignedOrderIds.has(o.id))
+    }
+
     if (list.length === 0) {
         return NextResponse.json([])
     }
