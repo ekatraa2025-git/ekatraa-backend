@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import { useRouter, useParams } from 'next/navigation'
-import { Loader2, CheckCircle2, AlertCircle, Shield } from 'lucide-react'
+import { Loader2, CheckCircle2, AlertCircle, Shield, Users } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { uploadFile } from '@/utils/storage'
@@ -28,6 +28,18 @@ function catalogTierLabel(tierKey: string): string {
 
 function normalizeName(value: unknown): string {
     return String(value || '').trim().toLowerCase()
+}
+
+type AdminTeamMember = {
+    id: string
+    vendor_id: string
+    member_user_id: string | null
+    full_name: string
+    phone: string
+    role: string
+    status: string
+    created_at?: string
+    updated_at?: string
 }
 
 export default function EditVendorPage() {
@@ -73,6 +85,14 @@ export default function EditVendorPage() {
     /** serviceId -> selected tier keys (multi-select per catalog row) */
     const [bulkSelections, setBulkSelections] = useState<Record<string, string[]>>({})
     const [deleteServiceTarget, setDeleteServiceTarget] = useState<string | null>(null)
+
+    const [teamMembers, setTeamMembers] = useState<AdminTeamMember[]>([])
+    const [teamLoading, setTeamLoading] = useState(false)
+    const [teamSavingId, setTeamSavingId] = useState<string | null>(null)
+    const [addingTeamMember, setAddingTeamMember] = useState(false)
+    const [teamFullName, setTeamFullName] = useState('')
+    const [teamPhone, setTeamPhone] = useState('')
+    const [teamRole, setTeamRole] = useState<'manager' | 'staff'>('manager')
 
     useEffect(() => {
         fetchInitialData()
@@ -139,6 +159,8 @@ export default function EditVendorPage() {
             if (svcData && !svcData.error && Array.isArray(svcData)) {
                 setVendorServices(svcData)
             }
+
+            await fetchTeamMembers()
         } catch (err) {
             console.error('Fetch error:', err)
         } finally {
@@ -151,6 +173,86 @@ export default function EditVendorPage() {
         const res = await fetch(`/api/admin/services?vendor_id=${id}`)
         const data = await res.json()
         if (data && !data.error && Array.isArray(data)) setVendorServices(data)
+    }
+
+    const fetchTeamMembers = async () => {
+        if (!id) return
+        setTeamLoading(true)
+        try {
+            const res = await fetch(`/api/admin/vendors/${id}/team-members`)
+            const data = await res.json()
+            if (data?.error) {
+                toast.error(data.error)
+                setTeamMembers([])
+                return
+            }
+            setTeamMembers(Array.isArray(data) ? data : [])
+        } catch {
+            toast.error('Failed to load team members')
+            setTeamMembers([])
+        } finally {
+            setTeamLoading(false)
+        }
+    }
+
+    const handleAddTeamMember = async () => {
+        const name = teamFullName.trim()
+        const digits = teamPhone.replace(/\D/g, '').slice(-10)
+        if (!name) {
+            toast.error('Enter full name')
+            return
+        }
+        if (digits.length !== 10) {
+            toast.error('Enter a valid 10-digit mobile number')
+            return
+        }
+        setAddingTeamMember(true)
+        try {
+            const res = await fetch(`/api/admin/vendors/${id}/team-members`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ full_name: name, phone: digits, role: teamRole }),
+            })
+            const data = await res.json()
+            if (data?.error) {
+                toast.error(data.error)
+                return
+            }
+            toast.success('Team member saved')
+            setTeamFullName('')
+            setTeamPhone('')
+            setTeamRole('manager')
+            await fetchTeamMembers()
+        } catch {
+            toast.error('Failed to add team member')
+        } finally {
+            setAddingTeamMember(false)
+        }
+    }
+
+    const patchTeamMember = async (
+        memberId: string,
+        patch: Partial<Pick<AdminTeamMember, 'status' | 'role' | 'full_name' | 'phone'>>
+    ) => {
+        setTeamSavingId(memberId)
+        try {
+            const res = await fetch(`/api/admin/vendors/${id}/team-members/${memberId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(patch),
+            })
+            const data = await res.json()
+            if (data?.error) {
+                toast.error(data.error)
+                return
+            }
+            toast.success('Updated')
+            await fetchTeamMembers()
+        } catch {
+            toast.error('Update failed')
+        } finally {
+            setTeamSavingId(null)
+        }
     }
 
     const handleAddServiceFromCatalog = async () => {
@@ -609,10 +711,11 @@ export default function EditVendorPage() {
 
                 <form onSubmit={handleSubmit}>
                     <Tabs defaultValue="business" className="w-full">
-                        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 mb-6 gap-1">
+                        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 mb-6 gap-1">
                             <TabsTrigger value="business">Business Info</TabsTrigger>
                             <TabsTrigger value="services">Categories & Services</TabsTrigger>
                             <TabsTrigger value="gallery">Gallery</TabsTrigger>
+                            <TabsTrigger value="team">Team</TabsTrigger>
                             <TabsTrigger value="kyc">KYC</TabsTrigger>
                             <TabsTrigger value="status">Status</TabsTrigger>
                         </TabsList>
@@ -997,6 +1100,164 @@ export default function EditVendorPage() {
                             {(!formData.gallery_urls || formData.gallery_urls.length === 0) && (
                                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">No gallery images yet.</p>
                             )}
+                        </div>
+                    </div>
+                    </TabsContent>
+
+                    <TabsContent value="team">
+                    <div className="rounded-lg border border-stroke bg-white shadow-lg dark:border-strokedark dark:bg-boxdark mb-6">
+                        <div className="border-b border-stroke px-6 py-4 dark:border-strokedark bg-gradient-to-r from-indigo-50 to-white dark:from-indigo-950 dark:to-boxdark">
+                            <h3 className="text-lg font-semibold text-black dark:text-white flex items-center gap-2">
+                                <Users size={20} /> Vendor team members
+                            </h3>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-3xl">
+                                Managers and staff can sign in to the Ekatraa Vendor App with this mobile number and OTP. Assign them to orders from the vendor app; quotation submissions require an approval OTP sent to the vendor owner.
+                            </p>
+                        </div>
+                        <div className="p-6 space-y-6">
+                            <div className="rounded-lg border border-stroke dark:border-strokedark bg-gray-50 dark:bg-gray-900/80 p-4 space-y-4">
+                                <h4 className="text-sm font-semibold text-black dark:text-white">Add or update member</h4>
+                                <p className="text-xs text-muted-foreground">
+                                    Same mobile number updates the existing row (name/role). Account links automatically when they first sign in with OTP.
+                                </p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                                    <div className="md:col-span-2">
+                                        <label className={labelClass}>Full name</label>
+                                        <input
+                                            type="text"
+                                            value={teamFullName}
+                                            onChange={(e) => setTeamFullName(e.target.value)}
+                                            placeholder="Name shown in the app"
+                                            className={inputClass}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className={labelClass}>Mobile (10 digits)</label>
+                                        <input
+                                            type="text"
+                                            value={teamPhone}
+                                            onChange={(e) => setTeamPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                                            placeholder="9876543210"
+                                            className={inputClass}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className={labelClass}>Role</label>
+                                        <select
+                                            value={teamRole}
+                                            onChange={(e) => setTeamRole(e.target.value as 'manager' | 'staff')}
+                                            className={selectClass}
+                                        >
+                                            <option value="manager">Manager</option>
+                                            <option value="staff">Staff</option>
+                                        </select>
+                                    </div>
+                                    <div className="lg:col-span-4">
+                                        <button
+                                            type="button"
+                                            onClick={handleAddTeamMember}
+                                            disabled={addingTeamMember}
+                                            className="px-5 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                                        >
+                                            {addingTeamMember ? 'Saving...' : 'Save team member'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div className="flex items-center justify-between mb-3">
+                                    <h4 className="text-sm font-semibold text-black dark:text-white">Current members</h4>
+                                    <button
+                                        type="button"
+                                        onClick={() => fetchTeamMembers()}
+                                        disabled={teamLoading}
+                                        className="text-xs font-medium text-primary hover:underline disabled:opacity-50"
+                                    >
+                                        Refresh
+                                    </button>
+                                </div>
+                                {teamLoading ? (
+                                    <div className="flex justify-center py-12">
+                                        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+                                    </div>
+                                ) : teamMembers.length === 0 ? (
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 py-8 text-center rounded-lg border border-dashed border-stroke dark:border-strokedark">
+                                        No team members yet. Use the form above to add phone-based access for this vendor.
+                                    </p>
+                                ) : (
+                                    <div className="overflow-x-auto rounded-lg border border-stroke dark:border-strokedark">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-gray-50 dark:bg-gray-900 border-b border-stroke dark:border-strokedark">
+                                                <tr>
+                                                    <th className="text-left px-4 py-3 font-semibold text-black dark:text-white">Name</th>
+                                                    <th className="text-left px-4 py-3 font-semibold text-black dark:text-white">Phone</th>
+                                                    <th className="text-left px-4 py-3 font-semibold text-black dark:text-white">Role</th>
+                                                    <th className="text-left px-4 py-3 font-semibold text-black dark:text-white">Status</th>
+                                                    <th className="text-left px-4 py-3 font-semibold text-black dark:text-white">Account</th>
+                                                    <th className="text-right px-4 py-3 font-semibold text-black dark:text-white">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-stroke dark:divide-strokedark">
+                                                {teamMembers.map((m) => (
+                                                    <tr key={m.id} className="bg-white dark:bg-boxdark">
+                                                        <td className="px-4 py-3 text-black dark:text-white font-medium">{m.full_name}</td>
+                                                        <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{m.phone}</td>
+                                                        <td className="px-4 py-3">
+                                                            <select
+                                                                value={m.role}
+                                                                disabled={teamSavingId === m.id}
+                                                                onChange={(e) =>
+                                                                    patchTeamMember(m.id, { role: e.target.value as 'manager' | 'staff' })
+                                                                }
+                                                                className={selectClass + ' py-2 text-xs'}
+                                                            >
+                                                                <option value="manager">Manager</option>
+                                                                <option value="staff">Staff</option>
+                                                            </select>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <span
+                                                                className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                                                    m.status === 'active'
+                                                                        ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
+                                                                        : 'bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                                                                }`}
+                                                            >
+                                                                {m.status}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400">
+                                                            {m.member_user_id ? 'Linked' : 'Pending first login'}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            {m.status === 'active' ? (
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={teamSavingId === m.id}
+                                                                    onClick={() => patchTeamMember(m.id, { status: 'inactive' })}
+                                                                    className="text-xs font-semibold text-amber-700 hover:underline disabled:opacity-50"
+                                                                >
+                                                                    Deactivate
+                                                                </button>
+                                                            ) : (
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={teamSavingId === m.id}
+                                                                    onClick={() => patchTeamMember(m.id, { status: 'active' })}
+                                                                    className="text-xs font-semibold text-green-700 hover:underline disabled:opacity-50"
+                                                                >
+                                                                    Activate
+                                                                </button>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                     </TabsContent>
