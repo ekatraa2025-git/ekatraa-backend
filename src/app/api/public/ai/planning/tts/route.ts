@@ -3,6 +3,21 @@ import { planningCorsHeaders } from '@/lib/ai-planning-cors'
 
 const SARVAM_TTS_URL = 'https://api.sarvam.ai/text-to-speech/stream'
 
+/**
+ * Bulbul v2-only speakers (Sarvam docs). Pairing these with `bulbul:v3` yields 4xx from the API.
+ * v3 voices are a different set (e.g. priya, shubh); "anushka" is v2 female default only.
+ */
+const BULBUL_V2_ONLY_FEMALE = new Set(['anushka', 'manisha', 'vidya', 'arya'])
+const BULBUL_V2_ONLY_MALE = new Set(['abhilash', 'karun', 'hitesh'])
+
+function resolveSpeakerForModel(speaker: string, model: string): string {
+    const m = model.toLowerCase()
+    if (!m.includes('bulbul:v3')) return speaker
+    if (BULBUL_V2_ONLY_FEMALE.has(speaker)) return 'priya'
+    if (BULBUL_V2_ONLY_MALE.has(speaker)) return 'shubh'
+    return speaker
+}
+
 /** Strip markdown-ish noise and cart payload tail for natural speech. */
 function textForTts(raw: string): string {
     const noCart = raw.replace(/(?:^|\n)CART_ACTIONS:(\{[\s\S]*\})\s*$/m, '').trim()
@@ -21,7 +36,7 @@ function textForTts(raw: string): string {
  * POST JSON: { text: string }
  * Response: audio/mpeg stream (or Sarvam error JSON).
  *
- * Optional env: SARVAM_TTS_SPEAKER (default anushka), SARVAM_TTS_MODEL (default bulbul:v3)
+ * Optional env: SARVAM_TTS_SPEAKER (default priya for bulbul:v3, anushka for v2), SARVAM_TTS_MODEL (default bulbul:v3)
  */
 export async function OPTIONS(req: Request) {
     return new NextResponse(null, { status: 204, headers: planningCorsHeaders(req) })
@@ -50,19 +65,25 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Missing or empty text after cleanup' }, { status: 400, headers: cors })
     }
 
-    const speaker = (process.env.SARVAM_TTS_SPEAKER || 'anushka').trim().toLowerCase()
     const model = (process.env.SARVAM_TTS_MODEL || 'bulbul:v3').trim()
+    const rawSpeaker = (process.env.SARVAM_TTS_SPEAKER || '').trim().toLowerCase()
+    const defaultSpeaker = model.toLowerCase().includes('bulbul:v3') ? 'priya' : 'anushka'
+    const speaker = resolveSpeakerForModel(rawSpeaker || defaultSpeaker, model)
 
-    const payload = {
+    const isV3 = model.toLowerCase().includes('bulbul:v3')
+    const payload: Record<string, unknown> = {
         text,
         target_language_code: 'en-IN',
         speaker,
         pace: 1,
         model,
-        temperature: 0.6,
-        enable_preprocessing: false,
         output_audio_codec: 'mp3',
         output_audio_bitrate: '128k',
+    }
+    if (isV3) {
+        payload.temperature = 0.6
+    } else {
+        payload.enable_preprocessing = false
     }
 
     const upstream = await fetch(SARVAM_TTS_URL, {
