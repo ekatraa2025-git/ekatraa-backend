@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { RequestContext } from '@mastra/core/request-context'
 import { mastra } from '@/mastra'
 import { getAiAppCatalogContext } from '@/lib/ai-app-context'
 import { getAiRuntimeSettings } from '@/lib/ai-runtime-settings'
@@ -10,6 +11,7 @@ import {
     sanitizeAssistantReplyText,
     withTimeout,
 } from '@/lib/claude-client'
+import { resolveOptionalBearerUser } from '@/lib/user-auth'
 import { z } from 'zod'
 
 const bodySchema = z.object({
@@ -30,6 +32,11 @@ const bodySchema = z.object({
     planned_budget_inr: z.number().optional(),
     /** Rich snapshot from the app user-info wizard (contact, location, guests, budget label, etc.) */
     event_form_snapshot: z.record(z.string(), z.unknown()).optional(),
+    /**
+     * For anonymous carts: must match `carts.session_id` so Mastra `get_cart_summary` can authorize reads.
+     * Omit for JWT-only flows when the cart row is user-bound (Bearer required for those reads).
+     */
+    cart_owner_session_id: z.string().max(512).optional(),
 })
 
 /**
@@ -43,8 +50,11 @@ export async function POST(req: Request) {
         if (!parsed.success) {
             return NextResponse.json({ error: 'Invalid body', details: parsed.error.flatten() }, { status: 400 })
         }
-        const { message, history, city, occasion_id, occasion_name, planned_budget_inr, event_form_snapshot } =
+        const { message, history, city, occasion_id, occasion_name, planned_budget_inr, event_form_snapshot, cart_owner_session_id } =
             parsed.data
+
+        const auth = await resolveOptionalBearerUser(req)
+        if (auth.error) return auth.error
 
         const threadId =
             req.headers.get('x-thread-id')?.trim() ||
@@ -54,6 +64,15 @@ export async function POST(req: Request) {
             (typeof json.session_id === 'string' && json.session_id.trim()) ||
             threadId ||
             `planning-${Date.now()}`
+
+        const plannerRequestContext = new RequestContext()
+        if (auth.userId) {
+            plannerRequestContext.set('authenticatedUserId', auth.userId)
+        }
+        const sessionClaim = typeof cart_owner_session_id === 'string' ? cart_owner_session_id.trim() : ''
+        if (sessionClaim) {
+            plannerRequestContext.set('trustedCartSessionId', sessionClaim)
+        }
 
         const catalog = await getAiAppCatalogContext({
             city: city?.trim() || null,
@@ -136,6 +155,7 @@ export async function POST(req: Request) {
 
         const agent = mastra.getAgentById('event-planning-agent')
         const out = await agent.generate(messages, {
+            requestContext: plannerRequestContext,
             memory: {
                 thread: threadId,
                 resource: 'ekatraa-mobile',

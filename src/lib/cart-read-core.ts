@@ -1,5 +1,42 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+/** Passed from route handlers into Mastra `RequestContext` for `get_cart_summary`. */
+export type CartReadAccessContext = {
+    authenticatedUserId: string | null
+    /** Must match `carts.session_id` for anonymous carts (no `user_id`). */
+    trustedCartSessionId: string | null
+}
+
+/**
+ * Ensures callers cannot enumerate arbitrary cart UUIDs: user-bound carts require JWT ownership;
+ * anonymous carts require the client's session secret that matches the row.
+ */
+export function assertCartReadableByActor(
+    cart: Record<string, unknown>,
+    ctx: CartReadAccessContext
+): { ok: true } | { ok: false; status: 403; message: string } {
+    const uid = cart.user_id != null && String(cart.user_id).trim() ? String(cart.user_id) : null
+
+    if (uid) {
+        if (!ctx.authenticatedUserId || ctx.authenticatedUserId !== uid) {
+            return { ok: false, status: 403, message: 'Forbidden: cart belongs to another user' }
+        }
+        return { ok: true }
+    }
+
+    const sid = cart.session_id != null && String(cart.session_id).trim() ? String(cart.session_id).trim() : null
+    if (!sid) {
+        return { ok: false, status: 403, message: 'Forbidden: cart has no session anchor' }
+    }
+
+    const trusted = ctx.trustedCartSessionId?.trim() || ''
+    if (!trusted || trusted !== sid) {
+        return { ok: false, status: 403, message: 'Forbidden: anonymous cart session mismatch' }
+    }
+
+    return { ok: true }
+}
+
 /**
  * Load cart + items (same projection as GET /api/public/cart/[id]).
  */
