@@ -36,7 +36,7 @@ export async function GET() {
             ai_openrouter_image_model: 'sourceful/riverflow-v2-fast',
             ai_openrouter_invite_animated_model: 'sourceful/riverflow-v2-pro',
             ai_claude_model: 'claude-sonnet-4-6',
-            ai_gemini_model: 'gemini-3.1-flash-lite-preview',
+            ai_gemini_model: 'gemini-2.0-flash',
             e_invite_static_inr: 300,
             e_invite_animated_inr: 500,
         })

@@ -16,7 +16,7 @@ type ModelOption = {
 }
 
 const CLAUDE_DEFAULTS = ['claude-sonnet-4-6', 'claude-opus-4-1', 'claude-haiku-3-5']
-const GEMINI_DEFAULTS = ['gemini-3.1-flash-lite-preview', 'gemini-2.5-flash', 'gemini-2.5-pro']
+const GEMINI_DEFAULTS = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3.1-flash-lite-preview']
 const IMAGE_MODEL_DEFAULTS = [
     'sourceful/riverflow-v2-fast',
     'sourceful/riverflow-v2-pro',
@@ -36,7 +36,7 @@ export default function AiModelSettings() {
     const [primaryModel, setPrimaryModel] = useState('nvidia/nemotron-3-nano-omni:free')
     const [openrouterModel, setOpenrouterModel] = useState('nvidia/nemotron-3-nano-omni:free')
     const [claudeModel, setClaudeModel] = useState('claude-sonnet-4-6')
-    const [geminiModel, setGeminiModel] = useState('gemini-3.1-flash-lite-preview')
+    const [geminiModel, setGeminiModel] = useState('gemini-2.0-flash')
     const [openrouterImageModel, setOpenrouterImageModel] = useState('sourceful/riverflow-v2-fast')
     const [openrouterModels, setOpenrouterModels] = useState<ModelOption[]>([])
     const [openrouterImageModels, setOpenrouterImageModels] = useState<ModelOption[]>([])
@@ -90,7 +90,7 @@ export default function AiModelSettings() {
                         setPrimaryModel(String(settings.ai_primary_model || 'nvidia/nemotron-3-nano-omni:free'))
                         setOpenrouterModel(String(settings.ai_openrouter_model || 'nvidia/nemotron-3-nano-omni:free'))
                         setClaudeModel(String(settings.ai_claude_model || 'claude-sonnet-4-6'))
-                        setGeminiModel(String(settings.ai_gemini_model || 'gemini-3.1-flash-lite-preview'))
+                        setGeminiModel(String(settings.ai_gemini_model || 'gemini-2.0-flash'))
                         setOpenrouterImageModel(String(settings.ai_openrouter_image_model || 'sourceful/riverflow-v2-fast'))
                     }
                     if (Array.isArray(modelsJson?.models)) {

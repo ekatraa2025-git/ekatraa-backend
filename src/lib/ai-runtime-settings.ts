@@ -14,7 +14,8 @@ export type AiRuntimeSettings = {
     geminiModel: string
 }
 
-const DEFAULT_GEMINI_MODEL = 'gemini-3.1-flash-lite-preview'
+/** Stable default; avoid preview/lite IDs in prod (Google 503 capacity errors). */
+const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash'
 
 function safeProvider(raw: unknown): AiPrimaryProvider {
     const v = String(raw || '').trim().toLowerCase()
