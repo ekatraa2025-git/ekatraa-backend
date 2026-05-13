@@ -57,27 +57,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         .select('id, name, quantity, unit_price')
         .eq('order_id', orderId)
 
-    const itemIds = (items ?? []).map((i: { id: string }) => i.id)
-    let visibleItems = (items ?? []) as { id: string; name?: string; quantity?: number; unit_price?: number }[]
-    if (itemIds.length > 0) {
-        const { data: allocRows } = await supabase
-            .from('order_item_allocations')
-            .select('order_item_id, vendor_id')
-            .in('order_item_id', itemIds)
-        const rows = (allocRows ?? []) as { order_item_id: string; vendor_id: string }[]
-        if (rows.length > 0) {
-            const mine = new Set(rows.filter((a) => a.vendor_id === auth.vendorId).map((a) => a.order_item_id))
-            visibleItems = visibleItems.filter((i) => mine.has(i.id))
-        }
-    }
-
     const { data: vendor } = await supabase
         .from('vendors')
         .select('id, business_name, logo_url')
         .eq('id', auth.vendorId!)
         .single()
 
-    const defaultLines: LineItem[] = visibleItems.map((i: { name?: string; quantity?: number; unit_price?: number }) => {
+    const defaultLines: LineItem[] = (items ?? []).map((i: { name?: string; quantity?: number; unit_price?: number }) => {
         const q = Number(i.quantity) || 0
         const up = Number(i.unit_price) || 0
         return {

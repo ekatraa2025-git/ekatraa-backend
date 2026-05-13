@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase/server'
-import { resolveVendorCategoryIdForDb } from '@/lib/vendor-category-resolve'
 import { NextResponse } from 'next/server'
+import { resolveVendorCategoryIdForDb } from '@/lib/vendor-category-resolve'
 
 function normalizePhoneDigits(raw: string): string {
     const d = raw.replace(/\D/g, '')
@@ -42,11 +42,7 @@ export async function POST() {
             .limit(1)
             .maybeSingle()
 
-        const { id: categoryId } = await resolveVendorCategoryIdForDb(
-            supabase,
-            catRow?.id ?? null,
-            catRow?.name ?? null
-        )
+        const categoryId = catRow?.id ?? null
         const categoryName = catRow?.name ?? 'Venue'
 
         let userId = await findUserIdByEmail(email)
@@ -97,10 +93,10 @@ export async function POST() {
             description: 'Default demo vendor for testing login (OTP + email).',
             status: 'active',
             is_active: true,
-            category: categoryName,
         }
-        if (categoryId) {
-            vendorRow.category_id = categoryId
+        const { id: resolvedCategoryId } = await resolveVendorCategoryIdForDb(supabase, categoryId, categoryName)
+        if (resolvedCategoryId) {
+            vendorRow.category_id = resolvedCategoryId
         }
 
         const { error: insertErr } = await supabase.from('vendors').insert([vendorRow])

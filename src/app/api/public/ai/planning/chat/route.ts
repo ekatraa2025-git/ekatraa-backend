@@ -1,66 +1,88 @@
 import { handleChatStream } from '@mastra/ai-sdk'
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'
+import { RequestContext } from '@mastra/core/request-context'
 import { createUIMessageStreamResponse } from 'ai'
 import { NextResponse } from 'next/server'
 import { mastra } from '@/mastra'
 import { planningCorsHeaders } from '@/lib/ai-planning-cors'
+import { resolveOptionalBearerUser } from '@/lib/user-auth'
 
-const DEFAULT_THREAD = 'anonymous-planning'
-const DEFAULT_RESOURCE = 'ekatraa-web-chat'
+const DEFAULT_CUSTOMER_RESOURCE = 'ekatraa-web-planning'
 
 export async function OPTIONS(req: Request) {
-    return new NextResponse(null, {
-        status: 204,
-        headers: planningCorsHeaders(req),
-    })
+    return new NextResponse(null, { status: 204, headers: planningCorsHeaders(req) })
 }
 
+/**
+ * Streaming planning chat (AI SDK UI v6) — mirrors vendor route but optional Bearer + cart session hints.
+ */
 export async function POST(req: Request) {
     const cors = planningCorsHeaders(req)
+    const auth = await resolveOptionalBearerUser(req)
+    if (auth.error) return auth.error
+
     try {
-        const params = await req.json()
-        const threadHeader = req.headers.get('x-thread-id')?.trim()
+        const params = (await req.json()) as Record<string, unknown>
+
+        let cartSessionClaim = ''
+        if (typeof params.cart_owner_session_id === 'string') {
+            cartSessionClaim = params.cart_owner_session_id.trim().slice(0, 512)
+        }
+
+        const rc = new RequestContext()
+        if (auth.userId) {
+            rc.set('authenticatedUserId', auth.userId)
+        }
+        if (cartSessionClaim) {
+            rc.set('trustedCartSessionId', cartSessionClaim)
+        }
+
         const threadId =
-            threadHeader ||
-            (typeof params.memory?.thread === 'string' && params.memory.thread) ||
-            DEFAULT_THREAD
-        const resourceId =
-            (typeof params.memory?.resource === 'string' && params.memory.resource) || DEFAULT_RESOURCE
+            req.headers.get('x-thread-id')?.trim() ||
+            (typeof (params.memory as { thread?: unknown } | undefined)?.thread === 'string' &&
+                (params.memory as { thread: string }).thread) ||
+            'anonymous-web'
+
+        const incomingMemory =
+            params.memory != null && typeof params.memory === 'object' ? (params.memory as Record<string, unknown>) : {}
 
         const stream = await handleChatStream({
             mastra,
             agentId: 'event-planning-agent',
             version: 'v6',
+            sendReasoning: true,
             params: {
                 ...params,
+                requestContext: rc,
                 memory: {
-                    ...params.memory,
+                    ...incomingMemory,
                     thread: threadId,
-                    resource: resourceId,
+                    resource: DEFAULT_CUSTOMER_RESOURCE,
                 },
-            },
+            } as Parameters<typeof handleChatStream>[0] extends { params: infer P } ? P : never,
         })
         return createUIMessageStreamResponse({
-            stream,
+            stream: stream as Parameters<typeof createUIMessageStreamResponse>[0]['stream'],
             headers: cors,
         })
     } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Chat failed'
+        const msg = e instanceof Error ? e.message : 'Planning chat failed'
         return NextResponse.json({ error: msg }, { status: 500, headers: cors })
     }
 }
 
 export async function GET(req: Request) {
     const cors = planningCorsHeaders(req)
-    const threadHeader = req.headers.get('x-thread-id')?.trim() || DEFAULT_THREAD
-    const resourceId = DEFAULT_RESOURCE
+    const url = new URL(req.url)
+    const threadId =
+        req.headers.get('x-thread-id')?.trim() || url.searchParams.get('thread')?.trim() || 'anonymous-web'
 
     const memory = await mastra.getAgentById('event-planning-agent').getMemory()
     let response = null
     try {
         response = await memory?.recall({
-            threadId: threadHeader,
-            resourceId,
+            threadId,
+            resourceId: DEFAULT_CUSTOMER_RESOURCE,
         })
     } catch {
         /* no history */

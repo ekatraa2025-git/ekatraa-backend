@@ -43,3 +43,20 @@ export async function getEndUserIdFromRequest(req: Request): Promise<
 
     return { userId: user.id, error: null }
 }
+
+/**
+ * Resolves JWT when present without requiring auth (returns null if omitted).
+ * Invalid or expired Bearer returns 401 — clients must refresh or omit the header for anonymous flows.
+ */
+export async function resolveOptionalBearerUser(req: Request): Promise<
+    { userId: string | null; error: null } | { userId: null; error: NextResponse }
+> {
+    const authHeader = req.headers.get('Authorization')
+    const token = authHeader?.replace(/^Bearer\s+/i, '')?.trim()
+
+    if (!token) {
+        return { userId: null, error: null }
+    }
+
+    return getEndUserIdFromRequest(req)
+}

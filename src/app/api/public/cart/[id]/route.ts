@@ -1,27 +1,46 @@
 import { supabase } from '@/lib/supabase/server'
-import { getCartWithItems } from '@/lib/cart-read-core'
+import { assertCartReadableByActor, getCartWithItems } from '@/lib/cart-read-core'
+import { CART_OWNER_SESSION_HEADER } from '@/lib/cart-owner-http'
 import { NextResponse } from 'next/server'
-import { getEndUserIdFromRequest } from '@/lib/user-auth'
+import { resolveOptionalBearerUser } from '@/lib/user-auth'
 
 /**
  * GET /api/public/cart/[id]
  * Returns cart with items (and service details).
+ * Ownership: Bearer must match carts.user_id when set; anonymous carts require
+ * `${CART_OWNER_SESSION_HEADER}: <carts.session_id>` matching the DB row (parity with Mastra `get_cart_summary`).
  */
 export async function GET(
-    _req: Request,
+    req: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
     const { id } = await params
+    const auth = await resolveOptionalBearerUser(req)
+    if (auth.error) return auth.error
+
+    const sessionClaimRaw = req.headers.get(CART_OWNER_SESSION_HEADER)?.trim().slice(0, 512) || ''
+
     const result = await getCartWithItems(supabase, id)
     if (!result.ok) {
         return NextResponse.json({ error: result.message }, { status: result.status })
     }
+
+    const gate = assertCartReadableByActor(result.cart, {
+        authenticatedUserId: auth.userId,
+        trustedCartSessionId: sessionClaimRaw || null,
+    })
+    if (!gate.ok) {
+        return NextResponse.json({ error: gate.message }, { status: gate.status })
+    }
+
     return NextResponse.json({ ...result.cart, items: result.items })
 }
 
 /**
  * PATCH /api/public/cart/[id]
  * Update cart event/contact details before checkout.
+ * Ownership: same as GET — Bearer must match carts.user_id when set; anonymous carts require
+ * `${CART_OWNER_SESSION_HEADER}: <carts.session_id>`.
  */
 export async function PATCH(
     req: Request,
@@ -32,14 +51,23 @@ export async function PATCH(
         return NextResponse.json({ error: 'Cart id required' }, { status: 400 })
     }
 
-    // If the cart has a user_id, verify the caller owns it
-    const { data: cartOwner } = await supabase.from('carts').select('user_id').eq('id', id).single()
-    if (cartOwner?.user_id) {
-        const { userId, error: authError } = await getEndUserIdFromRequest(req)
-        if (authError) return authError
-        if (cartOwner.user_id !== userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-        }
+    const auth = await resolveOptionalBearerUser(req)
+    if (auth.error) return auth.error
+
+    const sessionClaimRaw = req.headers.get(CART_OWNER_SESSION_HEADER)?.trim().slice(0, 512) || ''
+
+    const { data: cartRow, error: cartFetchErr } = await supabase.from('carts').select('*').eq('id', id).single()
+
+    if (cartFetchErr || !cartRow) {
+        return NextResponse.json({ error: 'Cart not found' }, { status: 404 })
+    }
+
+    const gate = assertCartReadableByActor(cartRow as Record<string, unknown>, {
+        authenticatedUserId: auth.userId,
+        trustedCartSessionId: sessionClaimRaw || null,
+    })
+    if (!gate.ok) {
+        return NextResponse.json({ error: gate.message }, { status: gate.status })
     }
 
     const body = await req.json().catch(() => ({}))
