@@ -3,13 +3,15 @@
 import React, { useEffect, useState } from 'react'
 import DefaultLayout from '@/components/Layouts/DefaultLayout'
 import { useRouter, useParams } from 'next/navigation'
-import { Loader2, CheckCircle2, AlertCircle, Shield } from 'lucide-react'
+import { Loader2, CheckCircle2, AlertCircle, Shield, Pencil, Trash2, Users, X } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { uploadFile } from '@/utils/storage'
 import { AdminImage } from '@/components/Common/AdminImage'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/Common/ConfirmDialog'
+import * as Dialog from '@radix-ui/react-dialog'
+import { Button } from '@/components/ui/button'
 
 const CATALOG_TIER_DEFS: { key: string; label: string }[] = [
     { key: 'basic', label: 'Basic' },
@@ -28,6 +30,18 @@ function catalogTierLabel(tierKey: string): string {
 
 function normalizeName(value: unknown): string {
     return String(value || '').trim().toLowerCase()
+}
+
+type VendorTeamMemberRow = {
+    id: string
+    vendor_id: string
+    member_user_id: string | null
+    full_name: string
+    phone: string
+    role: string
+    status: string
+    created_at: string
+    updated_at: string
 }
 
 export default function EditVendorPage() {
@@ -73,6 +87,23 @@ export default function EditVendorPage() {
     /** serviceId -> selected tier keys (multi-select per catalog row) */
     const [bulkSelections, setBulkSelections] = useState<Record<string, string[]>>({})
     const [deleteServiceTarget, setDeleteServiceTarget] = useState<string | null>(null)
+
+    const [teamMembers, setTeamMembers] = useState<VendorTeamMemberRow[]>([])
+    const [teamLoading, setTeamLoading] = useState(false)
+    const [teamSaving, setTeamSaving] = useState(false)
+    const [deleteTeamTarget, setDeleteTeamTarget] = useState<string | null>(null)
+    const [teamEditRow, setTeamEditRow] = useState<VendorTeamMemberRow | null>(null)
+    const [teamEditDraft, setTeamEditDraft] = useState({
+        full_name: '',
+        phone: '',
+        role: 'manager',
+        status: 'active',
+    })
+    const [teamAddDraft, setTeamAddDraft] = useState({
+        full_name: '',
+        phone: '',
+        role: 'manager',
+    })
 
     useEffect(() => {
         fetchInitialData()
@@ -134,10 +165,17 @@ export default function EditVendorPage() {
                 }
             }
 
-            const svcRes = await fetch(`/api/admin/services?vendor_id=${id}`)
+            const [svcRes, teamRes] = await Promise.all([
+                fetch(`/api/admin/services?vendor_id=${id}`),
+                fetch(`/api/admin/vendors/${id}/team-members`),
+            ])
             const svcData = await svcRes.json()
+            const teamData = await teamRes.json()
             if (svcData && !svcData.error && Array.isArray(svcData)) {
                 setVendorServices(svcData)
+            }
+            if (Array.isArray(teamData)) {
+                setTeamMembers(teamData)
             }
         } catch (err) {
             console.error('Fetch error:', err)
@@ -151,6 +189,94 @@ export default function EditVendorPage() {
         const res = await fetch(`/api/admin/services?vendor_id=${id}`)
         const data = await res.json()
         if (data && !data.error && Array.isArray(data)) setVendorServices(data)
+    }
+
+    const fetchVendorTeamMembers = async () => {
+        if (!id) return
+        setTeamLoading(true)
+        try {
+            const res = await fetch(`/api/admin/vendors/${id}/team-members`)
+            const data = await res.json()
+            if (Array.isArray(data)) setTeamMembers(data)
+            else if (data?.error) toast.error(data.error)
+        } finally {
+            setTeamLoading(false)
+        }
+    }
+
+    const openTeamEdit = (row: VendorTeamMemberRow) => {
+        setTeamEditRow(row)
+        setTeamEditDraft({
+            full_name: row.full_name,
+            phone: row.phone,
+            role: row.role,
+            status: row.status,
+        })
+    }
+
+    const saveTeamEdit = async () => {
+        if (!id || !teamEditRow) return
+        setTeamSaving(true)
+        try {
+            const res = await fetch(`/api/admin/vendors/${id}/team-members/${teamEditRow.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(teamEditDraft),
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Update failed')
+            toast.success('Team member updated')
+            setTeamEditRow(null)
+            await fetchVendorTeamMembers()
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : 'Update failed')
+        } finally {
+            setTeamSaving(false)
+        }
+    }
+
+    const addTeamMember = async () => {
+        if (!id) return
+        if (!teamAddDraft.full_name.trim()) {
+            toast.error('Full name is required')
+            return
+        }
+        setTeamSaving(true)
+        try {
+            const res = await fetch(`/api/admin/vendors/${id}/team-members`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(teamAddDraft),
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Failed to add team member')
+            toast.success('Team member saved')
+            setTeamAddDraft({ full_name: '', phone: '', role: 'manager' })
+            await fetchVendorTeamMembers()
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : 'Failed to add team member')
+        } finally {
+            setTeamSaving(false)
+        }
+    }
+
+    const confirmDeleteTeamMember = async () => {
+        if (!id || !deleteTeamTarget) return
+        setTeamSaving(true)
+        try {
+            const res = await fetch(`/api/admin/vendors/${id}/team-members/${deleteTeamTarget}`, {
+                method: 'DELETE',
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Delete failed')
+            toast.success('Team member deleted')
+            setDeleteTeamTarget(null)
+            await fetchVendorTeamMembers()
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : 'Delete failed')
+        } finally {
+            setTeamSaving(false)
+        }
     }
 
     const handleAddServiceFromCatalog = async () => {
@@ -609,11 +735,12 @@ export default function EditVendorPage() {
 
                 <form onSubmit={handleSubmit}>
                     <Tabs defaultValue="business" className="w-full">
-                        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 mb-6 gap-1">
+                        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 mb-6 gap-1">
                             <TabsTrigger value="business">Business Info</TabsTrigger>
                             <TabsTrigger value="services">Categories & Services</TabsTrigger>
                             <TabsTrigger value="gallery">Gallery</TabsTrigger>
                             <TabsTrigger value="kyc">KYC</TabsTrigger>
+                            <TabsTrigger value="team">Team</TabsTrigger>
                             <TabsTrigger value="status">Status</TabsTrigger>
                         </TabsList>
 
@@ -1144,6 +1271,130 @@ export default function EditVendorPage() {
                     </div>
                     </TabsContent>
 
+                    {/* Tab: Team members (vendor app + admin) */}
+                    <TabsContent value="team">
+                    <div className="rounded-lg border border-stroke bg-white shadow-lg dark:border-strokedark dark:bg-boxdark mb-6">
+                        <div className="border-b border-stroke px-6 py-4 dark:border-strokedark bg-gradient-to-r from-violet-50 to-white dark:from-violet-950 dark:to-boxdark flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <Users className="h-5 w-5 text-violet-600 dark:text-violet-400" aria-hidden />
+                                <div>
+                                    <h3 className="text-lg font-semibold text-black dark:text-white">Team members</h3>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                        Same roster the vendor manages in the app. Order assignments cascade when you delete a member.
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => fetchVendorTeamMembers()}
+                                disabled={teamLoading}
+                                className="text-sm font-medium text-primary hover:underline disabled:opacity-50"
+                            >
+                                {teamLoading ? 'Refreshing…' : 'Refresh'}
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-6">
+                            <div className="rounded-lg border border-stroke dark:border-strokedark p-4 bg-gray-50/80 dark:bg-gray-900/40">
+                                <h4 className="text-sm font-semibold text-black dark:text-white mb-3">Add member</h4>
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                                    <div className="md:col-span-2">
+                                        <label className={labelClass}>Full name</label>
+                                        <input
+                                            type="text"
+                                            value={teamAddDraft.full_name}
+                                            onChange={(e) => setTeamAddDraft((d) => ({ ...d, full_name: e.target.value }))}
+                                            className={inputClass}
+                                            placeholder="Name shown to the vendor"
+                                            disabled={teamSaving}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className={labelClass}>Phone (10 digits)</label>
+                                        <input
+                                            type="tel"
+                                            value={teamAddDraft.phone}
+                                            onChange={(e) => setTeamAddDraft((d) => ({ ...d, phone: e.target.value }))}
+                                            className={inputClass}
+                                            placeholder="9XXXXXXXXX"
+                                            disabled={teamSaving}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className={labelClass}>Role</label>
+                                        <select
+                                            value={teamAddDraft.role}
+                                            onChange={(e) => setTeamAddDraft((d) => ({ ...d, role: e.target.value }))}
+                                            className={selectClass}
+                                            disabled={teamSaving}
+                                        >
+                                            <option value="manager">Manager</option>
+                                            <option value="staff">Staff</option>
+                                        </select>
+                                        <button
+                                            type="button"
+                                            disabled={teamSaving}
+                                            onClick={addTeamMember}
+                                            className="mt-3 w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+                                        >
+                                            {teamSaving ? 'Saving…' : 'Add'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {!teamMembers.length && !teamLoading ? (
+                                <p className="text-sm text-gray-500 dark:text-gray-400 py-6 text-center">No team members yet.</p>
+                            ) : (
+                                <div className="overflow-x-auto rounded-lg border border-stroke dark:border-strokedark">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 dark:bg-gray-900 border-b border-stroke dark:border-strokedark">
+                                            <tr>
+                                                <th className="text-left px-4 py-3 font-semibold text-black dark:text-white">Name</th>
+                                                <th className="text-left px-4 py-3 font-semibold text-black dark:text-white">Phone</th>
+                                                <th className="text-left px-4 py-3 font-semibold text-black dark:text-white">Role</th>
+                                                <th className="text-left px-4 py-3 font-semibold text-black dark:text-white">Status</th>
+                                                <th className="text-left px-4 py-3 font-semibold text-black dark:text-white">Linked login</th>
+                                                <th className="text-right px-4 py-3 font-semibold text-black dark:text-white">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-stroke dark:divide-strokedark">
+                                            {teamMembers.map((m) => (
+                                                <tr key={m.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-900/40">
+                                                    <td className="px-4 py-3 text-black dark:text-white font-medium">{m.full_name}</td>
+                                                    <td className="px-4 py-3 text-black dark:text-white">{m.phone}</td>
+                                                    <td className="px-4 py-3 capitalize">{m.role}</td>
+                                                    <td className="px-4 py-3 capitalize">{m.status}</td>
+                                                    <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400">
+                                                        {m.member_user_id ? `${m.member_user_id.slice(0, 8)}…` : '—'}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right">
+                                                        <button
+                                                            type="button"
+                                                            className="inline-flex items-center gap-1 rounded-md p-2 text-primary hover:bg-primary/10"
+                                                            aria-label={`Edit ${m.full_name}`}
+                                                            onClick={() => openTeamEdit(m)}
+                                                        >
+                                                            <Pencil className="h-4 w-4" />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="inline-flex items-center gap-1 rounded-md p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                                                            aria-label={`Delete ${m.full_name}`}
+                                                            onClick={() => setDeleteTeamTarget(m.id)}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    </TabsContent>
+
                     {/* Tab: Status */}
                     <TabsContent value="status">
                     {/* Section 4: Status */}
@@ -1184,6 +1435,85 @@ export default function EditVendorPage() {
                 description="Are you sure you want to delete this service? This action cannot be undone."
                 onConfirm={confirmDeleteService}
             />
+            <ConfirmDialog
+                open={!!deleteTeamTarget}
+                onOpenChange={(open) => !open && setDeleteTeamTarget(null)}
+                title="Delete team member"
+                description="Remove this person from the vendor team? Their order assignments for this vendor will be removed."
+                onConfirm={confirmDeleteTeamMember}
+            />
+            <Dialog.Root open={!!teamEditRow} onOpenChange={(open) => !open && setTeamEditRow(null)}>
+                <Dialog.Portal>
+                    <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
+                    <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-stroke bg-white p-6 shadow-lg dark:border-strokedark dark:bg-boxdark">
+                        <Dialog.Title className="text-lg font-semibold text-black dark:text-white">Edit team member</Dialog.Title>
+                        <Dialog.Description className="sr-only">Update name, phone, role, and status.</Dialog.Description>
+                        <div className="mt-4 space-y-4">
+                            <div>
+                                <label className={labelClass}>Full name</label>
+                                <input
+                                    type="text"
+                                    value={teamEditDraft.full_name}
+                                    onChange={(e) => setTeamEditDraft((d) => ({ ...d, full_name: e.target.value }))}
+                                    className={inputClass}
+                                    disabled={teamSaving}
+                                />
+                            </div>
+                            <div>
+                                <label className={labelClass}>Phone</label>
+                                <input
+                                    type="tel"
+                                    value={teamEditDraft.phone}
+                                    onChange={(e) => setTeamEditDraft((d) => ({ ...d, phone: e.target.value }))}
+                                    className={inputClass}
+                                    disabled={teamSaving}
+                                />
+                            </div>
+                            <div>
+                                <label className={labelClass}>Role</label>
+                                <select
+                                    value={teamEditDraft.role}
+                                    onChange={(e) => setTeamEditDraft((d) => ({ ...d, role: e.target.value }))}
+                                    className={selectClass}
+                                    disabled={teamSaving}
+                                >
+                                    <option value="manager">Manager</option>
+                                    <option value="staff">Staff</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className={labelClass}>Status</label>
+                                <select
+                                    value={teamEditDraft.status}
+                                    onChange={(e) => setTeamEditDraft((d) => ({ ...d, status: e.target.value }))}
+                                    className={selectClass}
+                                    disabled={teamSaving}
+                                >
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="mt-6 flex justify-end gap-3">
+                            <Button type="button" variant="outline" onClick={() => setTeamEditRow(null)} disabled={teamSaving}>
+                                Cancel
+                            </Button>
+                            <Button type="button" onClick={saveTeamEdit} disabled={teamSaving}>
+                                {teamSaving ? 'Saving…' : 'Save'}
+                            </Button>
+                        </div>
+                        <Dialog.Close asChild>
+                            <button
+                                type="button"
+                                className="absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100"
+                                aria-label="Close"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </Dialog.Close>
+                    </Dialog.Content>
+                </Dialog.Portal>
+            </Dialog.Root>
         </DefaultLayout>
     )
 }

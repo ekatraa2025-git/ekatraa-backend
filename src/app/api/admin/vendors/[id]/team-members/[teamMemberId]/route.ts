@@ -62,3 +62,34 @@ export async function PATCH(
     }
     return NextResponse.json(data)
 }
+
+export async function DELETE(
+    _req: Request,
+    {
+        params,
+    }: {
+        params: Promise<{ id: string; teamMemberId: string }>
+    }
+) {
+    const { id: vendorId, teamMemberId } = await params
+    if (!vendorId || !teamMemberId) {
+        return NextResponse.json({ error: 'vendor id and team member id required' }, { status: 400 })
+    }
+
+    const { data, error } = await supabase
+        .from('vendor_team_members')
+        .delete()
+        .eq('id', teamMemberId)
+        .eq('vendor_id', vendorId)
+        .select('id')
+        .maybeSingle()
+
+    if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    if (!data?.id) {
+        return NextResponse.json({ error: 'Team member not found' }, { status: 404 })
+    }
+
+    return NextResponse.json({ ok: true, id: data.id })
+}
