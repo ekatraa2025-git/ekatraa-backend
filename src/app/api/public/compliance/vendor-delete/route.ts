@@ -6,10 +6,11 @@ import {
     findVendorIdsByNormalizedPhone,
     purgeVendorBusinessAccount,
 } from '@/lib/vendor-compliance-delete'
-import { supabase } from '@/lib/supabase/server'
+import { verifyAndClearVendorDeletionOtp } from '@/lib/vendor-compliance-delete-otp'
 
 const bodySchema = z.object({
     phone: z.string().min(8).max(32),
+    otp: z.string().regex(/^\d{6}$/),
     confirmation: z.literal('DELETE MY VENDOR ACCOUNT'),
 })
 
@@ -33,7 +34,7 @@ function rateLimitOk(key: string): boolean {
  * Vendor self-service erasure (compliance). Uses service role; never reveals whether a phone matched.
  *
  * POST /api/public/compliance/vendor-delete
- * Body: { phone, confirmation: "DELETE MY VENDOR ACCOUNT" }
+ * Body: { phone, otp (6 digits), confirmation: "DELETE MY VENDOR ACCOUNT" }
  */
 export async function OPTIONS(req: Request) {
     return new NextResponse(null, { status: 204, headers: planningCorsHeaders(req) })
@@ -45,7 +46,10 @@ export async function POST(req: Request) {
         const json = await req.json()
         const parsed = bodySchema.safeParse(json)
         if (!parsed.success) {
-            return NextResponse.json({ error: 'Invalid request. Check phone and confirmation phrase.' }, { status: 400, headers: cors })
+            return NextResponse.json(
+                { error: 'Invalid request. Check phone, 6-digit code, and confirmation phrase.' },
+                { status: 400, headers: cors }
+            )
         }
 
         const digits = normalizePhoneDigits(parsed.data.phone)
@@ -60,6 +64,17 @@ export async function POST(req: Request) {
             return NextResponse.json(
                 { error: 'Too many requests. Please try again later or email your privacy contact.' },
                 { status: 429, headers: cors }
+            )
+        }
+
+        const otpOk = await verifyAndClearVendorDeletionOtp(digits, parsed.data.otp)
+        if (!otpOk) {
+            return NextResponse.json(
+                {
+                    error:
+                        'Invalid or expired verification code. Request a new code and try again, or email your privacy contact.',
+                },
+                { status: 400, headers: cors }
             )
         }
 

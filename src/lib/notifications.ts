@@ -472,6 +472,22 @@ export async function sendNotificationToVendors(
   }
 }
 
+/** Expo push for vendor account deletion OTP (owner-initiated compliance flow). */
+export async function notifyVendorAccountDeletionOtp(params: {
+    vendorIds: string[]
+    otp: string
+}): Promise<void> {
+    const otp = String(params.otp || '').trim()
+    const vendorIds = [...new Set((params.vendorIds || []).filter(Boolean))]
+    if (!otp || !vendorIds.length) return
+    await sendRemotePushToVendors({
+        vendor_ids: vendorIds,
+        title: 'Vendor account deletion',
+        message: `Your verification code is ${otp}. It expires in 10 minutes.`,
+        data: { kind: 'vendor_account_deletion_otp' },
+    })
+}
+
 /**
  * Send system update notification to all vendors
  */
