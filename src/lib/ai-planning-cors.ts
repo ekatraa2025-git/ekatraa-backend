@@ -22,7 +22,8 @@ export function planningCorsHeaders(request: Request): HeadersInit {
     return {
         'Access-Control-Allow-Origin': allow,
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Thread-Id',
+        'Access-Control-Allow-Headers':
+            'Content-Type, Authorization, X-Thread-Id, Accept, Accept-Language, Origin',
         Vary: 'Origin',
     }
 }

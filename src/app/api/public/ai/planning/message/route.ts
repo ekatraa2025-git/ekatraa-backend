@@ -3,6 +3,7 @@ import { RequestContext } from '@mastra/core/request-context'
 import { mastra } from '@/mastra'
 import { getAiAppCatalogContext } from '@/lib/ai-app-context'
 import { getAiRuntimeSettings } from '@/lib/ai-runtime-settings'
+<<<<<<< HEAD
 import { chatWithOpenRouter } from '@/lib/openrouter-client'
 import {
     anthropicErrorToHttp,
@@ -12,6 +13,11 @@ import {
     withTimeout,
 } from '@/lib/claude-client'
 import { resolveOptionalBearerUser } from '@/lib/user-auth'
+=======
+import { buildMastraAgentModelFallbacks, mastraAgentModelForInvocation } from '@/lib/mastra-llm-model'
+import { resolveOptionalBearerUser } from '@/lib/user-auth'
+import { toSpeechSafeText } from '@/lib/voice-text'
+>>>>>>> 6ce4ae0 (Vendor Deletion fixes)
 import { z } from 'zod'
 
 const bodySchema = z.object({
@@ -37,6 +43,11 @@ const bodySchema = z.object({
      * Omit for JWT-only flows when the cart row is user-bound (Bearer required for those reads).
      */
     cart_owner_session_id: z.string().max(512).optional(),
+<<<<<<< HEAD
+=======
+    response_mode: z.enum(['text', 'voice']).optional(),
+    voice_target_language_code: z.string().trim().min(2).max(16).optional(),
+>>>>>>> 6ce4ae0 (Vendor Deletion fixes)
 })
 
 /**
@@ -50,7 +61,22 @@ export async function POST(req: Request) {
         if (!parsed.success) {
             return NextResponse.json({ error: 'Invalid body', details: parsed.error.flatten() }, { status: 400 })
         }
+<<<<<<< HEAD
         const { message, history, city, occasion_id, occasion_name, planned_budget_inr, event_form_snapshot, cart_owner_session_id } =
+=======
+        const {
+            message,
+            history,
+            city,
+            occasion_id,
+            occasion_name,
+            planned_budget_inr,
+            event_form_snapshot,
+            cart_owner_session_id,
+            response_mode,
+            voice_target_language_code,
+        } =
+>>>>>>> 6ce4ae0 (Vendor Deletion fixes)
             parsed.data
 
         const auth = await resolveOptionalBearerUser(req)
@@ -60,10 +86,15 @@ export async function POST(req: Request) {
             req.headers.get('x-thread-id')?.trim() ||
             (typeof json.thread_id === 'string' && json.thread_id) ||
             'anonymous-mobile'
-        const sessionId =
-            (typeof json.session_id === 'string' && json.session_id.trim()) ||
-            threadId ||
-            `planning-${Date.now()}`
+
+        const plannerRequestContext = new RequestContext()
+        if (auth.userId) {
+            plannerRequestContext.set('authenticatedUserId', auth.userId)
+        }
+        const sessionClaim = typeof cart_owner_session_id === 'string' ? cart_owner_session_id.trim() : ''
+        if (sessionClaim) {
+            plannerRequestContext.set('trustedCartSessionId', sessionClaim)
+        }
 
         const plannerRequestContext = new RequestContext()
         if (auth.userId) {
@@ -93,11 +124,15 @@ export async function POST(req: Request) {
                 eventDetailsHint = ''
             }
         }
+        const isVoiceMode = response_mode === 'voice'
+        const voiceHint = isVoiceMode
+            ? `\nVoice mode is active. Keep replies concise, natural, and easy to speak aloud. Avoid markdown tables and links. Prefer short sentences and plain language. Target language: ${voice_target_language_code || 'en-IN'}.`
+            : ''
 
         const messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [
             {
                 role: 'system',
-                content: `Catalog and app context:\n${catalog}${occasionHint}${budgetHint}${eventDetailsHint}`,
+                content: `Catalog and app context:\n${catalog}${occasionHint}${budgetHint}${eventDetailsHint}${voiceHint}`,
             },
         ]
         for (const h of history ?? []) {
@@ -105,56 +140,14 @@ export async function POST(req: Request) {
         }
         messages.push({ role: 'user', content: message })
 
-        const runtime = await getAiRuntimeSettings()
-
-        if (runtime.provider === 'openrouter') {
-            const system = messages.find((m) => m.role === 'system')?.content || ''
-            const historyMessages: Array<{ role: 'user' | 'assistant'; content: string }> = messages.flatMap((m) =>
-                m.role === 'user' || m.role === 'assistant'
-                    ? [{ role: m.role, content: m.content }]
-                    : []
-            )
-            const out = await chatWithOpenRouter({
-                model: runtime.openrouterModel || runtime.primaryModel,
-                system,
-                messages: historyMessages,
-                temperature: 0.6,
-                maxTokens: 2048,
-                sessionId,
-            })
-            return NextResponse.json({
-                reply: out.text,
-                ai_meta: { source: 'openrouter', provider: 'openrouter', model: out.model },
-            })
-        }
-
-        if (runtime.provider === 'claude') {
-            const system = messages.find((m) => m.role === 'system')?.content || ''
-            const anthropicMessages: Array<{ role: 'user' | 'assistant'; content: string }> = messages.flatMap((m) =>
-                m.role === 'user' || m.role === 'assistant'
-                    ? [{ role: m.role, content: m.content }]
-                    : []
-            )
-            const raw = await withTimeout(
-                getAnthropicClient().messages.create({
-                    model: runtime.claudeModel || runtime.primaryModel,
-                    max_tokens: 4096,
-                    temperature: 0.6,
-                    system,
-                    messages: anthropicMessages,
-                }),
-                45_000,
-                'Planning chat'
-            )
-            const reply = sanitizeAssistantReplyText(extractAnthropicText(raw))
-            return NextResponse.json({
-                reply: reply || 'No reply from planner.',
-                ai_meta: { source: 'claude', provider: 'claude', model: runtime.claudeModel || runtime.primaryModel },
-            })
-        }
-
         const agent = mastra.getAgentById('event-planning-agent')
+        const runtime = await getAiRuntimeSettings()
+        const modelFallbacks = buildMastraAgentModelFallbacks(runtime)
         const out = await agent.generate(messages, {
+<<<<<<< HEAD
+=======
+            model: mastraAgentModelForInvocation(runtime),
+>>>>>>> 6ce4ae0 (Vendor Deletion fixes)
             requestContext: plannerRequestContext,
             memory: {
                 thread: threadId,
@@ -163,16 +156,25 @@ export async function POST(req: Request) {
         })
 
         const reply = out.text?.trim() || 'No reply from planner.'
+        const speechText = isVoiceMode ? toSpeechSafeText(reply, 1200) : null
         return NextResponse.json({
             reply,
-            ai_meta: { source: 'mastra-gemini', provider: 'gemini', model: runtime.geminiModel || runtime.primaryModel },
+            ...(speechText
+                ? {
+                      speech_text: speechText,
+                      voice: {
+                          tts_endpoint: '/api/public/ai/planning/tts',
+                          target_language_code: voice_target_language_code || 'en-IN',
+                      },
+                  }
+                : {}),
+            ai_meta: {
+                source: 'mastra',
+                routing: `${runtime.provider}_primary_with_fallbacks`,
+                models: modelFallbacks.map((x) => x.model),
+            },
         })
     } catch (e) {
-        const m = e instanceof Error ? e.message : ''
-        if (m.includes('ANTHROPIC') || m.includes('CLAUDE_API_KEY')) {
-            const { status, body } = anthropicErrorToHttp(e)
-            return NextResponse.json(body, { status })
-        }
         const msg = e instanceof Error ? e.message : 'Planner failed'
         return NextResponse.json({ error: msg }, { status: 500 })
     }

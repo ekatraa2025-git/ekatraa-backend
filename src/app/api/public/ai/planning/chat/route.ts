@@ -1,9 +1,16 @@
+<<<<<<< HEAD
 import { handleChatStream } from '@mastra/ai-sdk'
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'
+=======
+import { handleChatStream, type ChatStreamHandlerParams } from '@mastra/ai-sdk'
+import { toAISdkMessages, toAISdkV5Messages } from '@mastra/ai-sdk/ui'
+>>>>>>> 6ce4ae0 (Vendor Deletion fixes)
 import { RequestContext } from '@mastra/core/request-context'
 import { createUIMessageStreamResponse } from 'ai'
 import { NextResponse } from 'next/server'
 import { mastra } from '@/mastra'
+import { getAiRuntimeSettings } from '@/lib/ai-runtime-settings'
+import { buildMastraAgentModelFallbacks } from '@/lib/mastra-llm-model'
 import { planningCorsHeaders } from '@/lib/ai-planning-cors'
 import { resolveOptionalBearerUser } from '@/lib/user-auth'
 
@@ -45,6 +52,12 @@ export async function POST(req: Request) {
 
         const incomingMemory =
             params.memory != null && typeof params.memory === 'object' ? (params.memory as Record<string, unknown>) : {}
+<<<<<<< HEAD
+=======
+
+        const runtime = await getAiRuntimeSettings()
+        const modelChain = buildMastraAgentModelFallbacks(runtime)
+>>>>>>> 6ce4ae0 (Vendor Deletion fixes)
 
         const stream = await handleChatStream({
             mastra,
@@ -53,13 +66,21 @@ export async function POST(req: Request) {
             sendReasoning: true,
             params: {
                 ...params,
+<<<<<<< HEAD
+=======
+                model: modelChain,
+>>>>>>> 6ce4ae0 (Vendor Deletion fixes)
                 requestContext: rc,
                 memory: {
                     ...incomingMemory,
                     thread: threadId,
                     resource: DEFAULT_CUSTOMER_RESOURCE,
                 },
+<<<<<<< HEAD
             } as Parameters<typeof handleChatStream>[0] extends { params: infer P } ? P : never,
+=======
+            } as unknown as ChatStreamHandlerParams,
+>>>>>>> 6ce4ae0 (Vendor Deletion fixes)
         })
         return createUIMessageStreamResponse({
             stream: stream as Parameters<typeof createUIMessageStreamResponse>[0]['stream'],
@@ -88,6 +109,11 @@ export async function GET(req: Request) {
         /* no history */
     }
 
-    const uiMessages = toAISdkV5Messages(response?.messages || [])
+    let uiMessages: unknown[]
+    try {
+        uiMessages = toAISdkMessages(response?.messages || [], { version: 'v6' })
+    } catch {
+        uiMessages = toAISdkV5Messages(response?.messages || [])
+    }
     return NextResponse.json(uiMessages, { headers: cors })
 }

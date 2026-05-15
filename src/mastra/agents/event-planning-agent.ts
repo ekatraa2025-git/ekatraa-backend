@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent'
-import { getMastraLlmModelString } from '@/lib/mastra-llm-model'
+import { buildDefaultMastraAgentModelFallbacksFromEnv } from '@/lib/mastra-llm-model'
 import { listCategoriesTool, listOccasionsTool, getCatalogContextTool } from '@/mastra/tools/catalog-tools'
 import { getRecommendationsTool } from '@/mastra/tools/recommendations-tool'
 import { getVendorsPreviewTool } from '@/mastra/tools/vendors-preview-tool'
@@ -15,6 +15,7 @@ const PLANNING_INSTRUCTIONS = `You are Ekatraa AI for event planning in India, O
 - The system message may include **User event details** (role, guest count, location, planned budget ₹, dates). Use them to personalize advice; still ground prices and service lists in tools.
 - Encourage booking through the Ekatraa app for live packages. Do not give legal or medical advice.
 - **Formatting (important for the app UI):** Use GitHub-Flavored Markdown. Separate ideas with **short paragraphs** and blank lines. For multiple services or next-step choices, use a **markdown bullet list** with one service or action per line (list items are tappable in the app). For **package tiers, pricing, or included items**, use a **markdown table** (columns such as Tier / Package, Price, Includes / notes) when comparing rows; each table row is tappable. Keep list items and table cell text scannable.
+- If the system context says voice mode is active, switch to plain conversational text (no markdown tables/links), keep to short sentences, and prioritize speakability.
 - **Add to cart (mobile app):** When get_recommendations (or other tools) return offerable services with \`id\` in \`categories[].services[].id\`, you may add one final line after your markdown (no code fence, plain text only):
   CART_ACTIONS:{"items":[{"service_id":"<exact id from tool output>","quantity":1,"label":"<short service name>"}]}
   Only include service_id values you actually saw in tool results (UUIDs from the catalog). Never invent ids. If nothing is safe to add, omit CART_ACTIONS entirely.`
@@ -24,7 +25,7 @@ export function createEventPlanningAgent(storage: LibSQLStore) {
         id: 'event-planning-agent',
         name: 'Ekatraa Event Planning',
         instructions: PLANNING_INSTRUCTIONS,
-        model: getMastraLlmModelString(),
+        model: buildDefaultMastraAgentModelFallbacksFromEnv(),
         tools: {
             listOccasions: listOccasionsTool,
             listCategories: listCategoriesTool,

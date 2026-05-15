@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { getEndUserIdFromRequest } from '@/lib/user-auth'
 import { supabase } from '@/lib/supabase/server'
 import { getAiRuntimeSettings } from '@/lib/ai-runtime-settings'
+import { mastraAgentModelForInvocation } from '@/lib/mastra-llm-model'
 import { generateImageWithOpenRouter } from '@/lib/openrouter-client'
 import { priceInrForMediaKind, type EInviteMediaKind } from '@/lib/e-invite-pricing'
 import { buildEInviteImagePrompt } from '@/lib/e-invite-prompt'
@@ -84,9 +85,13 @@ Recent chat context:
 ${args.chatHistory || 'N/A'}`
     try {
         const agent = mastra.getAgentById('event-planning-agent')
+        const runtime = await getAiRuntimeSettings()
         const out = await agent.generate(
             [{ role: 'user', content: prompt }],
-            { memory: { thread: `e-invite-${args.sessionId}`, resource: 'ekatraa-einvite' } }
+            {
+                model: mastraAgentModelForInvocation(runtime),
+                memory: { thread: `e-invite-${args.sessionId}`, resource: 'ekatraa-einvite' },
+            }
         )
         const text = String(out?.text || '').trim()
         return text || args.userPrompt

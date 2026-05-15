@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server'
 import { planningCorsHeaders } from '@/lib/ai-planning-cors'
+<<<<<<< HEAD
+=======
+import { toSpeechSafeText } from '@/lib/voice-text'
+import { z } from 'zod'
+>>>>>>> 6ce4ae0 (Vendor Deletion fixes)
 
 const SARVAM_TTS_URL = 'https://api.sarvam.ai/text-to-speech/stream'
 
@@ -18,6 +23,7 @@ function resolveSpeakerForModel(speaker: string, model: string): string {
     return speaker
 }
 
+<<<<<<< HEAD
 /** Strip markdown-ish noise and cart payload tail for natural speech. */
 function textForTts(raw: string): string {
     const noCart = raw.replace(/(?:^|\n)CART_ACTIONS:(\{[\s\S]*\})\s*$/m, '').trim()
@@ -29,6 +35,16 @@ function textForTts(raw: string): string {
         .trim()
         .slice(0, 3500)
 }
+=======
+const bodySchema = z.object({
+    text: z.string().min(1).max(16000),
+    response_format: z.enum(['stream', 'base64']).optional(),
+    target_language_code: z.string().trim().min(2).max(16).optional(),
+    pace: z.number().min(0.5).max(2).optional(),
+    speaker: z.string().trim().min(2).max(40).optional(),
+    model: z.string().trim().min(2).max(40).optional(),
+})
+>>>>>>> 6ce4ae0 (Vendor Deletion fixes)
 
 /**
  * Proxy Sarvam streaming TTS (Bulbul). API key stays on the server — use SARVAM_API_KEY.
@@ -59,23 +75,48 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Invalid JSON' }, { status: 400, headers: cors })
     }
 
+<<<<<<< HEAD
     const textIn = typeof (body as { text?: unknown }).text === 'string' ? (body as { text: string }).text : ''
     const text = textForTts(textIn)
+=======
+    const parsed = bodySchema.safeParse(body)
+    if (!parsed.success) {
+        return NextResponse.json({ error: 'Invalid body', details: parsed.error.flatten() }, { status: 400, headers: cors })
+    }
+
+    const text = toSpeechSafeText(parsed.data.text, 3500)
+>>>>>>> 6ce4ae0 (Vendor Deletion fixes)
     if (!text) {
         return NextResponse.json({ error: 'Missing or empty text after cleanup' }, { status: 400, headers: cors })
     }
 
+<<<<<<< HEAD
     const model = (process.env.SARVAM_TTS_MODEL || 'bulbul:v3').trim()
     const rawSpeaker = (process.env.SARVAM_TTS_SPEAKER || '').trim().toLowerCase()
     const defaultSpeaker = model.toLowerCase().includes('bulbul:v3') ? 'priya' : 'anushka'
     const speaker = resolveSpeakerForModel(rawSpeaker || defaultSpeaker, model)
+=======
+    const model = (parsed.data.model || process.env.SARVAM_TTS_MODEL || 'bulbul:v3').trim()
+    const rawSpeaker = (parsed.data.speaker || process.env.SARVAM_TTS_SPEAKER || '').trim().toLowerCase()
+    const defaultSpeaker = model.toLowerCase().includes('bulbul:v3') ? 'priya' : 'anushka'
+    const speaker = resolveSpeakerForModel(rawSpeaker || defaultSpeaker, model)
+    const responseFormat = parsed.data.response_format || 'stream'
+    const targetLanguageCode = parsed.data.target_language_code || 'en-IN'
+    const pace = parsed.data.pace || 1
+>>>>>>> 6ce4ae0 (Vendor Deletion fixes)
 
     const isV3 = model.toLowerCase().includes('bulbul:v3')
     const payload: Record<string, unknown> = {
         text,
+<<<<<<< HEAD
         target_language_code: 'en-IN',
         speaker,
         pace: 1,
+=======
+        target_language_code: targetLanguageCode,
+        speaker,
+        pace,
+>>>>>>> 6ce4ae0 (Vendor Deletion fixes)
         model,
         output_audio_codec: 'mp3',
         output_audio_bitrate: '128k',
@@ -104,6 +145,23 @@ export async function POST(req: Request) {
     }
 
     const contentType = upstream.headers.get('content-type') || 'audio/mpeg'
+<<<<<<< HEAD
+=======
+    if (responseFormat === 'base64') {
+        const buf = Buffer.from(await upstream.arrayBuffer())
+        return NextResponse.json(
+            {
+                audio_base64: buf.toString('base64'),
+                mime_type: contentType,
+                provider: 'sarvam',
+                model,
+                speaker,
+                text,
+            },
+            { headers: cors }
+        )
+    }
+>>>>>>> 6ce4ae0 (Vendor Deletion fixes)
 
     return new NextResponse(upstream.body, {
         headers: {
