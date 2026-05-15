@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
 export type VendorPrincipal = {
@@ -11,6 +11,38 @@ export type VendorPrincipal = {
 
 function normalizePhone(value: string | null | undefined): string {
     return String(value || '').replace(/\D/g, '').slice(-10)
+}
+
+function phoneLookupVariants(digits10: string): string[] {
+    if (digits10.length !== 10) return []
+    return [`+91${digits10}`, digits10, `91${digits10}`]
+}
+
+/** Owner row when JWT subject differs from `vendors.id` (e.g. admin created vendor before auth). */
+async function findOwnerVendorIdByContact(
+    serverSupabase: SupabaseClient,
+    user: { id: string; phone?: string | null; email?: string | null }
+): Promise<string | null> {
+    const digits = normalizePhone(user.phone)
+    for (const variant of phoneLookupVariants(digits)) {
+        const { data } = await serverSupabase.from('vendors').select('id').eq('phone', variant).maybeSingle()
+        if (data?.id) return String(data.id)
+    }
+
+    const email = String(user.email || '')
+        .trim()
+        .toLowerCase()
+    if (email) {
+        const { data } = await serverSupabase
+            .from('vendors')
+            .select('id, email')
+            .ilike('email', email)
+            .limit(1)
+            .maybeSingle()
+        if (data?.id) return String(data.id)
+    }
+
+    return null
 }
 
 /**
@@ -62,6 +94,18 @@ export async function getVendorFromRequest(req: Request): Promise<
     if (vendor) {
         return {
             vendorId: user.id,
+            requesterUserId: user.id,
+            isTeamMember: false,
+            teamMemberId: null,
+            teamRole: null,
+            error: null,
+        }
+    }
+
+    const ownerVendorId = await findOwnerVendorIdByContact(serverSupabase, user)
+    if (ownerVendorId) {
+        return {
+            vendorId: ownerVendorId,
             requesterUserId: user.id,
             isTeamMember: false,
             teamMemberId: null,
