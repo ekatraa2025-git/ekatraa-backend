@@ -4,7 +4,10 @@ import { supabase } from '@/lib/supabase/server'
 import { getVendorFromRequest } from '@/lib/vendor-auth'
 import { resolveVendorOwnerPhoneDigits } from '@/lib/vendor-owner-phone'
 import { purgeVendorBusinessAccount } from '@/lib/vendor-compliance-delete'
-import { verifyAndClearVendorDeletionOtp } from '@/lib/vendor-compliance-delete-otp'
+import {
+    clearVendorDeletionOtpForPhone,
+    validateVendorDeletionOtp,
+} from '@/lib/vendor-compliance-delete-otp'
 
 const bodySchema = z.object({
     otp: z.string().regex(/^\d{6}$/),
@@ -65,7 +68,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Registered mobile is invalid.' }, { status: 400 })
         }
 
-        const otpOk = await verifyAndClearVendorDeletionOtp(digits, parsed.data.otp)
+        const otpOk = await validateVendorDeletionOtp(digits, parsed.data.otp)
         if (!otpOk) {
             return NextResponse.json(
                 { error: 'Invalid or expired verification code. Request a new code.' },
@@ -81,6 +84,8 @@ export async function POST(req: Request) {
                 { status: 500 }
             )
         }
+
+        await clearVendorDeletionOtpForPhone(digits)
 
         return NextResponse.json({
             ok: true,
