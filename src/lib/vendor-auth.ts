@@ -24,8 +24,14 @@ async function findOwnerVendorIdByContact(
     user: { id: string; phone?: string | null; email?: string | null }
 ): Promise<string | null> {
     const digits = normalizePhone(user.phone)
-    for (const variant of phoneLookupVariants(digits)) {
-        const { data } = await serverSupabase.from('vendors').select('id').eq('phone', variant).maybeSingle()
+    const variants = phoneLookupVariants(digits)
+    if (variants.length > 0) {
+        const { data } = await serverSupabase
+            .from('vendors')
+            .select('id')
+            .in('phone', variants)
+            .limit(1)
+            .maybeSingle()
         if (data?.id) return String(data.id)
     }
 

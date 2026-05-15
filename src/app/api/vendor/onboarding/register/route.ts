@@ -65,6 +65,26 @@ async function ensureRequesterMembership(
     const normalizedPhone = normalizePhoneDigits(user.phone)
     const fullName =
         String(user.user_metadata?.full_name || user.user_metadata?.name || '').trim() || 'Vendor Owner'
+    const byUserId = await serverSupabase
+        .from('vendor_team_members')
+        .select('id, vendor_id')
+        .eq('member_user_id', user.id)
+        .maybeSingle()
+    if (byUserId.data?.id) {
+        await serverSupabase
+            .from('vendor_team_members')
+            .update({
+                vendor_id: vendorId,
+                full_name: fullName,
+                phone: normalizedPhone || null,
+                role: 'manager',
+                status: 'active',
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', byUserId.data.id)
+        return
+    }
+
     const existing = await serverSupabase
         .from('vendor_team_members')
         .select('id')
@@ -124,7 +144,7 @@ export async function POST(req: Request) {
     const vendorId = await resolveOwnerVendorId(supabase, user)
     const phoneDb = normalizePhoneForDb(String(body.phone || ''))
 
-    const { error: vendorError } = await supabase.from('vendors').upsert(
+    const { data: vendorRow, error: vendorError } = await supabase.from('vendors').upsert(
         {
             id: vendorId,
             business_name: businessName.substring(0, 100),
@@ -140,11 +160,17 @@ export async function POST(req: Request) {
         },
         { onConflict: 'id' }
     )
+    .select('*')
+    .maybeSingle()
     if (vendorError) {
         return NextResponse.json({ error: vendorError.message }, { status: 500 })
     }
 
-    await ensureRequesterMembership(supabase, user, vendorId)
+    try {
+        await ensureRequesterMembership(supabase, user, vendorId)
+    } catch {
+        // Membership linking is best-effort; vendor row save remains successful.
+    }
 
     if (!body.has_services && body.service?.name && body.service?.price_amount != null) {
         const price = Number(body.service.price_amount)
@@ -165,26 +191,19 @@ export async function POST(req: Request) {
         }
     }
 
-    const { data: vendor, error: fetchVendorError } = await supabase
-        .from('vendors')
-        .select('*')
-        .eq('id', vendorId)
-        .maybeSingle()
-    if (fetchVendorError) {
-        return NextResponse.json({ error: fetchVendorError.message }, { status: 500 })
-    }
-
-    const { data: services } = await supabase
+    const { count: serviceCount, error: serviceCountError } = await supabase
         .from('services')
-        .select('*')
+        .select('id', { count: 'exact', head: true })
         .eq('vendor_id', vendorId)
-        .order('created_at', { ascending: false })
+    if (serviceCountError) {
+        return NextResponse.json({ error: serviceCountError.message }, { status: 500 })
+    }
 
     return NextResponse.json({
         ok: true,
         vendor_id: vendorId,
-        vendor: vendor ?? null,
-        services: Array.isArray(services) ? services : [],
-        service_count: Array.isArray(services) ? services.length : 0,
+        vendor: vendorRow ?? null,
+        services: [],
+        service_count: Number(serviceCount || 0),
     })
 }

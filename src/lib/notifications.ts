@@ -480,12 +480,13 @@ export async function notifyVendorAccountDeletionOtp(params: {
     const otp = String(params.otp || '').trim()
     const vendorIds = [...new Set((params.vendorIds || []).filter(Boolean))]
     if (!otp || !vendorIds.length) return
-    await sendRemotePushToVendors({
-        vendor_ids: vendorIds,
-        title: 'Vendor account deletion',
-        message: `Your verification code is ${otp}. It expires in 10 minutes.`,
-        data: { kind: 'vendor_account_deletion_otp' },
-    })
+    await sendNotificationToVendors(
+      vendorIds,
+      'system_update',
+      'Vendor account deletion',
+      `Your verification code is ${otp}. It expires in 10 minutes.`,
+      { kind: 'vendor_account_deletion_otp' }
+    )
 }
 
 /**

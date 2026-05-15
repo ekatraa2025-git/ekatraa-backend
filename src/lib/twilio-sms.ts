@@ -91,28 +91,8 @@ export async function sendTwilioProgrammableSms(params: {
     }
 }
 
-async function postComplianceSmsWebhook(phoneDigits10: string, otp: string): Promise<boolean> {
-    const url = process.env.COMPLIANCE_VENDOR_DELETE_SMS_WEBHOOK_URL?.trim()
-    if (!url) return false
-    try {
-        const r = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                phone_e164: national10ToE164(phoneDigits10),
-                otp,
-                purpose: 'vendor_account_deletion',
-            }),
-        })
-        return r.ok
-    } catch {
-        return false
-    }
-}
-
 /**
- * Vendor delete OTP: Twilio SMS when configured (same stack as Auth transactional SMS), else optional webhook.
- * Fire-and-forget from route handlers; logs on failure.
+ * Vendor delete OTP via Twilio only (no fallback webhook path).
  */
 export async function deliverVendorDeletionOtpSms(phoneDigits10: string, otp: string): Promise<void> {
     const to = national10ToE164(phoneDigits10)
@@ -125,16 +105,13 @@ export async function deliverVendorDeletionOtpSms(phoneDigits10: string, otp: st
         process.env.TWILIO_VENDOR_DELETE_SMS_BODY_TEMPLATE?.replace(/\{otp\}/g, otp) ||
         `Ekatraa: Your vendor account deletion code is ${otp}. Valid 10 minutes. Do not share.`
 
-    if (twilioSmsConfigured()) {
-        const result = await sendTwilioProgrammableSms({ toE164: to, body })
-        if (result.ok) return
-        console.error('[vendor deletion sms] Twilio failed:', result.error)
+    if (!twilioSmsConfigured()) {
+        console.warn('[vendor deletion sms] Twilio SMS env not fully configured')
+        return
     }
 
-    const webhookOk = await postComplianceSmsWebhook(phoneDigits10, otp)
-    if (!webhookOk && !twilioSmsConfigured()) {
-        console.warn(
-            '[vendor deletion sms] No Twilio credentials and webhook failed or unset; OTP only via push.'
-        )
+    const result = await sendTwilioProgrammableSms({ toE164: to, body })
+    if (!result.ok) {
+        console.error('[vendor deletion sms] Twilio failed:', result.error)
     }
 }

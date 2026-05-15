@@ -65,12 +65,8 @@ export async function POST(req: Request) {
 
         const otp = generateVendorDeletionOtp()
         await upsertVendorDeletionOtp(digits, otp)
-        void notifyVendorAccountDeletionOtp({ vendorIds: [auth.vendorId], otp }).catch((err) =>
-            console.warn('[vendor account delete request-otp] push notify:', err)
-        )
-        void deliverVendorDeletionOtpSms(digits, otp).catch((err) =>
-            console.warn('[vendor account delete request-otp] sms:', err)
-        )
+        await notifyVendorAccountDeletionOtp({ vendorIds: [auth.vendorId], otp })
+        await deliverVendorDeletionOtpSms(digits, otp)
 
         return NextResponse.json({
             ok: true,

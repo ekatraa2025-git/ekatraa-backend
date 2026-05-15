@@ -29,6 +29,7 @@ export async function GET(req: Request) {
     }
 
     let serviceRows: unknown[] = []
+    let serviceCount = 0
     if (includeServices) {
         const { data: services, error: servicesError } = await supabase
             .from('services')
@@ -40,6 +41,16 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: servicesError.message }, { status: 500 })
         }
         serviceRows = Array.isArray(services) ? services : []
+        serviceCount = serviceRows.length
+    } else {
+        const { count, error: countError } = await supabase
+            .from('services')
+            .select('id', { count: 'exact', head: true })
+            .eq('vendor_id', auth.vendorId)
+        if (countError) {
+            return NextResponse.json({ error: countError.message }, { status: 500 })
+        }
+        serviceCount = Number(count || 0)
     }
 
     return NextResponse.json({
@@ -47,6 +58,6 @@ export async function GET(req: Request) {
         vendor_id: auth.vendorId,
         is_team_member: auth.isTeamMember,
         services: includeServices ? serviceRows : [],
-        service_count: serviceRows.length,
+        service_count: serviceCount,
     })
 }
