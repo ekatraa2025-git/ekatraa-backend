@@ -1,0 +1,21 @@
+---
+description: Ship ekatraa_backend by syncing into ekatraa_backend_recovery_push and pushing main.
+globs: "**/*.{ts,tsx,js,json}"
+alwaysApply: false
+---
+
+# Backend deploy via `ekatraa_backend_recovery_push`
+
+This repo’s **`origin/main`** may lag your daily checkout. The sibling repo **`ekatraa_backend_recovery_push`** tracks GitHub (`ekatraa2025-git/ekatraa-backend`) and is used for commits/pushes.
+
+## Workflow
+
+1. Finish edits here (`ekatraa_backend`).
+2. Copy changed paths into **`../ekatraa_backend_recovery_push`** so layouts stay aligned (`src/`, `migrations/`, etc.).
+3. In **`ekatraa_backend_recovery_push`**: `git status`, stage intentionally, **`git commit`** with a clear message, **`git push origin main`**.
+4. Do not force-push or rewrite remote history unless the team explicitly asks.
+
+## Tips
+
+- Run ESLint on touched TS route/lib files before commit when feasible.
+- If Supabase migrations changed here, mirror them into recovery_push before push.
