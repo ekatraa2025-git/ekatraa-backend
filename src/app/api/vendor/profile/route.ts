@@ -16,9 +16,23 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: 'Vendor profile not found.' }, { status: 404 })
     }
 
+    const { data: services, error: servicesError } = await supabase
+        .from('services')
+        .select('*')
+        .eq('vendor_id', auth.vendorId)
+        .order('created_at', { ascending: false })
+
+    if (servicesError) {
+        return NextResponse.json({ error: servicesError.message }, { status: 500 })
+    }
+
+    const serviceRows = Array.isArray(services) ? services : []
+
     return NextResponse.json({
         vendor: data,
         vendor_id: auth.vendorId,
         is_team_member: auth.isTeamMember,
+        services: serviceRows,
+        service_count: serviceRows.length,
     })
 }
