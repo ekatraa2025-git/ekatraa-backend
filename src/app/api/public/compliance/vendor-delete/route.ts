@@ -6,14 +6,10 @@ import {
     findVendorIdsByNormalizedPhone,
     purgeVendorBusinessAccount,
 } from '@/lib/vendor-compliance-delete'
-<<<<<<< HEAD
-import { verifyAndClearVendorDeletionOtp } from '@/lib/vendor-compliance-delete-otp'
-=======
 import {
     clearVendorDeletionOtpForPhone,
     validateVendorDeletionOtp,
 } from '@/lib/vendor-compliance-delete-otp'
->>>>>>> 6ce4ae0 (Vendor Deletion fixes)
 
 const bodySchema = z.object({
     phone: z.string().min(8).max(32),
@@ -74,11 +70,7 @@ export async function POST(req: Request) {
             )
         }
 
-<<<<<<< HEAD
-        const otpOk = await verifyAndClearVendorDeletionOtp(digits, parsed.data.otp)
-=======
         const otpOk = await validateVendorDeletionOtp(digits, parsed.data.otp)
->>>>>>> 6ce4ae0 (Vendor Deletion fixes)
         if (!otpOk) {
             return NextResponse.json(
                 {
@@ -92,10 +84,7 @@ export async function POST(req: Request) {
         const vendorIds = await findVendorIdsByNormalizedPhone(digits)
 
         if (vendorIds.length === 0) {
-<<<<<<< HEAD
-=======
             await clearVendorDeletionOtpForPhone(digits)
->>>>>>> 6ce4ae0 (Vendor Deletion fixes)
             return NextResponse.json(
                 {
                     ok: true,
@@ -117,11 +106,8 @@ export async function POST(req: Request) {
             }
         }
 
-<<<<<<< HEAD
-=======
         await clearVendorDeletionOtpForPhone(digits)
 
->>>>>>> 6ce4ae0 (Vendor Deletion fixes)
         return NextResponse.json(
             {
                 ok: true,

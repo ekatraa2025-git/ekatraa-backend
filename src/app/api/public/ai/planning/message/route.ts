@@ -3,21 +3,9 @@ import { RequestContext } from '@mastra/core/request-context'
 import { mastra } from '@/mastra'
 import { getAiAppCatalogContext } from '@/lib/ai-app-context'
 import { getAiRuntimeSettings } from '@/lib/ai-runtime-settings'
-<<<<<<< HEAD
-import { chatWithOpenRouter } from '@/lib/openrouter-client'
-import {
-    anthropicErrorToHttp,
-    extractAnthropicText,
-    getAnthropicClient,
-    sanitizeAssistantReplyText,
-    withTimeout,
-} from '@/lib/claude-client'
-import { resolveOptionalBearerUser } from '@/lib/user-auth'
-=======
 import { buildMastraAgentModelFallbacks, mastraAgentModelForInvocation } from '@/lib/mastra-llm-model'
 import { resolveOptionalBearerUser } from '@/lib/user-auth'
 import { toSpeechSafeText } from '@/lib/voice-text'
->>>>>>> 6ce4ae0 (Vendor Deletion fixes)
 import { z } from 'zod'
 
 const bodySchema = z.object({
@@ -43,11 +31,8 @@ const bodySchema = z.object({
      * Omit for JWT-only flows when the cart row is user-bound (Bearer required for those reads).
      */
     cart_owner_session_id: z.string().max(512).optional(),
-<<<<<<< HEAD
-=======
     response_mode: z.enum(['text', 'voice']).optional(),
     voice_target_language_code: z.string().trim().min(2).max(16).optional(),
->>>>>>> 6ce4ae0 (Vendor Deletion fixes)
 })
 
 /**
@@ -61,9 +46,6 @@ export async function POST(req: Request) {
         if (!parsed.success) {
             return NextResponse.json({ error: 'Invalid body', details: parsed.error.flatten() }, { status: 400 })
         }
-<<<<<<< HEAD
-        const { message, history, city, occasion_id, occasion_name, planned_budget_inr, event_form_snapshot, cart_owner_session_id } =
-=======
         const {
             message,
             history,
@@ -76,7 +58,6 @@ export async function POST(req: Request) {
             response_mode,
             voice_target_language_code,
         } =
->>>>>>> 6ce4ae0 (Vendor Deletion fixes)
             parsed.data
 
         const auth = await resolveOptionalBearerUser(req)
@@ -86,15 +67,6 @@ export async function POST(req: Request) {
             req.headers.get('x-thread-id')?.trim() ||
             (typeof json.thread_id === 'string' && json.thread_id) ||
             'anonymous-mobile'
-
-        const plannerRequestContext = new RequestContext()
-        if (auth.userId) {
-            plannerRequestContext.set('authenticatedUserId', auth.userId)
-        }
-        const sessionClaim = typeof cart_owner_session_id === 'string' ? cart_owner_session_id.trim() : ''
-        if (sessionClaim) {
-            plannerRequestContext.set('trustedCartSessionId', sessionClaim)
-        }
 
         const plannerRequestContext = new RequestContext()
         if (auth.userId) {
@@ -144,10 +116,7 @@ export async function POST(req: Request) {
         const runtime = await getAiRuntimeSettings()
         const modelFallbacks = buildMastraAgentModelFallbacks(runtime)
         const out = await agent.generate(messages, {
-<<<<<<< HEAD
-=======
             model: mastraAgentModelForInvocation(runtime),
->>>>>>> 6ce4ae0 (Vendor Deletion fixes)
             requestContext: plannerRequestContext,
             memory: {
                 thread: threadId,
