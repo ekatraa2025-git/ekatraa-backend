@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase/server'
 import { getVendorFromRequest } from '@/lib/vendor-auth'
+import { resolveVendorOwnerPhoneDigits } from '@/lib/vendor-owner-phone'
 
 export async function GET(req: Request) {
     const auth = await getVendorFromRequest(req)
@@ -16,6 +17,18 @@ export async function GET(req: Request) {
         teamMember = (data as Record<string, unknown> | null) ?? null
     }
 
+    let registered_phone_hint: string | null = null
+    if (!auth.isTeamMember) {
+        const { data: vendorRow } = await supabase
+            .from('vendors')
+            .select('phone')
+            .eq('id', auth.vendorId)
+            .maybeSingle()
+        const digits = await resolveVendorOwnerPhoneDigits(req, vendorRow?.phone as string | null | undefined)
+        registered_phone_hint =
+            digits.length === 10 ? `+91 ••••••${digits.slice(-4)}` : null
+    }
+
     return NextResponse.json({
         vendor_id: auth.vendorId,
         requester_user_id: auth.requesterUserId,
@@ -23,5 +36,6 @@ export async function GET(req: Request) {
         team_member_id: auth.teamMemberId,
         team_role: auth.teamRole,
         team_member: teamMember,
+        registered_phone_hint: registered_phone_hint,
     })
 }

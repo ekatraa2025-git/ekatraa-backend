@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { supabase } from '@/lib/supabase/server'
 import { getVendorFromRequest } from '@/lib/vendor-auth'
-import { normalizePhoneDigits } from '@/lib/phone-normalize'
+import { resolveVendorOwnerPhoneDigits } from '@/lib/vendor-owner-phone'
 import { purgeVendorBusinessAccount } from '@/lib/vendor-compliance-delete'
 import { verifyAndClearVendorDeletionOtp } from '@/lib/vendor-compliance-delete-otp'
 
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Vendor profile not found.' }, { status: 404 })
         }
 
-        const digits = normalizePhoneDigits(vendor.phone as string)
+        const digits = await resolveVendorOwnerPhoneDigits(req, vendor.phone as string | null)
         if (digits.length !== 10) {
             return NextResponse.json({ error: 'Registered mobile is invalid.' }, { status: 400 })
         }

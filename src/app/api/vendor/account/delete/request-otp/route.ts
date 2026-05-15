@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase/server'
 import { getVendorFromRequest } from '@/lib/vendor-auth'
 import { normalizePhoneDigits } from '@/lib/phone-normalize'
+import { resolveVendorOwnerPhoneDigits } from '@/lib/vendor-owner-phone'
 import {
     generateVendorDeletionOtp,
     upsertVendorDeletionOtp,
@@ -49,12 +50,17 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Vendor profile not found.' }, { status: 404 })
         }
 
-        const digits = normalizePhoneDigits(vendor.phone as string)
+        const digits = await resolveVendorOwnerPhoneDigits(req, vendor.phone as string | null)
         if (digits.length !== 10) {
             return NextResponse.json(
                 { error: 'Your profile needs a valid 10-digit registered mobile before deletion.' },
                 { status: 400 }
             )
+        }
+
+        const rowDigits = normalizePhoneDigits(vendor.phone as string)
+        if (rowDigits.length !== 10) {
+            await supabase.from('vendors').update({ phone: `+91${digits}` }).eq('id', auth.vendorId)
         }
 
         const otp = generateVendorDeletionOtp()
