@@ -44,10 +44,6 @@ type VendorTeamMemberRow = {
     updated_at: string
 }
 
-function normalizeName(value: unknown): string {
-    return String(value || '').trim().toLowerCase()
-}
-
 export default function EditVendorPage() {
     const [loading, setLoading] = useState(false)
     const [fetching, setFetching] = useState(true)

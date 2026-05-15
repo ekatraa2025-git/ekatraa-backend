@@ -1,5 +1,11 @@
 import { sandboxAuthorizedPost } from '@/lib/sandbox-client'
 
+type SandboxSmsResponseBody = {
+    code?: number
+    message?: string
+    data?: { message?: string }
+}
+
 const DEFAULT_REASON =
     'Ekatraa vendor account deletion verification — one-time OTP delivery to registered mobile.'
 
@@ -51,9 +57,9 @@ export async function sendVendorDeletionOtpSmsSandbox(params: {
     try {
         const res = await sandboxAuthorizedPost(path, body)
         const raw = await res.text()
-        let parsed: { code?: number; message?: string; data?: { message?: string } } | null = null
+        let parsed: SandboxSmsResponseBody | null = null
         try {
-            parsed = JSON.parse(raw) as typeof parsed
+            parsed = JSON.parse(raw) as SandboxSmsResponseBody
         } catch {
             /* non-json body */
         }
