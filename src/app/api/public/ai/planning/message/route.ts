@@ -6,6 +6,7 @@ import { getAiRuntimeSettings } from '@/lib/ai-runtime-settings'
 import { buildMastraAgentModelFallbacks, mastraAgentModelForInvocation } from '@/lib/mastra-llm-model'
 import { resolveOptionalBearerUser } from '@/lib/user-auth'
 import { toSpeechSafeText } from '@/lib/voice-text'
+import { buildVoiceReplyLanguageHint } from '@/lib/voice-languages'
 import { z } from 'zod'
 
 const bodySchema = z.object({
@@ -97,9 +98,7 @@ export async function POST(req: Request) {
             }
         }
         const isVoiceMode = response_mode === 'voice'
-        const voiceHint = isVoiceMode
-            ? `\nVoice mode is active. Keep replies concise, natural, and easy to speak aloud. Avoid markdown tables and links. Prefer short sentences and plain language. Target language: ${voice_target_language_code || 'en-IN'}.`
-            : ''
+        const voiceHint = isVoiceMode ? buildVoiceReplyLanguageHint(voice_target_language_code) : ''
 
         const messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [
             {

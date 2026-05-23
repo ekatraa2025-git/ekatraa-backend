@@ -53,9 +53,14 @@ export default function OrdersPage() {
 
     useEffect(() => {
         fetch('/api/admin/orders')
-            .then((r) => r.json())
+            .then(async (r) => {
+                if (!r.ok || !(r.headers.get('content-type') ?? '').includes('application/json')) {
+                    return null
+                }
+                return r.json()
+            })
             .then((data) => {
-                if (!data.error) {
+                if (data && !data.error) {
                     const list = Array.isArray(data) ? data : []
                     setItems(list)
                 }
@@ -69,6 +74,7 @@ export default function OrdersPage() {
 
     const refreshOrders = async () => {
         const r = await fetch('/api/admin/orders')
+        if (!r.ok || !(r.headers.get('content-type') ?? '').includes('application/json')) return
         const data = await r.json()
         if (!data?.error) {
             const list = Array.isArray(data) ? data : []

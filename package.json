@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:clean": "rm -rf .next/dev/cache/turbopack && next dev",
     "mastra:dev": "mastra dev",
+    "pipecat:dev": "cd pipecat-service && uv run bot.py -t daily",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

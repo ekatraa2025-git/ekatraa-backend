@@ -31,7 +31,6 @@ export async function GET(req: Request) {
 
     let result = orders ?? []
 
-    // Fetch order_item_allocations for all orders
     const orderIds = result.map((o: { id: string }) => o.id)
     const { data: allItems } = await supabase
         .from('order_items')
@@ -40,7 +39,7 @@ export async function GET(req: Request) {
     const itemIds = (allItems ?? []).map((i: { id: string }) => i.id)
     const itemToOrderId = new Map((allItems ?? []).map((i: { id: string; order_id: string }) => [i.id, i.order_id]))
 
-    let allocationsByOrderId = new Map<string, { vendor_id: string }[]>()
+    const allocationsByOrderId = new Map<string, { vendor_id: string }[]>()
     if (itemIds.length > 0) {
         const { data: allocations } = await supabase
             .from('order_item_allocations')
@@ -64,7 +63,7 @@ export async function GET(req: Request) {
         list.forEach((a) => allVendorIds.add(a.vendor_id))
     })
 
-    let vendorsMap = new Map<string, { business_name: string; city?: string }>()
+    const vendorsMap = new Map<string, { business_name: string; city?: string }>()
     if (allVendorIds.size > 0) {
         const { data: vendors } = await supabase
             .from('vendors')

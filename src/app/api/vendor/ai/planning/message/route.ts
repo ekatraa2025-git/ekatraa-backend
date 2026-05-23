@@ -5,6 +5,7 @@ import { getAiRuntimeSettings } from '@/lib/ai-runtime-settings'
 import { mastraAgentModelForInvocation } from '@/lib/mastra-llm-model'
 import { getVendorFromRequest } from '@/lib/vendor-auth'
 import { toSpeechSafeText } from '@/lib/voice-text'
+import { buildVoiceReplyLanguageHint } from '@/lib/voice-languages'
 import { z } from 'zod'
 
 const bodySchema = z.object({
@@ -49,9 +50,7 @@ export async function POST(req: Request) {
             {
                 role: 'system',
                 content: `You are assisting vendor_id=${auth.vendorId}. Use list_my_orders for grounded data.${
-                    response_mode === 'voice'
-                        ? ` Voice mode is active. Keep responses short, plain-language, and easy to speak aloud in ${voice_target_language_code || 'en-IN'}.`
-                        : ''
+                    response_mode === 'voice' ? buildVoiceReplyLanguageHint(voice_target_language_code) : ''
                 }`,
             },
         ]

@@ -71,8 +71,12 @@ export default function DashboardPage() {
                 ])
 
                 const ordersRes = await fetch('/api/admin/orders')
-                const ordersData = await ordersRes.json()
-                if (ordersData) setRecentOrders(ordersData.slice(0, 5))
+                let ordersData: any[] = []
+                if (ordersRes.ok && (ordersRes.headers.get('content-type') ?? '').includes('application/json')) {
+                    const parsed = await ordersRes.json()
+                    ordersData = Array.isArray(parsed) ? parsed : []
+                }
+                if (ordersData.length) setRecentOrders(ordersData.slice(0, 5))
 
                 const last7Days = eachDayOfInterval({
                     start: subDays(new Date(), 6),

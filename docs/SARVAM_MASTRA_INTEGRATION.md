@@ -155,12 +155,34 @@ Avoid long numeric dumps; summarize ranges and offer to share detailed breakdown
 
 ## 6) End-to-End Sequence
 
+### Legacy chunked voice (mobile / web fallback)
+
 1. Client records audio and sends multipart payload to `POST /api/public/ai/planning/stt`
 2. Client receives transcript
 3. Client sends transcript to `POST /api/public/ai/planning/message` with `response_mode: "voice"`
 4. Client receives `reply` + `speech_text`
 5. Client calls `POST /api/public/ai/planning/tts` with `speech_text`
 6. Client plays returned audio
+
+### Live Pipecat voice (recommended when enabled)
+
+Uses [Pipecat](https://docs.pipecat.ai/pipecat/get-started/introduction) for sub-second round-trip audio with Sarvam streaming STT/TTS. Mastra agents remain the brain via an OpenAI-compatible proxy.
+
+1. Client calls `POST /api/public/ai/voice/session` → receives Pipecat `start_url` + session metadata
+2. Client connects WebRTC to Pipecat (`pipecat-service/bot.py` or Pipecat Cloud)
+3. Pipecat pipeline: Sarvam STT → `POST /api/public/ai/voice/chat/completions` (Mastra) → Sarvam TTS
+4. RTVI transcripts + audio stream to the client in real time
+
+| Component | Path / command |
+| --- | --- |
+| Pipecat bot | `cd ekatraa_backend/pipecat-service && uv run bot.py` |
+| Session bootstrap | `POST /api/public/ai/voice/session` |
+| Mastra OpenAI proxy (customer) | `POST /api/public/ai/voice/chat/completions` |
+| Mastra OpenAI proxy (vendor) | `POST /api/vendor/ai/voice/chat/completions` |
+
+**Client flags:** `EXPO_PUBLIC_PIPECAT_VOICE=1` (mobile), `NEXT_PUBLIC_PIPECAT_VOICE=1` (web).
+
+**Backend env:** `PIPECAT_SERVICE_URL=http://localhost:7860` (returned to clients from session route).
 
 ## 7) Troubleshooting Checklist
 
@@ -169,4 +191,6 @@ Avoid long numeric dumps; summarize ranges and offer to share detailed breakdown
 - Voice sounds incorrect -> confirm `SARVAM_TTS_MODEL` and speaker compatibility
 - Voice mode ignored -> confirm `response_mode: "voice"` in planning message body
 - Lost conversation memory -> set persistent `MASTRA_LIBSQL_URL` (avoid `:memory:` in production)
-- Cart-aware tools fail for anonymous users -> pass `cart_owner_session_id` consistently
+- Cart-aware tools fail for anonymous users → pass `cart_owner_session_id` consistently
+- Live Pipecat cannot connect → verify `PIPECAT_SERVICE_URL`, Pipecat bot running, and WebRTC/mic permissions
+- Pipecat connects but agent is generic → confirm `EKATRAA_BACKEND_URL` in pipecat `.env` and Mastra keys on backend

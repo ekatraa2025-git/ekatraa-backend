@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { planningCorsHeaders } from '@/lib/ai-planning-cors'
+import { normalizeSarvamLanguageCode } from '@/lib/sarvam-language'
 
 const SARVAM_STT_URL = process.env.SARVAM_STT_URL?.trim() || 'https://api.sarvam.ai/speech-to-text'
 const MAX_AUDIO_BYTES = 12 * 1024 * 1024
@@ -43,7 +44,15 @@ function resolveTranscript(payload: unknown): string {
  * Browsers often send `audio/webm; codecs=opus`, which is rejected — normalize to `audio/webm`.
  */
 function normalizeFileMimeForSarvam(file: File): File {
-    const raw = (file.type || '').trim().toLowerCase()
+    const name = (file.name || '').trim().toLowerCase()
+    let raw = (file.type || '').trim().toLowerCase()
+    if (!raw || raw === 'application/octet-stream') {
+        if (name.endsWith('.m4a') || name.endsWith('.mp4') || name.endsWith('.caf')) raw = 'audio/mp4'
+        else if (name.endsWith('.webm')) raw = 'audio/webm'
+        else if (name.endsWith('.wav')) raw = 'audio/wav'
+        else if (name.endsWith('.mp3')) raw = 'audio/mpeg'
+        else if (name.endsWith('.ogg')) raw = 'audio/ogg'
+    }
     if (!raw) return file
 
     let canonical: string | null = null
@@ -62,8 +71,8 @@ function normalizeFileMimeForSarvam(file: File): File {
 
     if (!canonical || canonical === file.type) return file
 
-    const name = file.name?.trim() || 'audio.webm'
-    return new File([file], name, { type: canonical, lastModified: file.lastModified })
+    const fileName = file.name?.trim() || 'audio.webm'
+    return new File([file], fileName, { type: canonical, lastModified: file.lastModified })
 }
 
 /** Sarvam enum `input_audio_codec` — helps some browsers (WebM/Opus). */
@@ -124,8 +133,9 @@ export async function POST(req: Request) {
     }
 
     const languageCodeRaw = formData.get('language_code')
-    const languageCode =
-        typeof languageCodeRaw === 'string' && languageCodeRaw.trim() ? languageCodeRaw.trim().slice(0, 16) : 'en-IN'
+    const languageCode = normalizeSarvamLanguageCode(
+        typeof languageCodeRaw === 'string' ? languageCodeRaw : 'en-IN'
+    )
 
     const modelRaw = formData.get('model')
     const modelFromClient = typeof modelRaw === 'string' && modelRaw.trim() ? modelRaw.trim().slice(0, 64) : ''
@@ -168,10 +178,15 @@ export async function POST(req: Request) {
 
     if (!upstream.ok) {
         const upstreamMessage = summarizeSarvamError(upstreamPayload)
+        const userMessage =
+            upstreamMessage ||
+            (upstream.status === 401 || upstream.status === 403
+                ? 'Speech recognition is not configured on the server (check SARVAM_API_KEY).'
+                : `Speech recognition failed (${upstream.status}).`)
         return NextResponse.json(
             {
-                error: 'Sarvam STT request failed',
-                ...(upstreamMessage ? { message: upstreamMessage } : {}),
+                error: userMessage,
+                message: userMessage,
                 detail: upstreamPayload,
             },
             { status: upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502, headers: cors }
