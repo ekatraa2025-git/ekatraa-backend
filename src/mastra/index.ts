@@ -8,10 +8,12 @@ import { eventPlanningIntakeWorkflow } from '@/mastra/workflows/event-planning-i
 
 /** Turso/libsql file URL for durable threads; default :memory: (OK for CI/build; set MASTRA_LIBSQL_URL in prod). */
 const libsqlUrl = process.env.MASTRA_LIBSQL_URL?.trim() || ':memory:'
+const libsqlAuthToken = process.env.MASTRA_LIBSQL_AUTH_TOKEN?.trim()
 
 const storage = new LibSQLStore({
     id: 'ekatraa-mastra',
     url: libsqlUrl,
+    ...(libsqlAuthToken ? { authToken: libsqlAuthToken } : {}),
 })
 
 export const mastra = new Mastra({
