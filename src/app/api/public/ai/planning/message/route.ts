@@ -4,6 +4,7 @@ import { mastra } from '@/mastra'
 import { getAiAppCatalogContext } from '@/lib/ai-app-context'
 import { getAiRuntimeSettings } from '@/lib/ai-runtime-settings'
 import { buildMastraAgentModelFallbacks, mastraAgentModelForInvocation } from '@/lib/mastra-llm-model'
+import { planningCorsHeaders } from '@/lib/ai-planning-cors'
 import { resolveOptionalBearerUser } from '@/lib/user-auth'
 import { toSpeechSafeText } from '@/lib/voice-text'
 import { buildVoiceReplyLanguageHint } from '@/lib/voice-languages'
@@ -40,12 +41,17 @@ const bodySchema = z.object({
  * Non-streaming Mastra agent turn for mobile clients (JSON { reply }).
  * Prefer POST /api/public/ai/planning/chat for web streaming (AI SDK UI).
  */
+export async function OPTIONS(req: Request) {
+    return new NextResponse(null, { status: 204, headers: planningCorsHeaders(req) })
+}
+
 export async function POST(req: Request) {
+    const cors = planningCorsHeaders(req)
     try {
         const json = await req.json()
         const parsed = bodySchema.safeParse(json)
         if (!parsed.success) {
-            return NextResponse.json({ error: 'Invalid body', details: parsed.error.flatten() }, { status: 400 })
+            return NextResponse.json({ error: 'Invalid body', details: parsed.error.flatten() }, { status: 400, headers: cors })
         }
         const {
             message,
@@ -141,9 +147,9 @@ export async function POST(req: Request) {
                 routing: `${runtime.provider}_primary_with_fallbacks`,
                 models: modelFallbacks.map((x) => x.model),
             },
-        })
+        }, { headers: cors })
     } catch (e) {
         const msg = e instanceof Error ? e.message : 'Planner failed'
-        return NextResponse.json({ error: msg }, { status: 500 })
+        return NextResponse.json({ error: msg }, { status: 500, headers: cors })
     }
 }

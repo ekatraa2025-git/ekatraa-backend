@@ -1,8 +1,18 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { isAllowlistedAdminEmail } from '@/lib/admin-config'
+import { applyPlanningCorsHeaders, isBrowserPlanningApiPath, planningCorsHeaders } from '@/lib/ai-planning-cors'
 
 export async function middleware(request: NextRequest) {
+    const { pathname } = request.nextUrl
+
+    // Browser CORS for ekatraa-web → planning/voice APIs (handles OPTIONS before route handlers).
+    if (isBrowserPlanningApiPath(pathname)) {
+        if (request.method === 'OPTIONS') {
+            return new NextResponse(null, { status: 204, headers: planningCorsHeaders(request) })
+        }
+    }
+
     // Single pass-through response; mutating cookies on it preserves the original request
     // body for API routes (recreating NextResponse with only `headers` can drop bodies on Next 16+).
     let response = NextResponse.next()
@@ -51,6 +61,10 @@ export async function middleware(request: NextRequest) {
     // Redirect to /admin if logged in and trying to access /login
     if (request.nextUrl.pathname === '/login' && user && isAllowlistedAdminEmail(user.email)) {
         return NextResponse.redirect(new URL('/admin', request.url))
+    }
+
+    if (isBrowserPlanningApiPath(pathname)) {
+        return applyPlanningCorsHeaders(request, response)
     }
 
     return response
