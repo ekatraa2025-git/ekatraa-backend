@@ -24,6 +24,8 @@ export function isBrowserPlanningApiPath(pathname: string): boolean {
     return (
         pathname.startsWith('/api/public/ai/planning/') ||
         pathname.startsWith('/api/public/ai/voice/') ||
+        pathname.startsWith('/api/vendor/ai/planning/') ||
+        pathname.startsWith('/api/vendor/ai/voice/') ||
         pathname.startsWith('/api/public/compliance/vendor-delete')
     )
 }

@@ -11,6 +11,14 @@ import { resolveOptionalBearerUser } from '@/lib/user-auth'
 
 const DEFAULT_CUSTOMER_RESOURCE = 'ekatraa-web-planning'
 
+function withCors(req: Request, response: NextResponse): NextResponse {
+    const headers = new Headers(response.headers)
+    for (const [key, value] of Object.entries(planningCorsHeaders(req))) {
+        headers.set(key, value)
+    }
+    return new NextResponse(response.body, { status: response.status, headers })
+}
+
 export async function OPTIONS(req: Request) {
     return new NextResponse(null, { status: 204, headers: planningCorsHeaders(req) })
 }
@@ -21,7 +29,7 @@ export async function OPTIONS(req: Request) {
 export async function POST(req: Request) {
     const cors = planningCorsHeaders(req)
     const auth = await resolveOptionalBearerUser(req)
-    if (auth.error) return auth.error
+    if (auth.error) return withCors(req, auth.error)
 
     try {
         const params = (await req.json()) as Record<string, unknown>
@@ -83,22 +91,26 @@ export async function GET(req: Request) {
     const threadId =
         req.headers.get('x-thread-id')?.trim() || url.searchParams.get('thread')?.trim() || 'anonymous-web'
 
-    const memory = await mastra.getAgentById('event-planning-agent').getMemory()
-    let response = null
     try {
-        response = await memory?.recall({
-            threadId,
-            resourceId: DEFAULT_CUSTOMER_RESOURCE,
-        })
-    } catch {
-        /* no history */
-    }
+        const memory = await mastra.getAgentById('event-planning-agent').getMemory()
+        let response = null
+        try {
+            response = await memory?.recall({
+                threadId,
+                resourceId: DEFAULT_CUSTOMER_RESOURCE,
+            })
+        } catch {
+            /* no history */
+        }
 
-    let uiMessages: unknown[]
-    try {
-        uiMessages = toAISdkMessages(response?.messages || [], { version: 'v6' })
+        let uiMessages: unknown[]
+        try {
+            uiMessages = toAISdkMessages(response?.messages || [], { version: 'v6' })
+        } catch {
+            uiMessages = toAISdkV5Messages(response?.messages || [])
+        }
+        return NextResponse.json(uiMessages, { headers: cors })
     } catch {
-        uiMessages = toAISdkV5Messages(response?.messages || [])
+        return NextResponse.json([], { headers: cors })
     }
-    return NextResponse.json(uiMessages, { headers: cors })
 }
