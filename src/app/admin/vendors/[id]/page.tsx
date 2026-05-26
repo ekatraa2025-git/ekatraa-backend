@@ -685,11 +685,6 @@ export default function EditVendorPage() {
         delete submitData.vendor_categories
         delete submitData.create_auth
 
-        const uuidRe =
-            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-        if (submitData.category_id != null && typeof submitData.category_id === 'string' && !uuidRe.test(submitData.category_id.trim())) {
-            delete submitData.category_id
-        }
         delete submitData.id
 
         const res = await fetch(`/api/admin/vendors/${id}`, {

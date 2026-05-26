@@ -202,7 +202,12 @@ export default function NewVendorPage() {
         const submitData: any = { ...formData }
         submitData.status = submitData.status ? 'active' : 'pending'
         if (submitData.is_verified) submitData.aadhaar_verified = true
-        delete submitData.create_auth
+
+        if (submitData.create_auth && !String(submitData.phone || '').trim()) {
+            toast.error('Phone number is required when creating a vendor login account.')
+            setLoading(false)
+            return
+        }
 
         const res = await fetch('/api/admin/vendors', {
             method: 'POST',

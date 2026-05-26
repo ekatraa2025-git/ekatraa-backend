@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { extractCityFromAddress } from '@/utils/addressParser'
 import { pickVendorPayload } from '@/lib/vendor-fields'
 import { notifyVendorActivated } from '@/lib/notifications'
-import { isCatalogUuid, resolveVendorCategoryIdForDb } from '@/lib/vendor-category-resolve'
+import { applyResolvedVendorCategory, resolveVendorCategoryIdForDb } from '@/lib/vendor-category-resolve'
 
 export async function GET(
     req: Request,
@@ -32,19 +32,25 @@ export async function PATCH(
         const raw = await req.json()
         const body = pickVendorPayload(raw as Record<string, unknown>) as Record<string, unknown>
 
-        // Admin UI may send legacy slug ids (e.g. venue-menu); vendors.category_id must be UUID in DB.
-        if (body.category_id !== undefined && body.category_id !== null && String(body.category_id).trim() !== '') {
-            if (!isCatalogUuid(body.category_id)) {
-                const { id: resolvedCatId, reason } = await resolveVendorCategoryIdForDb(
-                    supabase,
-                    body.category_id,
-                    body.category
-                )
-                if (!resolvedCatId) {
-                    return NextResponse.json({ error: reason || 'Invalid category_id' }, { status: 400 })
-                }
-                body.category_id = resolvedCatId
+        const hasCategoryId =
+            body.category_id !== undefined &&
+            body.category_id !== null &&
+            String(body.category_id).trim() !== ''
+        const hasCategoryName =
+            body.category !== undefined &&
+            body.category !== null &&
+            String(body.category).trim() !== ''
+
+        if (hasCategoryId || hasCategoryName) {
+            const { id: resolvedCatId, name: resolvedCatName, reason } = await resolveVendorCategoryIdForDb(
+                supabase,
+                body.category_id,
+                body.category
+            )
+            if (!resolvedCatId) {
+                return NextResponse.json({ error: reason || 'Invalid category' }, { status: 400 })
             }
+            applyResolvedVendorCategory(body, { id: resolvedCatId, name: resolvedCatName || String(body.category || '') })
         }
         delete body.id
 

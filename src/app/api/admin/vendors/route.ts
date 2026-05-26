@@ -1,8 +1,39 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { extractCityFromAddress } from '@/utils/addressParser'
 import { pickVendorPayload } from '@/lib/vendor-fields'
-import { resolveVendorCategoryIdForDb } from '@/lib/vendor-category-resolve'
+import { applyResolvedVendorCategory, resolveVendorCategoryIdForDb } from '@/lib/vendor-category-resolve'
+
+function normalizePhoneDigits(raw: unknown): string {
+    const digits = String(raw ?? '').replace(/\D/g, '')
+    if (digits.length >= 10) return digits.slice(-10)
+    return digits
+}
+
+function toE164IndiaPhone(raw: unknown): string | null {
+    const digits = normalizePhoneDigits(raw)
+    if (digits.length !== 10) return null
+    return `+91${digits}`
+}
+
+async function findAuthUserIdByPhone(
+    client: SupabaseClient,
+    phoneNumber: string
+): Promise<string | null> {
+    let page = 1
+    const perPage = 200
+    for (;;) {
+        const { data, error } = await client.auth.admin.listUsers({ page, perPage })
+        if (error || !data?.users?.length) break
+        const hit = data.users.find((u) => u.phone === phoneNumber)
+        if (hit?.id) return hit.id
+        if (data.users.length < perPage) break
+        page += 1
+        if (page > 50) break
+    }
+    return null
+}
 
 function normalizeName(value: unknown): string {
     return String(value || '').trim().toLowerCase()
@@ -70,8 +101,8 @@ export async function POST(req: Request) {
         const body = pickVendorPayload(raw) as Record<string, unknown>
         
         // Extract admin-only flags and non-vendor fields before inserting into vendors table
-        const createAuth = raw.create_auth
-        delete (raw as any).create_auth
+        const createAuth = raw.create_auth !== false
+        delete (raw as Record<string, unknown>).create_auth
         // Remove service catalog fields that are handled by the frontend separately
         delete body.service_subcategory
         delete body.service_stock_id
@@ -98,68 +129,115 @@ export async function POST(req: Request) {
             (body.category_id != null && String(body.category_id).trim() !== '') ||
             (body.category != null && String(body.category).trim() !== '')
         if (wantsCategory) {
-            const { id: resolvedCatId, reason: catReason } = await resolveVendorCategoryIdForDb(
-                supabase,
-                body.category_id,
-                body.category
-            )
+            const { id: resolvedCatId, name: resolvedCatName, reason: catReason } =
+                await resolveVendorCategoryIdForDb(supabase, body.category_id, body.category)
             if (!resolvedCatId) {
                 return NextResponse.json(
                     { error: catReason || 'Invalid category', auth_note: null },
                     { status: 400 }
                 )
             }
-            body.category_id = resolvedCatId
+            applyResolvedVendorCategory(body, { id: resolvedCatId, name: resolvedCatName || String(body.category || '') })
         }
 
-        // If create_auth is enabled and phone is provided, create a Supabase auth user
-        // so the vendor can log in via phone OTP in the mobile app
+        // vendors.id must equal auth.users.id (FK). Create or link auth before insert.
         let authUserId: string | null = null
         let authNote: string | null = null
 
-        if (createAuth && body.phone) {
-            // Normalize phone number to +91 format
-            let phoneNumber = String(body.phone).replace(/\s/g, '')
-            if (!phoneNumber.startsWith('+')) {
-                phoneNumber = `+91${phoneNumber}`
+        if (createAuth) {
+            const phoneNumber = toE164IndiaPhone(body.phone)
+            if (!phoneNumber) {
+                return NextResponse.json(
+                    {
+                        error: 'A valid 10-digit phone number is required to create a vendor login account.',
+                        auth_note: null,
+                    },
+                    { status: 400 }
+                )
             }
 
+            body.phone = normalizePhoneDigits(body.phone)
+
             try {
-                // Create auth user with phone number using admin API (service role key)
                 const { data: authData, error: authError } = await supabase.auth.admin.createUser({
                     phone: phoneNumber,
                     phone_confirm: true,
+                    email: body.email ? String(body.email).trim().toLowerCase() : undefined,
+                    email_confirm: body.email ? true : undefined,
                 })
 
                 if (authError) {
-                    // If user already exists, try to find the existing user
-                    if (authError.message?.includes('already been registered') || authError.message?.includes('already exists')) {
-                        // List users and find by phone
-                        const { data: existingUsers } = await supabase.auth.admin.listUsers()
-                        const existingUser = existingUsers?.users?.find(
-                            (u: any) => u.phone === phoneNumber
-                        )
-                        if (existingUser) {
-                            authUserId = existingUser.id
+                    const duplicate =
+                        authError.message?.includes('already been registered') ||
+                        authError.message?.includes('already exists') ||
+                        authError.message?.includes('already registered')
+
+                    if (duplicate) {
+                        authUserId = await findAuthUserIdByPhone(supabase, phoneNumber)
+                        if (authUserId) {
                             authNote = `Vendor linked to existing auth account (phone: ${phoneNumber}). The vendor can log in using phone OTP.`
                         } else {
-                            authNote = `Auth user creation skipped: ${authError.message}. You can manually set up authentication later.`
+                            return NextResponse.json(
+                                {
+                                    error: `Phone ${phoneNumber} is already registered but could not be linked. Try a different number or contact support.`,
+                                    auth_note: null,
+                                },
+                                { status: 400 }
+                            )
                         }
                     } else {
-                        authNote = `Auth user creation failed: ${authError.message}. Vendor record created without login credentials.`
+                        return NextResponse.json(
+                            {
+                                error: `Could not create vendor login: ${authError.message}`,
+                                auth_note: null,
+                            },
+                            { status: 400 }
+                        )
                     }
-                } else if (authData?.user) {
+                } else if (authData?.user?.id) {
                     authUserId = authData.user.id
                     authNote = `Auth account created successfully. Vendor can log in with phone: ${phoneNumber} using OTP.`
                 }
-            } catch (authCatchError: any) {
-                authNote = `Auth user creation error: ${authCatchError.message}. Vendor record created without login credentials.`
+            } catch (authCatchError: unknown) {
+                const message = authCatchError instanceof Error ? authCatchError.message : 'Unknown auth error'
+                return NextResponse.json(
+                    { error: `Could not create vendor login: ${message}`, auth_note: null },
+                    { status: 400 }
+                )
             }
+        } else {
+            return NextResponse.json(
+                {
+                    error: 'Vendor profiles require a Supabase auth account. Enable "Create Auth Account" and provide a phone number.',
+                    auth_note: null,
+                },
+                { status: 400 }
+            )
         }
 
-        // If we got an auth user ID, use it as vendors.id (matches JWT subject for vendor login)
-        if (authUserId) {
-            body.id = authUserId
+        if (!authUserId) {
+            return NextResponse.json(
+                { error: 'Could not resolve vendor auth user id.', auth_note: authNote },
+                { status: 400 }
+            )
+        }
+
+        body.id = authUserId
+
+        const { data: existingVendor } = await supabase
+            .from('vendors')
+            .select('id')
+            .eq('id', authUserId)
+            .maybeSingle()
+
+        if (existingVendor) {
+            return NextResponse.json(
+                {
+                    error: 'A vendor profile already exists for this phone/auth account.',
+                    auth_note: authNote,
+                },
+                { status: 409 }
+            )
         }
 
         const { data, error } = await supabase
