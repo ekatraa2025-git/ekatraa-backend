@@ -3,7 +3,7 @@ type OpenRouterMessage = { role: 'system' | 'user' | 'assistant'; content: strin
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1'
 const DEFAULT_OPENROUTER_MODEL = 'nvidia/nemotron-3-nano-omni:free'
 const DEFAULT_OPENROUTER_IMAGE_MODEL = 'sourceful/riverflow-v2-fast'
-const DEFAULT_OPENROUTER_INVITE_ANIMATED_MODEL = 'sourceful/riverflow-v2-pro'
+const DEFAULT_OPENROUTER_INVITE_ANIMATED_MODEL = 'alibaba/wan-2.7'
 
 function isOpenRouterDebugLogsEnabled(): boolean {
     const raw = String(process.env.OPENROUTER_DEBUG_LOGS || '').trim().toLowerCase()

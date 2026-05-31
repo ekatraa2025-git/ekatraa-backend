@@ -66,6 +66,7 @@ export async function generateVideoWithOpenRouter(input: {
     aspect_ratio?: string
     frame_images?: OpenRouterVideoFrameImage[]
     input_references?: OpenRouterVideoReferenceImage[]
+    generate_audio?: boolean
     pollIntervalMs?: number
     maxPollAttempts?: number
 }): Promise<OpenRouterVideoJobResult> {
@@ -81,6 +82,7 @@ export async function generateVideoWithOpenRouter(input: {
     if (input.aspect_ratio) payload.aspect_ratio = input.aspect_ratio
     if (input.frame_images?.length) payload.frame_images = input.frame_images
     if (input.input_references?.length) payload.input_references = input.input_references
+    if (input.generate_audio != null) payload.generate_audio = input.generate_audio
 
     const submitRes = await openRouterVideoFetch('/videos', {
         method: 'POST',

@@ -267,6 +267,7 @@ export async function POST(req: Request) {
                 aspect_ratio: '9:16',
                 resolution: '720p',
                 duration: 5,
+                generate_audio: false,
                 frame_images: frameImages,
                 input_references: referenceImages.length ? referenceImages : undefined,
                 pollIntervalMs: 15000,
