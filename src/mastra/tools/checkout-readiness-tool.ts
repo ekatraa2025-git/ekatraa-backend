@@ -34,7 +34,8 @@ export const getCheckoutReadinessTool = createTool({
             return { error: gate.message, status: gate.status, ready: false }
         }
 
-        const items = result.items as CartLineForPaymentMode[]
+        type CartItemRow = CartLineForPaymentMode & { quantity?: number; unit_price?: number }
+        const items = result.items as CartItemRow[]
         const subtotal = items.reduce(
             (sum, i) => sum + Number(i.quantity || 0) * Number(i.unit_price || 0),
             0
