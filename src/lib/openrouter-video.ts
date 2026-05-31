@@ -54,6 +54,42 @@ function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+/** Known supported clip lengths from OpenRouter GET /videos/models (seconds). */
+const KNOWN_VIDEO_DURATIONS_SEC: Record<string, number[]> = {
+    'google/veo-3.1-lite': [4, 6, 8],
+    'google/veo-3.1-fast': [4, 6, 8],
+    'google/veo-3.1': [4, 6, 8],
+    'alibaba/wan-2.7': [2, 3, 4, 5, 6, 7, 8, 9, 10],
+    'alibaba/wan-2.6': [5, 10],
+    'kwaivgi/kling-v3.0-std': [5, 10],
+    'kwaivgi/kling-v3.0-pro': [5, 10],
+    'bytedance/seedance-2.0-fast': [2, 3, 4, 5, 6, 7, 8, 9, 10],
+    'bytedance/seedance-2.0': [2, 3, 4, 5, 6, 7, 8, 9, 10],
+    'minimax/hailuo-2.3': [6],
+}
+
+/**
+ * Pick a model-allowed duration closest to the preferred short e-invite length (2–3s).
+ * Veo models minimum is 4s; Wan/Seedance support 2–3s.
+ */
+export function pickInviteVideoDurationSec(model: string, preferredSec = 3): number {
+    const modelId = String(model || '').trim()
+    const preferred = Math.max(1, Math.round(Number(preferredSec) || 3))
+    const allowed = KNOWN_VIDEO_DURATIONS_SEC[modelId]
+    if (!allowed?.length) return preferred
+
+    if (allowed.includes(preferred)) return preferred
+    if (preferred <= 3) {
+        if (allowed.includes(3)) return 3
+        if (allowed.includes(2)) return 2
+    }
+
+    const atOrAbove = allowed.filter((d) => d >= preferred).sort((a, b) => a - b)
+    if (atOrAbove.length) return atOrAbove[0]
+
+    return Math.min(...allowed)
+}
+
 /**
  * Submit async video job to OpenRouter POST /videos, poll until completed, download content.
  * @see https://openrouter.ai/docs/guides/overview/multimodal/video-generation

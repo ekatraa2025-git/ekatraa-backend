@@ -8,7 +8,8 @@ const VIDEO_INSTRUCTIONS = `You are Ekatraa E-Invite Video Director for Indian c
 - When bride/groom or main character reference images are provided, describe respectful likeness preservation and elegant portrait-to-scene animation.
 - Keep typography areas stable; animate background ambience, soft particles, light bokeh, garlands, or mandap glow — not unreadable text morphing.
 - Family-friendly, culturally respectful, premium editorial look.
-- Include occasion name and key event details when supplied.`
+- Include occasion name and key event details when supplied.
+- Keep the clip very short (about 2–3 seconds): subtle motion loop suitable for a WhatsApp e-invite reel, not a long cinematic scene.`
 
 export function createVideoGenerationAgent(_storage: LibSQLStore) {
     return new Agent({

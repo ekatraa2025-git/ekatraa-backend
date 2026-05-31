@@ -11,11 +11,12 @@ import { signedUrlForStorageRef } from '@/lib/storage-display-url'
 import { buildGifFromPngBuffers } from '@/lib/e-invite-gif'
 import { buildMp4FromPngBuffers } from '@/lib/e-invite-video'
 import { mastra } from '@/mastra'
-import { MAX_EINVITE_ITERATIONS } from '@/lib/e-invite-constants'
+import { MAX_EINVITE_ITERATIONS, E_INVITE_VIDEO_DURATION_SEC } from '@/lib/e-invite-constants'
 import {
     generateVideoWithOpenRouter,
     openRouterImageUrlEntry,
     openRouterReferenceImageEntry,
+    pickInviteVideoDurationSec,
     type OpenRouterVideoReferenceImage,
 } from '@/lib/openrouter-video'
 import { refineEInviteVideoPrompt } from '@/mastra/agents/video-generation-agent'
@@ -203,6 +204,7 @@ export async function POST(req: Request) {
         let outputMime: string
         let apiCostUsd: number | null = null
         let openrouterCostUsd: number | null = null
+        let videoDurationSec: number | null = null
         let videoGenerationModel: string | null = null
 
         const brideImage = normalizeCharacterImageRef(body.bride_image)
@@ -261,12 +263,14 @@ export async function POST(req: Request) {
             }
 
             const videoModel = settings.openrouterInviteAnimatedModel
+            const envDuration = Number(process.env.OPENROUTER_INVITE_VIDEO_DURATION_SEC || E_INVITE_VIDEO_DURATION_SEC)
+            videoDurationSec = pickInviteVideoDurationSec(videoModel, envDuration)
             const videoResult = await generateVideoWithOpenRouter({
                 model: videoModel,
                 prompt: videoPrompt,
                 aspect_ratio: '9:16',
                 resolution: '720p',
-                duration: 5,
+                duration: videoDurationSec,
                 generate_audio: false,
                 frame_images: frameImages,
                 input_references: referenceImages.length ? referenceImages : undefined,
@@ -392,6 +396,7 @@ export async function POST(req: Request) {
             api_cost_usd: apiCostUsd,
             openrouter_cost_usd: openrouterCostUsd,
             video_model: videoGenerationModel,
+            video_duration_sec: videoDurationSec,
         })
     } catch (e) {
         const msg = (e as Error)?.message || String(e)
