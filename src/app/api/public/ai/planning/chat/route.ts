@@ -8,6 +8,7 @@ import { getAiRuntimeSettings } from '@/lib/ai-runtime-settings'
 import { buildMastraAgentModelFallbacks } from '@/lib/mastra-llm-model'
 import { planningCorsHeaders } from '@/lib/ai-planning-cors'
 import { resolveOptionalBearerUser } from '@/lib/user-auth'
+import { fetchUserOrderPlanningContext, formatPlanningOrderContextForPrompt } from '@/lib/planning-order-context'
 
 const DEFAULT_CUSTOMER_RESOURCE = 'ekatraa-web-planning'
 
@@ -59,13 +60,34 @@ export async function POST(req: Request) {
         const runtime = await getAiRuntimeSettings()
         const modelChain = buildMastraAgentModelFallbacks(runtime)
 
+        let chatParams = { ...params }
+        if (auth.userId) {
+            const orderContextHint = formatPlanningOrderContextForPrompt(await fetchUserOrderPlanningContext(auth.userId))
+            if (orderContextHint) {
+                const rawMessages = Array.isArray(chatParams.messages) ? [...chatParams.messages] : []
+                const sysIdx = rawMessages.findIndex(
+                    (m) => m && typeof m === 'object' && (m as { role?: string }).role === 'system'
+                )
+                if (sysIdx >= 0) {
+                    const existing = rawMessages[sysIdx] as { role: string; content?: unknown }
+                    rawMessages[sysIdx] = {
+                        ...existing,
+                        content: `${String(existing.content || '')}${orderContextHint}`,
+                    }
+                } else {
+                    rawMessages.unshift({ role: 'system', content: `Planning context:${orderContextHint}` })
+                }
+                chatParams = { ...chatParams, messages: rawMessages }
+            }
+        }
+
         const stream = await handleChatStream({
             mastra,
             agentId: 'event-planning-agent',
             version: 'v6',
             sendReasoning: true,
             params: {
-                ...params,
+                ...chatParams,
                 model: modelChain,
                 requestContext: rc,
                 memory: {

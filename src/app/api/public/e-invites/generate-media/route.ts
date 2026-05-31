@@ -11,9 +11,24 @@ import { signedUrlForStorageRef } from '@/lib/storage-display-url'
 import { buildGifFromPngBuffers } from '@/lib/e-invite-gif'
 import { buildMp4FromPngBuffers } from '@/lib/e-invite-video'
 import { mastra } from '@/mastra'
+import { MAX_EINVITE_ITERATIONS } from '@/lib/e-invite-constants'
+import {
+    generateVideoWithOpenRouter,
+    openRouterImageUrlEntry,
+    openRouterReferenceImageEntry,
+    type OpenRouterVideoReferenceImage,
+} from '@/lib/openrouter-video'
+import { refineEInviteVideoPrompt } from '@/mastra/agents/video-generation-agent'
 
 const BUCKET = 'ekatraa2025'
-const MAX_EINVITE_ITERATIONS = 10
+
+function normalizeCharacterImageRef(raw: unknown): string | null {
+    const s = String(raw || '').trim()
+    if (!s) return null
+    if (s.startsWith('data:image/')) return s
+    if (s.startsWith('http://') || s.startsWith('https://')) return s
+    return null
+}
 
 async function imageRefToBuffer(ref: string): Promise<Buffer> {
     const r = String(ref || '').trim()
@@ -186,6 +201,14 @@ export async function POST(req: Request) {
         let uploadBody: Buffer
         let contentType: string
         let outputMime: string
+        let apiCostUsd: number | null = null
+        let openrouterCostUsd: number | null = null
+        let videoGenerationModel: string | null = null
+
+        const brideImage = normalizeCharacterImageRef(body.bride_image)
+        const groomImage = normalizeCharacterImageRef(body.groom_image)
+        const mainCharacterImage = normalizeCharacterImageRef(body.main_character_image)
+        const hasCharacterImages = Boolean(brideImage || groomImage || mainCharacterImage)
 
         if (mediaKind === 'static') {
             const prompt = buildEInviteImagePrompt({
@@ -202,6 +225,61 @@ export async function POST(req: Request) {
             contentType = 'image/png'
             storagePath = `e-invites/${userId}/${randomUUID()}.png`
             outputMime = 'image/png'
+        } else if (hasCharacterImages) {
+            const characterParts: string[] = []
+            if (brideImage) characterParts.push('bride portrait reference')
+            if (groomImage) characterParts.push('groom portrait reference')
+            if (mainCharacterImage) characterParts.push('main character portrait reference')
+
+            const videoAgent = mastra.getAgentById('video-generation-agent')
+            const videoPrompt = await refineEInviteVideoPrompt({
+                agent: videoAgent,
+                occasion,
+                eventName,
+                hostNames: hostNames || undefined,
+                eventDate: eventDate || undefined,
+                venue: venue || undefined,
+                userPrompt: refinedPrompt,
+                characterHint: characterParts.join(', '),
+                memoryThread: `e-invite-video-${sessionId}`,
+            })
+
+            const frameImages = mainCharacterImage
+                ? [openRouterImageUrlEntry(mainCharacterImage, 'first_frame')]
+                : brideImage
+                  ? [openRouterImageUrlEntry(brideImage, 'first_frame')]
+                  : groomImage
+                    ? [openRouterImageUrlEntry(groomImage, 'first_frame')]
+                    : undefined
+
+            const referenceImages: OpenRouterVideoReferenceImage[] = []
+            if (mainCharacterImage) {
+                if (brideImage) referenceImages.push(openRouterReferenceImageEntry(brideImage))
+                if (groomImage) referenceImages.push(openRouterReferenceImageEntry(groomImage))
+            } else if (brideImage && groomImage) {
+                referenceImages.push(openRouterReferenceImageEntry(groomImage))
+            }
+
+            const videoModel = settings.openrouterInviteAnimatedModel
+            const videoResult = await generateVideoWithOpenRouter({
+                model: videoModel,
+                prompt: videoPrompt,
+                aspect_ratio: '9:16',
+                resolution: '720p',
+                duration: 5,
+                frame_images: frameImages,
+                input_references: referenceImages.length ? referenceImages : undefined,
+                pollIntervalMs: 15000,
+                maxPollAttempts: 48,
+            })
+
+            uploadBody = videoResult.videoBuffer
+            contentType = videoResult.contentType || 'video/mp4'
+            storagePath = `e-invites/${userId}/${randomUUID()}.mp4`
+            outputMime = 'video/mp4'
+            apiCostUsd = videoResult.costUsd
+            openrouterCostUsd = videoResult.costUsd
+            videoGenerationModel = videoResult.model
         } else {
             const prompt1 = buildEInviteImagePrompt({
                 ...baseArgs,
@@ -261,6 +339,12 @@ export async function POST(req: Request) {
             preferred_language: preferredLanguage,
             chat_history: chatHistory,
             prompt_refined: refinedPrompt,
+            bride_image: brideImage ? '[provided]' : undefined,
+            groom_image: groomImage ? '[provided]' : undefined,
+            main_character_image: mainCharacterImage ? '[provided]' : undefined,
+            api_cost_usd: apiCostUsd,
+            openrouter_cost_usd: openrouterCostUsd,
+            video_model: videoGenerationModel,
         }
 
         const { data: row, error: insErr } = await supabase
@@ -303,7 +387,10 @@ export async function POST(req: Request) {
             max_iterations: MAX_EINVITE_ITERATIONS,
             used_iterations: usedIterations + 1,
             remaining_iterations: Math.max(0, MAX_EINVITE_ITERATIONS - (usedIterations + 1)),
-            estimated_seconds: mediaKind === 'animated' ? 130 : 80,
+            estimated_seconds: mediaKind === 'animated' ? (hasCharacterImages ? 180 : 130) : 80,
+            api_cost_usd: apiCostUsd,
+            openrouter_cost_usd: openrouterCostUsd,
+            video_model: videoGenerationModel,
         })
     } catch (e) {
         const msg = (e as Error)?.message || String(e)

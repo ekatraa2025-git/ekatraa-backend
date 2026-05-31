@@ -4,15 +4,29 @@ import { listCategoriesTool, listOccasionsTool, getCatalogContextTool } from '@/
 import { getRecommendationsTool } from '@/mastra/tools/recommendations-tool'
 import { getVendorsPreviewTool } from '@/mastra/tools/vendors-preview-tool'
 import { getCartReadTool } from '@/mastra/tools/cart-read-tool'
+import { getCheckoutReadinessTool } from '@/mastra/tools/checkout-readiness-tool'
+import { getUserOrdersContextTool } from '@/mastra/tools/order-context-tool'
 import { matchOfferableServicesSemanticTool } from '@/mastra/tools/semantic-vendors-tool'
+import { createCatalogPlanningSubagent } from '@/mastra/agents/subagents/catalog-planning-subagent'
+import { createCartCheckoutSubagent } from '@/mastra/agents/subagents/cart-checkout-subagent'
+import { createOrderAllocationSubagent } from '@/mastra/agents/subagents/order-allocation-subagent'
+import {
+    buildEventPlanningHarnessSubagents,
+    createDelegatePlanningSubagentTool,
+} from '@/mastra/harness/event-planning-harness'
 import { Memory } from '@mastra/memory'
 import type { LibSQLStore } from '@mastra/libsql'
 
 const PLANNING_INSTRUCTIONS = `You are Ekatraa AI for event planning in India, Odisha (weddings, birthdays, gatherings, Janeyu, Puja, Corporate Events, Funerals, etc.).
-- Be warm, concise, and practical. Use tools to fetch real catalog data, recommendations, vendors, or cart state—never invent prices, vendor names, or guarantees.
-- When the user shares a budget and occasion, prefer calling get_recommendations then get_vendors_preview for grounded suggestions.
+- Be warm, concise, and practical. Use tools to fetch real catalog data, recommendations, vendors, cart, checkout readiness, or order context—never invent prices, vendor names, or guarantees.
+- **Sub-agents (harness):** For focused work, call \`delegate_planning_subagent\` with:
+  - \`catalog\` — occasions, categories, recommendations, vendor previews
+  - \`cart_checkout\` — cart summary, advance vs full payment, checkout readiness
+  - \`order_allocation\` — user's orders, vendor allocations, accepted quotes
+  Or delegate via built-in agent tools \`catalogPlanning\`, \`cartCheckout\`, \`orderAllocation\` when appropriate.
+- When the user shares a budget and occasion, prefer catalog/recommendations then vendor preview for grounded suggestions.
 - **Budget guardrails:** Catalog allocations never assign more rupees to a spending category than the highest-priced tier available among services in that category (the backend enforces this). When discussing or adjusting budgets, never imply a category can buy a tier above the catalog max for that category unless the user increases total budget or picks a different service.
-- The system message may include **User event details** (role, guest count, location, planned budget ₹, dates). Use them to personalize advice; still ground prices and service lists in tools.
+- The system message may include **User event details** (role, guest count, location, planned budget ₹, dates) and **User order context** (allocations, accepted quotes). Use them to personalize advice; still ground prices and service lists in tools.
 - Encourage booking through the Ekatraa app for live packages. Do not give legal or medical advice.
 - **Formatting (important for the app UI):** Use GitHub-Flavored Markdown. Separate ideas with **short paragraphs** and blank lines. For multiple services or next-step choices, use a **markdown bullet list** with one service or action per line (list items are tappable in the app). For **package tiers, pricing, or included items**, use a **markdown table** (columns such as Tier / Package, Price, Includes / notes) when comparing rows; each table row is tappable. Keep list items and table cell text scannable.
 - If the system context says voice mode is active, switch to plain conversational text (no markdown tables/links), keep to short sentences, and prioritize speakability.
@@ -20,12 +34,30 @@ const PLANNING_INSTRUCTIONS = `You are Ekatraa AI for event planning in India, O
   CART_ACTIONS:{"items":[{"service_id":"<exact id from tool output>","quantity":1,"label":"<short service name>"}]}
   Only include service_id values you actually saw in tool results (UUIDs from the catalog). Never invent ids. If nothing is safe to add, omit CART_ACTIONS entirely.`
 
+/** Subagent harness registry (for observability / Studio). */
+export const eventPlanningHarnessSubagents = buildEventPlanningHarnessSubagents()
+
 export function createEventPlanningAgent(storage: LibSQLStore) {
+    const catalogPlanning = createCatalogPlanningSubagent(storage)
+    const cartCheckout = createCartCheckoutSubagent(storage)
+    const orderAllocation = createOrderAllocationSubagent(storage)
+
+    const subagentMap = {
+        catalog: catalogPlanning,
+        cart_checkout: cartCheckout,
+        order_allocation: orderAllocation,
+    }
+
     return new Agent({
         id: 'event-planning-agent',
         name: 'Ekatraa Event Planning',
         instructions: PLANNING_INSTRUCTIONS,
         model: buildDefaultMastraAgentModelFallbacksFromEnv(),
+        agents: {
+            catalogPlanning,
+            cartCheckout,
+            orderAllocation,
+        },
         tools: {
             listOccasions: listOccasionsTool,
             listCategories: listCategoriesTool,
@@ -33,7 +65,10 @@ export function createEventPlanningAgent(storage: LibSQLStore) {
             getRecommendations: getRecommendationsTool,
             getVendorsPreview: getVendorsPreviewTool,
             getCartSummary: getCartReadTool,
+            getCheckoutReadiness: getCheckoutReadinessTool,
+            getUserOrdersContext: getUserOrdersContextTool,
             matchOfferableServicesSemantic: matchOfferableServicesSemanticTool,
+            delegatePlanningSubagent: createDelegatePlanningSubagentTool(subagentMap),
         },
         memory: new Memory({
             storage,

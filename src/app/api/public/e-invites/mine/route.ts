@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getEndUserIdFromRequest } from '@/lib/user-auth'
 import { supabase } from '@/lib/supabase/server'
 import { signedUrlForStorageRef } from '@/lib/storage-display-url'
-const MAX_EINVITE_ITERATIONS = 10
+import { MAX_EINVITE_ITERATIONS } from '@/lib/e-invite-constants'
 
 export async function GET(req: Request) {
     try {

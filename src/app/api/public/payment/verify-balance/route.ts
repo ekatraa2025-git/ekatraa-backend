@@ -29,7 +29,6 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Missing payment or order details' }, { status: 400 })
         }
 
-        // 1. Verify Razorpay HMAC signature
         const expectedSignature = crypto
             .createHmac('sha256', keySecret)
             .update(`${razorpay_order_id}|${razorpay_payment_id}`)
@@ -39,8 +38,6 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Payment verification failed' }, { status: 400 })
         }
 
-        // 2. Fetch the Razorpay order to get the authoritative charged amount
-        //    and verify it was created for this specific order_id
         const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret })
         let rzpOrder: { amount: number; notes?: Record<string, string> }
         try {
@@ -49,7 +46,6 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Could not fetch Razorpay order' }, { status: 400 })
         }
 
-        // Verify the Razorpay order was created for this order_id (prevents order substitution)
         if (rzpOrder.notes?.order_id && rzpOrder.notes.order_id !== String(order_id)) {
             return NextResponse.json({ error: 'Payment order does not match this order' }, { status: 400 })
         }
@@ -95,13 +91,11 @@ export async function POST(req: Request) {
             }
         }
 
-        // 3. Verify the Razorpay-charged amount matches the expected balance
         const expectedBalancePaise = Math.max(Math.round((agreedTotal - advancePaid) * 100), 100)
         if (Math.abs(rzpOrder.amount - expectedBalancePaise) > 100) {
             return NextResponse.json({ error: 'Payment amount does not match balance due' }, { status: 400 })
         }
 
-        // Use the actual charged amount (from Razorpay) to compute the new total paid
         const balancePaid = rzpOrder.amount / 100
         const newAdvance = advancePaid + balancePaid
 

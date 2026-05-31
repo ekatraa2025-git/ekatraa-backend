@@ -9,6 +9,7 @@ import { resolveOptionalBearerUser } from '@/lib/user-auth'
 import { toSpeechSafeText } from '@/lib/voice-text'
 import { buildVoiceReplyLanguageHint } from '@/lib/voice-languages'
 import { z } from 'zod'
+import { fetchUserOrderPlanningContext, formatPlanningOrderContextForPrompt } from '@/lib/planning-order-context'
 
 const bodySchema = z.object({
     message: z.string().min(1).max(4000),
@@ -105,11 +106,14 @@ export async function POST(req: Request) {
         }
         const isVoiceMode = response_mode === 'voice'
         const voiceHint = isVoiceMode ? buildVoiceReplyLanguageHint(voice_target_language_code) : ''
+        const orderContextHint = auth.userId
+            ? formatPlanningOrderContextForPrompt(await fetchUserOrderPlanningContext(auth.userId))
+            : ''
 
         const messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [
             {
                 role: 'system',
-                content: `Catalog and app context:\n${catalog}${occasionHint}${budgetHint}${eventDetailsHint}${voiceHint}`,
+                content: `Catalog and app context:\n${catalog}${occasionHint}${budgetHint}${eventDetailsHint}${orderContextHint}${voiceHint}`,
             },
         ]
         for (const h of history ?? []) {
