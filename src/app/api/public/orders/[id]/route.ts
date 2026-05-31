@@ -2,6 +2,8 @@ import { supabase } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { getEndUserIdFromRequest } from '@/lib/user-auth'
 import { signQuotationAttachments } from '@/lib/quotation-attachments'
+import { signedUrlForStorageRef } from '@/lib/storage-display-url'
+import { eInviteIdsFromItems } from '@/lib/e-invite-order'
 
 /**
  * GET /api/public/orders/[id]
@@ -69,6 +71,41 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         }))
     )
 
+    const inviteIds = eInviteIdsFromItems((items ?? []) as { options?: unknown }[])
+    let eInvites: Array<Record<string, unknown>> = []
+    if (inviteIds.length > 0) {
+        const { data: inviteRows } = await supabase
+            .from('user_e_invites')
+            .select('id, media_kind, storage_path, price_inr, payment_status, paid_at, form_payload, created_at')
+            .in('id', inviteIds)
+            .eq('user_id', userId)
+
+        eInvites = await Promise.all(
+            (inviteRows ?? []).map(async (inv) => {
+                const fp =
+                    inv.form_payload && typeof inv.form_payload === 'object' && !Array.isArray(inv.form_payload)
+                        ? (inv.form_payload as Record<string, unknown>)
+                        : {}
+                const previewUrl = await signedUrlForStorageRef(inv.storage_path)
+                const downloadUrl =
+                    inv.payment_status === 'paid' ? previewUrl : null
+                return {
+                    id: inv.id,
+                    media_kind: inv.media_kind,
+                    payment_status: inv.payment_status,
+                    price_inr: inv.price_inr,
+                    paid_at: inv.paid_at,
+                    output_mime: fp.output_mime ?? (inv.media_kind === 'animated' ? 'video/mp4' : 'image/png'),
+                    event_name: fp.event_name ?? fp.eventName ?? null,
+                    occasion: fp.occasion ?? null,
+                    preview_url: previewUrl,
+                    download_url: downloadUrl,
+                    design_redesign_count: Number(fp.design_redesign_count || 0),
+                }
+            })
+        )
+    }
+
     return NextResponse.json({
         ...order,
         items: items ?? [],
@@ -76,5 +113,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         quotes,
         vendor_quotes: quotes,
         vendor_invoice: vendorInvoice ?? null,
+        e_invites: eInvites,
     })
 }

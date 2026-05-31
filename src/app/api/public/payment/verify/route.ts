@@ -11,6 +11,7 @@ import {
     computeOnlineChargeInr,
     type CartLineForPaymentMode,
 } from '@/lib/cart-payment-mode'
+import { eInviteIdsFromItems, markUserEInvitesPaidAfterOrder } from '@/lib/e-invite-order'
 
 const ADVANCE_PERCENT = 20
 
@@ -146,16 +147,24 @@ export async function POST(req: Request) {
         }
 
         const orderItems = items.map(
-            (i: { service_id: string; quantity: number; unit_price: number | null; offerable_services: unknown }) => {
-                const name = i.offerable_services && typeof i.offerable_services === 'object' && !Array.isArray(i.offerable_services)
-                    ? (i.offerable_services as { name?: string }).name
-                    : null
+            (i: {
+                service_id: string
+                quantity: number
+                unit_price: number | null
+                options?: unknown
+                offerable_services: unknown
+            }) => {
+                const name =
+                    i.offerable_services && typeof i.offerable_services === 'object' && !Array.isArray(i.offerable_services)
+                        ? (i.offerable_services as { name?: string }).name
+                        : null
                 return {
                     order_id: order.id,
                     service_id: i.service_id,
                     name: name ?? null,
                     quantity: i.quantity,
                     unit_price: Number(i.unit_price || 0),
+                    options: i.options ?? null,
                 }
             }
         )
@@ -164,6 +173,14 @@ export async function POST(req: Request) {
 
         if (oiError) {
             return NextResponse.json({ error: 'Failed to create order items' }, { status: 500 })
+        }
+
+        if (fullPayment) {
+            const inviteIds = eInviteIdsFromItems(items as { options?: unknown }[])
+            await markUserEInvitesPaidAfterOrder(supabase, inviteIds, String(orderUser), {
+                razorpay_order_id: String(razorpay_order_id),
+                razorpay_payment_id: String(razorpay_payment_id),
+            })
         }
 
         await supabase.from('order_status_history').insert([

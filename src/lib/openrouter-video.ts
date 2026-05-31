@@ -69,23 +69,26 @@ const KNOWN_VIDEO_DURATIONS_SEC: Record<string, number[]> = {
 }
 
 /**
- * Pick a model-allowed duration closest to the preferred short e-invite length (2–3s).
- * Veo models minimum is 4s; Wan/Seedance support 2–3s.
+ * Pick a model-allowed duration closest to the preferred e-invite length (4–6s cinematic).
+ * Veo models allow 4, 6, 8; Wan/Seedance support 2–10.
  */
-export function pickInviteVideoDurationSec(model: string, preferredSec = 3): number {
+export function pickInviteVideoDurationSec(model: string, preferredSec = 5): number {
     const modelId = String(model || '').trim()
-    const preferred = Math.max(1, Math.round(Number(preferredSec) || 3))
+    const rawPreferred = Math.round(Number(preferredSec) || 5)
+    const preferred = Math.min(6, Math.max(4, rawPreferred))
     const allowed = KNOWN_VIDEO_DURATIONS_SEC[modelId]
     if (!allowed?.length) return preferred
 
     if (allowed.includes(preferred)) return preferred
-    if (preferred <= 3) {
-        if (allowed.includes(3)) return 3
-        if (allowed.includes(2)) return 2
-    }
+
+    const cinematicCandidates = [5, 4, 6].filter((d) => allowed.includes(d))
+    if (cinematicCandidates.length) return cinematicCandidates[0]
 
     const atOrAbove = allowed.filter((d) => d >= preferred).sort((a, b) => a - b)
     if (atOrAbove.length) return atOrAbove[0]
+
+    const below = allowed.filter((d) => d <= preferred).sort((a, b) => b - a)
+    if (below.length) return below[0]
 
     return Math.min(...allowed)
 }
