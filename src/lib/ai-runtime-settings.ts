@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase/server'
 import { getClaudeModel } from '@/lib/claude-client'
-import { getDefaultOpenRouterModel, getDefaultOpenRouterImageModel, getDefaultOpenRouterInviteAnimatedModel } from '@/lib/openrouter-client'
+import { getDefaultOpenRouterModel, getDefaultOpenRouterImageModel, getDefaultOpenRouterInviteAnimatedModel, resolveOpenRouterInviteVideoModel } from '@/lib/openrouter-client'
 
 export type AiPrimaryProvider = 'openrouter' | 'claude' | 'gemini'
 
@@ -41,9 +41,9 @@ export async function getAiRuntimeSettings(): Promise<AiRuntimeSettings> {
     const provider = safeProvider(data?.ai_primary_provider)
     const openrouterModel = String(data?.ai_openrouter_model || envOpenRouter).trim() || envOpenRouter
     const openrouterImageModel = String(data?.ai_openrouter_image_model || envOpenRouterImage).trim() || envOpenRouterImage
-    const openrouterInviteAnimatedModel = String(
+    const openrouterInviteAnimatedModel = resolveOpenRouterInviteVideoModel(
         data?.ai_openrouter_invite_animated_model || envOpenRouterAnim
-    ).trim() || envOpenRouterAnim
+    )
     const claudeModel = String(data?.ai_claude_model || envClaude).trim() || envClaude
     const geminiModel = String(data?.ai_gemini_model || envGemini).trim() || envGemini
 

@@ -334,6 +334,26 @@ function modelPrefersImageOnlyFirst(model: string): boolean {
     return /sourceful|riverflow|flux|black-forest|gemini.*image|image-preview/i.test(model)
 }
 
+/** True when the slug is an image-generation model, not OpenRouter /videos. */
+export function isOpenRouterImageGenerationModel(model: string): boolean {
+    return modelPrefersImageOnlyFirst(String(model || '').trim())
+}
+
+/**
+ * Picks a valid OpenRouter video model. DB may still store legacy riverflow image slugs.
+ * Priority: configured (if video) → OPENROUTER_INVITE_ANIMATED_MODEL env → default.
+ */
+export function resolveOpenRouterInviteVideoModel(configuredFromDb?: string | null): string {
+    const fallback = DEFAULT_OPENROUTER_INVITE_ANIMATED_MODEL
+    const fromEnv = String(process.env.OPENROUTER_INVITE_ANIMATED_MODEL || '').trim()
+    const fromDb = String(configuredFromDb || '').trim()
+
+    for (const candidate of [fromDb, fromEnv, fallback]) {
+        if (candidate && !isOpenRouterImageGenerationModel(candidate)) return candidate
+    }
+    return fallback
+}
+
 /**
  * Image generation via OpenRouter chat/completions + modalities.
  * Tries image+text then image-only when the first attempt returns no image.

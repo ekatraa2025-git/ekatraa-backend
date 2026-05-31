@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import type { BookingProtectionMode } from '@/lib/booking-protection'
 import type { AiPrimaryProvider } from '@/lib/ai-runtime-settings'
 import { requireAdminSession } from '@/lib/require-admin-session'
+import { isOpenRouterImageGenerationModel } from '@/lib/openrouter-client'
 
 function pickPositiveInrUpdate(value: unknown): number | undefined {
     if (value === undefined) return undefined
@@ -34,7 +35,7 @@ export async function GET() {
             ai_primary_model: 'nvidia/nemotron-3-nano-omni:free',
             ai_openrouter_model: 'nvidia/nemotron-3-nano-omni:free',
             ai_openrouter_image_model: 'sourceful/riverflow-v2-fast',
-            ai_openrouter_invite_animated_model: 'sourceful/riverflow-v2-pro',
+            ai_openrouter_invite_animated_model: 'alibaba/wan-2.7',
             ai_claude_model: 'claude-sonnet-4-6',
             ai_gemini_model: 'gemini-2.0-flash',
             e_invite_static_inr: 300,
@@ -107,6 +108,15 @@ export async function PATCH(req: Request) {
         if (body.ai_openrouter_invite_animated_model !== undefined) {
             const m = String(body.ai_openrouter_invite_animated_model || '').trim()
             if (!m) return NextResponse.json({ error: 'ai_openrouter_invite_animated_model cannot be empty' }, { status: 400 })
+            if (isOpenRouterImageGenerationModel(m)) {
+                return NextResponse.json(
+                    {
+                        error:
+                            'ai_openrouter_invite_animated_model must be a video model (e.g. alibaba/wan-2.7, google/veo-3.1-lite), not an image model like riverflow.',
+                    },
+                    { status: 400 }
+                )
+            }
             updates.ai_openrouter_invite_animated_model = m
         }
         if (body.ai_claude_model !== undefined) {
